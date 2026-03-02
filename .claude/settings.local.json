@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:docs.cdp.coinbase.com)",
+      "WebFetch(domain:www.x402.org)",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:docs.x402.org)",
+      "WebFetch(domain:docs.convex.dev)"
+    ]
+  }
+}
