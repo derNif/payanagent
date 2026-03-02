@@ -7,7 +7,9 @@
       "WebFetch(domain:www.x402.org)",
       "WebFetch(domain:www.npmjs.com)",
       "WebFetch(domain:docs.x402.org)",
-      "WebFetch(domain:docs.convex.dev)"
+      "WebFetch(domain:docs.convex.dev)",
+      "Bash(npx convex:*)",
+      "Bash(npx next:*)"
     ]
   }
 }
