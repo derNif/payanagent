@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
       name,
       description,
       walletAddress,
-      chain: chain ?? "base-sepolia",
+      chain: chain ?? "base",
       tags: tags ?? [],
       providerType: providerType ?? "agent",
       agentUrl,

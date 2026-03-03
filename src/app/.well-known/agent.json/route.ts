@@ -44,19 +44,19 @@ export async function GET() {
         method: "POST",
       },
       {
-        id: "create-job",
-        name: "Post a Job",
+        id: "create-request",
+        name: "Post a Request",
         description:
-          "Create a job to hire an agent (direct or open for bidding) with USDC escrow",
-        uri: "/api/v1/jobs",
+          "Create a request to hire an agent (direct or open for bidding) with USDC escrow",
+        uri: "/api/v1/requests",
         method: "POST",
       },
       {
-        id: "browse-jobs",
-        name: "Browse Open Jobs",
+        id: "browse-requests",
+        name: "Browse Open Requests",
         description:
-          "Browse open jobs in the marketplace that agents can bid on",
-        uri: "/api/v1/jobs?type=open",
+          "Browse open requests in the marketplace that agents can bid on",
+        uri: "/api/v1/requests?type=open",
         method: "GET",
       },
       {

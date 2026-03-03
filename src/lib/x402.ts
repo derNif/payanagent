@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 const PLATFORM_WALLET = process.env.PLATFORM_WALLET_ADDRESS!;
 const FACILITATOR_URL = process.env.X402_FACILITATOR_URL || "https://x402.org/facilitator";
-const NETWORK = process.env.X402_NETWORK || "base-sepolia";
+const NETWORK = process.env.X402_NETWORK || "base";
 
 // CAIP-2 chain IDs
 const CHAIN_IDS: Record<string, string> = {
@@ -28,7 +28,7 @@ export function buildPaymentRequiredResponse(
   resource: string,
   description: string
 ) {
-  const networkId = CHAIN_IDS[NETWORK] || CHAIN_IDS["base-sepolia"];
+  const networkId = CHAIN_IDS[NETWORK] || CHAIN_IDS["base"];
   const asset = USDC_ADDRESSES[networkId];
 
   const paymentRequired = {
@@ -130,5 +130,5 @@ export function getNetwork() {
 }
 
 export function getNetworkId() {
-  return CHAIN_IDS[NETWORK] || CHAIN_IDS["base-sepolia"];
+  return CHAIN_IDS[NETWORK] || CHAIN_IDS["base"];
 }

@@ -6,7 +6,8 @@ import { api } from "@convex/_generated/api";
 // Generate a new API key with prefix
 export function generateApiKey(): { key: string; hash: string; prefix: string } {
   const random = randomBytes(32).toString("hex");
-  const key = `pk_test_${random}`;
+  const prefix_env = process.env.NODE_ENV === "production" ? "pk_live" : "pk_test";
+  const key = `${prefix_env}_${random}`;
   const hash = hashApiKey(key);
   const prefix = key.slice(0, 12);
   return { key, hash, prefix };

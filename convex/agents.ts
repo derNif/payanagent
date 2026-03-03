@@ -27,7 +27,7 @@ export const create = mutation({
       name: args.name,
       description: args.description,
       walletAddress: args.walletAddress,
-      chain: args.chain ?? "base-sepolia",
+      chain: args.chain ?? "base",
       tags: args.tags,
       providerType: args.providerType,
       agentUrl: args.agentUrl,
