@@ -16,13 +16,29 @@ const USDC_ADDRESSES: Record<string, string> = {
   "eip155:8453": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
 };
 
+// EIP-712 domain parameters for USDC (ERC-3009 transferWithAuthorization)
+const USDC_DOMAINS: Record<string, { name: string; version: string }> = {
+  "eip155:84532": { name: "USDC", version: "2" },
+  "eip155:8453": { name: "USDC", version: "2" },
+};
+
 // Convert cents to USDC base units (6 decimals)
 // 1 cent = $0.01 = 10000 base units
 export function centsToUsdcBaseUnits(cents: number): string {
   return String(cents * 10000);
 }
 
-// Build a 402 Payment Required response with dynamic pricing
+// Decode a base64-encoded JSON header
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function decodeBase64Header(header: string): any | null {
+  try {
+    return JSON.parse(Buffer.from(header, "base64").toString("utf-8"));
+  } catch {
+    return null;
+  }
+}
+
+// Build a 402 Payment Required response with dynamic pricing (x402 v2)
 export function buildPaymentRequiredResponse(
   priceInCents: number,
   resource: string,
@@ -30,19 +46,27 @@ export function buildPaymentRequiredResponse(
 ) {
   const networkId = CHAIN_IDS[NETWORK] || CHAIN_IDS["base"];
   const asset = USDC_ADDRESSES[networkId];
+  const domain = USDC_DOMAINS[networkId] || { name: "USDC", version: "2" };
 
   const paymentRequired = {
     x402Version: 2,
+    resource: {
+      url: resource,
+      description,
+      mimeType: "application/json",
+    },
     accepts: [
       {
         scheme: "exact",
         network: networkId,
-        maxAmountRequired: centsToUsdcBaseUnits(priceInCents),
-        resource,
-        description,
+        amount: centsToUsdcBaseUnits(priceInCents),
         payTo: PLATFORM_WALLET,
         asset,
         maxTimeoutSeconds: 60,
+        extra: {
+          name: domain.name,
+          version: domain.version,
+        },
       },
     ],
     error: "Payment required. Include PAYMENT-SIGNATURE header with signed USDC transfer.",
@@ -59,29 +83,47 @@ export function buildPaymentRequiredResponse(
   });
 }
 
-// Verify a payment via the facilitator
-export async function verifyPayment(paymentSignature: string, paymentRequired: string): Promise<{
+// Verify a payment via the facilitator (x402 v2 structured format)
+export async function verifyPayment(paymentSignatureHeader: string, paymentRequiredHeader: string): Promise<{
   valid: boolean;
   txHash?: string;
   error?: string;
 }> {
   try {
+    const paymentPayload = decodeBase64Header(paymentSignatureHeader);
+    if (!paymentPayload) {
+      return { valid: false, error: "Invalid payment signature header" };
+    }
+
+    // paymentRequirements = the requirement the client accepted (embedded in payload)
+    const paymentRequirements = paymentPayload.accepted;
+    if (!paymentRequirements) {
+      return { valid: false, error: "Missing accepted payment requirements in payload" };
+    }
+
     const response = await fetch(`${FACILITATOR_URL}/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        paymentSignature,
-        paymentRequired,
+        x402Version: paymentPayload.x402Version || 2,
+        paymentPayload,
+        paymentRequirements,
       }),
     });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      return { valid: false, error: errorData.error || "Verification failed" };
+      return {
+        valid: false,
+        error: errorData.invalidReason || errorData.invalidMessage || errorData.error || "Verification failed",
+      };
     }
 
     const data = await response.json();
-    return { valid: true, txHash: data.txHash };
+    if (data.isValid === false) {
+      return { valid: false, error: data.invalidReason || data.invalidMessage || "Verification rejected by facilitator" };
+    }
+    return { valid: true, txHash: data.transaction };
   } catch (error) {
     return {
       valid: false,
@@ -90,29 +132,43 @@ export async function verifyPayment(paymentSignature: string, paymentRequired: s
   }
 }
 
-// Settle a payment via the facilitator (submit the on-chain transaction)
-export async function settlePayment(paymentSignature: string, paymentRequired: string): Promise<{
+// Settle a payment via the facilitator (x402 v2 structured format)
+export async function settlePayment(paymentSignatureHeader: string, paymentRequiredHeader: string): Promise<{
   success: boolean;
   txHash?: string;
   error?: string;
 }> {
   try {
+    const paymentPayload = decodeBase64Header(paymentSignatureHeader);
+    if (!paymentPayload) {
+      return { success: false, error: "Invalid payment signature header" };
+    }
+
+    const paymentRequirements = paymentPayload.accepted;
+    if (!paymentRequirements) {
+      return { success: false, error: "Missing accepted payment requirements in payload" };
+    }
+
     const response = await fetch(`${FACILITATOR_URL}/settle`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        paymentSignature,
-        paymentRequired,
+        x402Version: paymentPayload.x402Version || 2,
+        paymentPayload,
+        paymentRequirements,
       }),
     });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      return { success: false, error: errorData.error || "Settlement failed" };
+      return {
+        success: false,
+        error: errorData.errorReason || errorData.errorMessage || errorData.error || "Settlement failed",
+      };
     }
 
     const data = await response.json();
-    return { success: true, txHash: data.txHash };
+    return { success: true, txHash: data.transaction };
   } catch (error) {
     return {
       success: false,
