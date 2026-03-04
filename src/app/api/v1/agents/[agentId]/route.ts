@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
+import { validateBody, updateAgentSchema } from "@/lib/validation";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -49,8 +50,10 @@ export async function PATCH(
   }
 
   try {
-    const body = await request.json();
-    const { name, description, tags, agentUrl, ownerEmail, a2aCapabilities } = body;
+    const { data, error: validationError } = await validateBody(request, updateAgentSchema);
+    if (validationError) return validationError;
+
+    const { name, description, tags, agentUrl, ownerEmail, a2aCapabilities } = data;
 
     const convex = getConvexClient();
     await convex.mutation(api.agents.update, {

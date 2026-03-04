@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { createWalletClient, createPublicClient, http, parseAbi } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { base, baseSepolia } from "viem/chains";
 
 const PLATFORM_WALLET = process.env.PLATFORM_WALLET_ADDRESS!;
 const FACILITATOR_URL = process.env.X402_FACILITATOR_URL || "https://x402.org/facilitator";
@@ -173,6 +176,68 @@ export async function settlePayment(paymentSignatureHeader: string, paymentRequi
     return {
       success: false,
       error: error instanceof Error ? error.message : "Facilitator unreachable",
+    };
+  }
+}
+
+// Chain config for viem
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const VIEM_CHAINS: Record<string, any> = {
+  base,
+  "base-sepolia": baseSepolia,
+};
+
+const ERC20_TRANSFER_ABI = parseAbi([
+  "function transfer(address to, uint256 amount) returns (bool)",
+]);
+
+// Release escrowed USDC from platform wallet to provider on-chain
+export async function releaseEscrow(
+  toAddress: string,
+  amountCents: number
+): Promise<{ success: boolean; txHash?: string; error?: string }> {
+  const privateKey = process.env.PLATFORM_WALLET_PRIVATE_KEY;
+  if (!privateKey) {
+    return { success: false, error: "PLATFORM_WALLET_PRIVATE_KEY not configured" };
+  }
+
+  try {
+    const networkId = CHAIN_IDS[NETWORK] || CHAIN_IDS["base"];
+    const usdcAddress = USDC_ADDRESSES[networkId] as `0x${string}`;
+    const chain = VIEM_CHAINS[NETWORK] || base;
+    const account = privateKeyToAccount(privateKey as `0x${string}`);
+    const amountBaseUnits = BigInt(amountCents) * BigInt(10000);
+
+    const walletClient = createWalletClient({
+      account,
+      chain,
+      transport: http(),
+    });
+
+    const publicClient = createPublicClient({
+      chain,
+      transport: http(),
+    });
+
+    const hash = await walletClient.writeContract({
+      address: usdcAddress,
+      abi: ERC20_TRANSFER_ABI,
+      functionName: "transfer",
+      args: [toAddress as `0x${string}`, amountBaseUnits],
+      chain,
+    } as Parameters<typeof walletClient.writeContract>[0]);
+
+    // Wait for confirmation
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+
+    return {
+      success: receipt.status === "success",
+      txHash: hash,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Escrow release failed",
     };
   }
 }

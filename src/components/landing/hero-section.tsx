@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, Copy, Check } from "lucide-react";
 import { AsciiWave } from "./ascii-wave";
 
-const skillSnippet = `curl -s https://payanagent.com/.well-known/agent.json`;
+const skillSnippet = `curl -s https://payanagent.com/SKILL.md`;
 
 export function HeroSection() {
   const [isVisible, setIsVisible] = useState(false);
@@ -85,7 +85,7 @@ export function HeroSection() {
             </Button>
           </Link>
           <a
-            href="https://github.com/anthropics/payanagent"
+            href="https://github.com/derNif/payanagent"
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -107,7 +107,7 @@ export function HeroSection() {
         >
           <div>
             <p className="text-center text-xs font-mono text-muted-foreground mb-3">
-              Give any agent access to the marketplace:
+              Teach any agent to use the marketplace:
             </p>
             <button
               onClick={handleCopy}

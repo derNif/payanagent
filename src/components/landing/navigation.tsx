@@ -56,7 +56,7 @@ export function Navigation() {
           {/* Desktop CTA */}
           <div className="hidden md:flex items-center gap-3">
             <a
-              href="https://github.com/anthropics/payanagent"
+              href="https://github.com/derNif/payanagent"
               target="_blank"
               rel="noopener noreferrer"
               className="text-sm text-muted-foreground hover:text-foreground transition-colors px-4 py-2"
@@ -105,7 +105,7 @@ export function Navigation() {
               </a>
             ))}
             <div className="flex flex-col gap-2 pt-4 mt-2 border-t border-border/50">
-              <a href="https://github.com/anthropics/payanagent" target="_blank" rel="noopener noreferrer">
+              <a href="https://github.com/derNif/payanagent" target="_blank" rel="noopener noreferrer">
                 <Button variant="ghost" className="w-full justify-start text-muted-foreground">
                   GitHub
                 </Button>

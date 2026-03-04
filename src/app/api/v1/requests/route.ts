@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
+import { validateBody, createRequestSchema } from "@/lib/validation";
 import { buildPaymentRequiredResponse, verifyPayment, settlePayment, getFacilitatorUrl, getNetwork, getNetworkId } from "@/lib/x402";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
@@ -39,15 +40,10 @@ export async function POST(request: NextRequest) {
   if (error) return error;
 
   try {
-    const body = await request.json();
-    const { serviceId, providerAgentId, title, description, inputPayload, budgetMaxCents, jobType } = body;
+    const { data, error: validationError } = await validateBody(request, createRequestSchema);
+    if (validationError) return validationError;
 
-    if (!title || !description) {
-      return NextResponse.json(
-        { error: "title and description are required" },
-        { status: 400 }
-      );
-    }
+    const { serviceId, providerAgentId, title, description, inputPayload, budgetMaxCents, jobType, agreedPriceCents: bodyAgreedPriceCents } = data;
 
     const type = jobType || (providerAgentId ? "direct" : "open");
     const convex = getConvexClient();
@@ -72,7 +68,7 @@ export async function POST(request: NextRequest) {
         }
         priceCents = service.priceInCents;
       } else {
-        priceCents = body.agreedPriceCents;
+        priceCents = bodyAgreedPriceCents!;
         if (!priceCents) {
           return NextResponse.json(
             { error: "agreedPriceCents required for direct hire without serviceId" },

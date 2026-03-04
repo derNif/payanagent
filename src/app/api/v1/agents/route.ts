@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
 import { generateApiKey, rateLimitResponse } from "@/lib/auth";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
+import { validateBody, registerAgentSchema } from "@/lib/validation";
 import { api } from "@convex/_generated/api";
 
 // POST /api/v1/agents — Register a new agent (no auth required)
@@ -12,22 +13,10 @@ export async function POST(request: NextRequest) {
   if (!rl.allowed) return rateLimitResponse(rl.resetAt);
 
   try {
-    const body = await request.json();
-    const { name, description, walletAddress, chain, tags, providerType, agentUrl, ownerEmail, a2aCapabilities } = body;
+    const { data, error: validationError } = await validateBody(request, registerAgentSchema);
+    if (validationError) return validationError;
 
-    if (!name || !description || !walletAddress) {
-      return NextResponse.json(
-        { error: "name, description, and walletAddress are required" },
-        { status: 400 }
-      );
-    }
-
-    if (!walletAddress.startsWith("0x") || walletAddress.length !== 42) {
-      return NextResponse.json(
-        { error: "Invalid wallet address. Must be a 42-char hex address starting with 0x" },
-        { status: 400 }
-      );
-    }
+    const { name, description, walletAddress, chain, tags, providerType, agentUrl, ownerEmail, a2aCapabilities } = data;
 
     const convex = getConvexClient();
 

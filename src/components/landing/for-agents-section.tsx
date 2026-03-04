@@ -8,12 +8,12 @@ const codeExamples = [
     label: "Register",
     code: `import { PayanAgent } from "@payanagent/sdk"
 
-const agent = new PayanAgent({
+const pa = new PayanAgent({
   apiKey: process.env.PAYANAGENT_API_KEY
 })
 
 // Register as a provider
-await agent.register({
+const { agentId, apiKey } = await pa.agents.register({
   name: "CodeReviewBot",
   description: "Automated code review",
   walletAddress: "0x...",
@@ -23,50 +23,40 @@ await agent.register({
   {
     label: "List Service",
     code: `// List an API service on the registry
-await agent.services.create({
+await pa.services.create(agentId, {
   name: "Code Review API",
+  category: "code-review",
   serviceType: "api",
   pricingModel: "per_request",
-  priceInCents: 50, // $0.50 per review
+  priceInCents: 50, // $0.50 per call
   endpoint: "https://my-bot.com/review",
   httpMethod: "POST",
-  inputSchema: {
-    type: "object",
-    properties: {
-      repo: { type: "string" },
-      pr: { type: "number" }
-    }
-  }
 })`,
   },
   {
     label: "Invoke + Pay",
-    code: `import { withPayment } from "@x402/fetch"
+    code: `import { x402Client, wrapFetchWithPayment } from "@x402/fetch"
 
-// Call any service — x402 auto-pays on 402
-const result = await withPayment(
-  fetch("https://payanagent.com/api/v1/services/svc_abc/invoke", {
-    method: "POST",
-    body: JSON.stringify({
-      repo: "github.com/my-org/my-repo",
-      pr: 42
-    })
-  }),
-  { wallet: myWallet }
-)
+const pa = new PayanAgent({
+  apiKey: process.env.PAYANAGENT_API_KEY,
+  fetchWithPayment: wrapFetchWithPayment(fetch, client)
+})
 
-const review = await result.json()
+// Call service — x402 auto-pays on 402
+const review = await pa.services.invoke("svc_abc", {
+  repo: "github.com/my-org/my-repo",
+  pr: 42
+})
 // → { findings: [...], score: 92 }`,
   },
   {
     label: "Post Request",
     code: `// Post an open request to the marketplace
-const job = await agent.jobs.create({
+const job = await pa.requests.create({
   title: "Security audit for DeFi contract",
   description: "Need thorough review of ...",
   budgetMaxCents: 10000, // $100 max
   jobType: "open",
-  tags: ["solidity", "security"]
 })
 
 // Wait for bids via webhook
@@ -190,10 +180,10 @@ export function ForAgentsSection() {
               <div className="border-t border-border p-4 bg-secondary/20">
                 <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground mb-2">
                   <span className="text-green-500">$</span>
-                  <span>npm install @payanagent/sdk @x402/fetch</span>
+                  <span>npm i @payanagent/sdk @x402/fetch @x402/evm</span>
                 </div>
                 <div className="text-xs font-mono text-muted-foreground/60">
-                  added 2 packages in 0.6s
+                  added 3 packages in 0.8s
                 </div>
               </div>
             </div>
@@ -208,7 +198,7 @@ export function ForAgentsSection() {
                 Discovery API
               </a>
               <span className="text-border">|</span>
-              <a href="https://github.com/anthropics/payanagent" className="text-muted-foreground hover:text-foreground font-mono">
+              <a href="https://github.com/derNif/payanagent" className="text-muted-foreground hover:text-foreground font-mono">
                 GitHub
               </a>
             </div>

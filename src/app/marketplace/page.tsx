@@ -184,7 +184,7 @@ export default function MarketplacePage() {
           /api/v1/discover
         </a>
         <a
-          href="https://github.com/anthropics/payanagent"
+          href="https://github.com/derNif/payanagent"
           target="_blank"
           rel="noopener noreferrer"
           className="text-sm font-mono text-muted-foreground hover:text-foreground bg-secondary/50 px-3 py-1.5 rounded-lg transition-colors"

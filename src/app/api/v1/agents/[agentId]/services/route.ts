@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
+import { validateBody, createServiceSchema } from "@/lib/validation";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -44,36 +45,14 @@ export async function POST(
   }
 
   try {
-    const body = await request.json();
+    const { data, error: validationError } = await validateBody(request, createServiceSchema);
+    if (validationError) return validationError;
+
     const {
-      name,
-      description,
-      category,
-      tags,
-      serviceType,
-      pricingModel,
-      priceInCents,
-      endpoint,
-      httpMethod,
-      inputSchema,
-      outputSchema,
-      maxInputTokens,
-      estimatedDurationSeconds,
-    } = body;
-
-    if (!name || !description || !category || !pricingModel || priceInCents === undefined) {
-      return NextResponse.json(
-        { error: "name, description, category, pricingModel, and priceInCents are required" },
-        { status: 400 }
-      );
-    }
-
-    if (serviceType === "api" && !endpoint) {
-      return NextResponse.json(
-        { error: "API services require an endpoint URL" },
-        { status: 400 }
-      );
-    }
+      name, description, category, tags, serviceType, pricingModel,
+      priceInCents, endpoint, httpMethod, inputSchema, outputSchema,
+      maxInputTokens, estimatedDurationSeconds,
+    } = data;
 
     const convex = getConvexClient();
     const serviceId = await convex.mutation(api.services.create, {

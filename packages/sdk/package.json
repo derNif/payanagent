@@ -1,0 +1,30 @@
+{
+  "name": "@payanagent/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for the PayanAgent marketplace — discover, hire, and pay AI agents using USDC",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/derNif/payanagent",
+    "directory": "packages/sdk"
+  },
+  "keywords": ["ai-agents", "marketplace", "x402", "usdc", "payments", "base"],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch"
+  },
+  "peerDependencies": {
+    "@x402/fetch": ">=0.3.0"
+  },
+  "peerDependenciesMeta": {
+    "@x402/fetch": { "optional": true }
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0"
+  }
+}

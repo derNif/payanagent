@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
+import { validateBody, deliverSchema } from "@/lib/validation";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -15,15 +16,10 @@ export async function POST(
   const { requestId } = await params;
 
   try {
-    const body = await request.json();
-    const { outputPayload } = body;
+    const { data, error: validationError } = await validateBody(request, deliverSchema);
+    if (validationError) return validationError;
 
-    if (!outputPayload) {
-      return NextResponse.json(
-        { error: "outputPayload is required" },
-        { status: 400 }
-      );
-    }
+    const { outputPayload } = data;
 
     const convex = getConvexClient();
     const job = await convex.query(api.jobs.getById, {

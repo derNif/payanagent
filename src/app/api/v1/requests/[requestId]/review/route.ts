@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
+import { validateBody, reviewSchema } from "@/lib/validation";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -15,15 +16,10 @@ export async function POST(
   const { requestId } = await params;
 
   try {
-    const body = await request.json();
-    const { rating, comment } = body;
+    const { data, error: validationError } = await validateBody(request, reviewSchema);
+    if (validationError) return validationError;
 
-    if (!rating || rating < 1 || rating > 5) {
-      return NextResponse.json(
-        { error: "rating is required and must be 1-5" },
-        { status: 400 }
-      );
-    }
+    const { rating, comment } = data;
 
     const convex = getConvexClient();
     const job = await convex.query(api.jobs.getById, {

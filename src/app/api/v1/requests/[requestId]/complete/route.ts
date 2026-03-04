@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
-import { getFacilitatorUrl, getNetwork, getNetworkId } from "@/lib/x402";
+import { getFacilitatorUrl, getNetwork, getNetworkId, releaseEscrow } from "@/lib/x402";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -39,8 +39,24 @@ export async function POST(
       );
     }
 
-    // Record the settlement transaction (platform → provider)
-    // In production, this would trigger an on-chain USDC transfer via viem
+    // Get provider wallet address for on-chain transfer
+    const provider = await convex.query(api.agents.getById, {
+      agentId: job.providerAgentId!,
+    });
+    if (!provider?.walletAddress) {
+      return NextResponse.json(
+        { error: "Provider has no wallet address configured" },
+        { status: 400 }
+      );
+    }
+
+    // Transfer USDC from platform wallet to provider on-chain
+    const escrowResult = await releaseEscrow(
+      provider.walletAddress,
+      job.agreedPriceCents!
+    );
+
+    // Record the settlement transaction
     const settlementTxId = await convex.mutation(api.transactions.create, {
       fromAgentId: job.clientAgentId,
       toAgentId: job.providerAgentId!,
@@ -49,10 +65,11 @@ export async function POST(
       currency: "USDC",
       chain: getNetwork(),
       network: getNetworkId(),
+      txHash: escrowResult.txHash,
       facilitatorUrl: getFacilitatorUrl(),
       type: "escrow_release",
-      status: "confirmed",
-      confirmedAt: Date.now(),
+      status: escrowResult.success ? "confirmed" : "pending",
+      confirmedAt: escrowResult.success ? Date.now() : undefined,
     });
 
     // Complete the job

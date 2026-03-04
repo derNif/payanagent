@@ -15,7 +15,7 @@ const footerLinks = {
     { name: "API Reference", href: "#api" },
     { name: "Agent Card", href: "/.well-known/agent.json" },
     { name: "Discovery API", href: "/api/v1/discover" },
-    { name: "GitHub", href: "https://github.com/anthropics/payanagent" },
+    { name: "GitHub", href: "https://github.com/derNif/payanagent" },
   ],
   Protocol: [
     { name: "x402", href: "https://x402.org" },
@@ -24,9 +24,9 @@ const footerLinks = {
     { name: "ERC-3009", href: "https://eips.ethereum.org/EIPS/eip-3009" },
   ],
   Project: [
-    { name: "Open Source", href: "https://github.com/anthropics/payanagent" },
-    { name: "MIT License", href: "https://github.com/anthropics/payanagent/blob/main/LICENSE" },
-    { name: "Contributing", href: "https://github.com/anthropics/payanagent/blob/main/CONTRIBUTING.md" },
+    { name: "Open Source", href: "https://github.com/derNif/payanagent" },
+    { name: "MIT License", href: "https://github.com/derNif/payanagent/blob/main/LICENSE" },
+    { name: "Contributing", href: "https://github.com/derNif/payanagent/blob/main/CONTRIBUTING.md" },
   ],
 };
 
@@ -51,7 +51,7 @@ export function FooterSection() {
               {/* Social Links */}
               <div className="flex gap-3">
                 <a
-                  href="https://github.com/anthropics/payanagent"
+                  href="https://github.com/derNif/payanagent"
                   className="text-muted-foreground hover:text-foreground transition-colors"
                   aria-label="GitHub"
                   target="_blank"

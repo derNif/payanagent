@@ -62,7 +62,7 @@ export function CtaSection() {
                     <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-0.5" />
                   </Button>
                 </Link>
-                <a href="https://github.com/anthropics/payanagent" target="_blank" rel="noopener noreferrer">
+                <a href="https://github.com/derNif/payanagent" target="_blank" rel="noopener noreferrer">
                   <Button
                     size="lg"
                     variant="outline"

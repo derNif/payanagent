@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
+import { validateBody, createBidSchema } from "@/lib/validation";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -36,15 +37,10 @@ export async function POST(
   const { requestId } = await params;
 
   try {
-    const body = await request.json();
-    const { priceCents, estimatedDurationSeconds, message } = body;
+    const { data, error: validationError } = await validateBody(request, createBidSchema);
+    if (validationError) return validationError;
 
-    if (!priceCents) {
-      return NextResponse.json(
-        { error: "priceCents is required" },
-        { status: 400 }
-      );
-    }
+    const { priceCents, estimatedDurationSeconds, message } = data;
 
     const convex = getConvexClient();
     const bidId = await convex.mutation(api.bids.create, {

@@ -2,15 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { getConvexClient } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
+import { validateBody, webhookSchema } from "@/lib/validation";
 import { api } from "@convex/_generated/api";
-
-const VALID_EVENTS = [
-  "job.received",
-  "bid.received",
-  "bid.accepted",
-  "job.delivered",
-  "job.completed",
-];
 
 // POST /api/v1/webhooks — Register a webhook
 export async function POST(request: NextRequest) {
@@ -18,30 +11,10 @@ export async function POST(request: NextRequest) {
   if (error) return error;
 
   try {
-    const body = await request.json();
-    const { url, events } = body;
+    const { data, error: validationError } = await validateBody(request, webhookSchema);
+    if (validationError) return validationError;
 
-    if (!url) {
-      return NextResponse.json(
-        { error: "url is required" },
-        { status: 400 }
-      );
-    }
-
-    if (!events || !Array.isArray(events) || events.length === 0) {
-      return NextResponse.json(
-        { error: `events array is required. Valid events: ${VALID_EVENTS.join(", ")}` },
-        { status: 400 }
-      );
-    }
-
-    const invalidEvents = events.filter((e: string) => !VALID_EVENTS.includes(e));
-    if (invalidEvents.length > 0) {
-      return NextResponse.json(
-        { error: `Invalid events: ${invalidEvents.join(", ")}. Valid: ${VALID_EVENTS.join(", ")}` },
-        { status: 400 }
-      );
-    }
+    const { url, events } = data;
 
     // Generate webhook secret for HMAC verification
     const secret = `whsec_${randomBytes(24).toString("hex")}`;
