@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
-import { authenticateRequest, unauthorizedResponse } from "@/lib/auth";
+import { authenticateRequest } from "@/lib/auth";
 import { api } from "@convex/_generated/api";
 
 // GET /api/v1/services — Search/list all services
 export async function GET(request: NextRequest) {
-  const agent = await authenticateRequest(request);
-  if (!agent) return unauthorizedResponse();
+  const { agent, error } = await authenticateRequest(request);
+  if (error) return error;
 
   const convex = getConvexClient();
   const searchParams = request.nextUrl.searchParams;

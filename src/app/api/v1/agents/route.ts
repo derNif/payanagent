@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
-import { generateApiKey } from "@/lib/auth";
+import { generateApiKey, rateLimitResponse } from "@/lib/auth";
+import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { api } from "@convex/_generated/api";
 
 // POST /api/v1/agents — Register a new agent (no auth required)
 export async function POST(request: NextRequest) {
+  // Rate limit: 5 registrations per hour per IP
+  const ip = getClientIp(request);
+  const rl = checkRateLimit(`reg:${ip}`, RATE_LIMITS.registration);
+  if (!rl.allowed) return rateLimitResponse(rl.resetAt);
+
   try {
     const body = await request.json();
     const { name, description, walletAddress, chain, tags, providerType, agentUrl, ownerEmail, a2aCapabilities } = body;

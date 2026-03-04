@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "./convex";
 import { api } from "@convex/_generated/api";
+import { checkRateLimit, getClientIp, RATE_LIMITS } from "./rate-limit";
 
 // Generate a new API key with prefix
 export function generateApiKey(): { key: string; hash: string; prefix: string } {
@@ -18,21 +19,36 @@ export function hashApiKey(key: string): string {
   return createHash("sha256").update(key).digest("hex");
 }
 
-// Authenticate a request and return the agent, or null
-export async function authenticateRequest(request: NextRequest) {
+/**
+ * Authenticate a request and return the agent, or an error response.
+ * Includes rate limiting: 120 req/min per API key, 30 req/min per IP for unauthenticated.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function authenticateRequest(
+  request: NextRequest
+): Promise<{ agent: any; error?: never } | { agent?: never; error: NextResponse }> {
   const authHeader = request.headers.get("authorization");
+
   if (!authHeader?.startsWith("Bearer ")) {
-    return null;
+    const ip = getClientIp(request);
+    const rl = checkRateLimit(`unauth:${ip}`, RATE_LIMITS.unauthenticated);
+    if (!rl.allowed) return { error: tooManyRequestsResponse(rl.resetAt) };
+    return { error: unauthorizedResponse() };
   }
 
   const apiKey = authHeader.slice(7);
-  const keyHash = hashApiKey(apiKey);
+  const keyPrefix = apiKey.slice(0, 12);
 
+  // Rate limit by key prefix before DB lookup
+  const rl = checkRateLimit(`key:${keyPrefix}`, RATE_LIMITS.authenticated);
+  if (!rl.allowed) return { error: tooManyRequestsResponse(rl.resetAt) };
+
+  const keyHash = hashApiKey(apiKey);
   const convex = getConvexClient();
 
   const keyRecord = await convex.query(api.apiKeys.getByHash, { keyHash });
   if (!keyRecord || !keyRecord.isActive) {
-    return null;
+    return { error: unauthorizedResponse() };
   }
 
   // Update last used (fire and forget)
@@ -42,16 +58,36 @@ export async function authenticateRequest(request: NextRequest) {
     agentId: keyRecord.agentId,
   });
   if (!agent || agent.status !== "active") {
-    return null;
+    return { error: unauthorizedResponse() };
   }
 
-  return agent;
+  return { agent };
 }
 
-// Helper to return 401 response
-export function unauthorizedResponse() {
+function unauthorizedResponse() {
   return NextResponse.json(
     { error: "Unauthorized. Provide a valid API key in Authorization: Bearer <key>" },
     { status: 401 }
   );
+}
+
+function tooManyRequestsResponse(resetAt: number) {
+  return NextResponse.json(
+    { error: "Too many requests. Please try again later." },
+    {
+      status: 429,
+      headers: {
+        "Retry-After": String(Math.ceil((resetAt - Date.now()) / 1000)),
+      },
+    }
+  );
+}
+
+/** @deprecated Use the `error` field from authenticateRequest instead */
+export function unauthorizedResponse_legacy() {
+  return unauthorizedResponse();
+}
+
+export function rateLimitResponse(resetAt: number) {
+  return tooManyRequestsResponse(resetAt);
 }

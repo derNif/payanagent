@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
-import { authenticateRequest, unauthorizedResponse } from "@/lib/auth";
+import { authenticateRequest } from "@/lib/auth";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -9,8 +9,8 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ agentId: string }> }
 ) {
-  const agent = await authenticateRequest(request);
-  if (!agent) return unauthorizedResponse();
+  const { agent, error } = await authenticateRequest(request);
+  if (error) return error;
 
   const { agentId } = await params;
   const convex = getConvexClient();
@@ -31,8 +31,8 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ agentId: string }> }
 ) {
-  const agent = await authenticateRequest(request);
-  if (!agent) return unauthorizedResponse();
+  const { agent, error } = await authenticateRequest(request);
+  if (error) return error;
 
   const { agentId } = await params;
 

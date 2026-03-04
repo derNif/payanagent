@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
-import { authenticateRequest, unauthorizedResponse } from "@/lib/auth";
+import { authenticateRequest } from "@/lib/auth";
 import { buildPaymentRequiredResponse, verifyPayment, settlePayment, getFacilitatorUrl, getNetwork, getNetworkId } from "@/lib/x402";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
 // GET /api/v1/requests — List requests
 export async function GET(request: NextRequest) {
-  const agent = await authenticateRequest(request);
-  if (!agent) return unauthorizedResponse();
+  const { agent, error } = await authenticateRequest(request);
+  if (error) return error;
 
   const convex = getConvexClient();
   const searchParams = request.nextUrl.searchParams;
@@ -35,8 +35,8 @@ export async function GET(request: NextRequest) {
 // For direct hire: x402 payment required (escrow)
 // For open jobs: no payment yet (payment on bid acceptance)
 export async function POST(request: NextRequest) {
-  const agent = await authenticateRequest(request);
-  if (!agent) return unauthorizedResponse();
+  const { agent, error } = await authenticateRequest(request);
+  if (error) return error;
 
   try {
     const body = await request.json();

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { getConvexClient } from "@/lib/convex";
-import { authenticateRequest, unauthorizedResponse } from "@/lib/auth";
+import { authenticateRequest } from "@/lib/auth";
 import { api } from "@convex/_generated/api";
 
 const VALID_EVENTS = [
@@ -14,8 +14,8 @@ const VALID_EVENTS = [
 
 // POST /api/v1/webhooks — Register a webhook
 export async function POST(request: NextRequest) {
-  const agent = await authenticateRequest(request);
-  if (!agent) return unauthorizedResponse();
+  const { agent, error } = await authenticateRequest(request);
+  if (error) return error;
 
   try {
     const body = await request.json();
