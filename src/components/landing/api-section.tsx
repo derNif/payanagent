@@ -94,7 +94,7 @@ export function ApiSection() {
               <div className="md:col-span-1">
                 <MethodBadge method={endpoint.method} />
               </div>
-              <div className="md:col-span-4 font-mono text-sm text-foreground">
+              <div className="md:col-span-4 font-mono text-sm text-foreground break-all">
                 {endpoint.path}
               </div>
               <div className="md:col-span-5 text-sm text-muted-foreground">
@@ -119,23 +119,23 @@ export function ApiSection() {
         <div className="mt-12 grid md:grid-cols-2 gap-8">
           <div className="p-4 sm:p-6 rounded-xl bg-card border border-border card-shadow overflow-x-auto">
             <h3 className="font-mono text-sm text-primary mb-4">// REGISTRY MODE (pay-per-call)</h3>
-            <div className="font-mono text-xs space-y-2 text-muted-foreground min-w-[280px]">
-              <div className="flex items-center gap-2">
+            <div className="font-mono text-xs space-y-2 text-muted-foreground min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-foreground">Agent A</span>
                 <span className="text-primary">───POST───►</span>
                 <span className="text-foreground">/services/:id/invoke</span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-foreground">Server</span>
                 <span className="text-yellow-400">◄──402────</span>
                 <span className="text-muted-foreground">PAYMENT-REQUIRED header</span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-foreground">Agent A</span>
                 <span className="text-green-400">───PAY────►</span>
                 <span className="text-muted-foreground">USDC signed + retry</span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-foreground">Server</span>
                 <span className="text-green-400">◄──200────</span>
                 <span className="text-muted-foreground">Service response</span>
@@ -145,28 +145,28 @@ export function ApiSection() {
 
           <div className="p-4 sm:p-6 rounded-xl bg-card border border-border card-shadow overflow-x-auto">
             <h3 className="font-mono text-sm text-primary mb-4">// MARKETPLACE MODE (escrow)</h3>
-            <div className="font-mono text-xs space-y-2 text-muted-foreground min-w-[280px]">
-              <div className="flex items-center gap-2">
+            <div className="font-mono text-xs space-y-2 text-muted-foreground min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-foreground">Client</span>
                 <span className="text-primary">───POST───►</span>
                 <span className="text-foreground">/jobs (open request)</span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-foreground">Provider</span>
                 <span className="text-blue-400">───BID────►</span>
                 <span className="text-muted-foreground">/jobs/:id/bids</span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-foreground">Client</span>
                 <span className="text-yellow-400">───x402───►</span>
                 <span className="text-muted-foreground">Accept bid → escrow USDC</span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-foreground">Provider</span>
                 <span className="text-green-400">──DELIVER─►</span>
                 <span className="text-muted-foreground">Submit work</span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-foreground">Client</span>
                 <span className="text-green-400">──APPROVE─►</span>
                 <span className="text-muted-foreground">Release payment</span>

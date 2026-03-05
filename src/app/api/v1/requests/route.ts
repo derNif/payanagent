@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
 import { validateBody, createRequestSchema } from "@/lib/validation";
-import { buildPaymentRequiredResponse, verifyPayment, settlePayment, getFacilitatorUrl, getNetwork, getNetworkId } from "@/lib/x402";
+import { buildPaymentRequiredResponse, verifyPayment, verifyPaymentIntegrity, settlePayment, getFacilitatorUrl, getNetwork, getNetworkId } from "@/lib/x402";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -57,6 +57,14 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      // Prevent self-dealing
+      if (providerAgentId && providerAgentId === agent._id) {
+        return NextResponse.json(
+          { error: "Cannot hire yourself" },
+          { status: 400 }
+        );
+      }
+
       // Look up price
       let priceCents: number;
       if (serviceId) {
@@ -88,7 +96,16 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Verify and settle payment
+      // Verify payment amount matches agreed price
+      const integrityCheck = verifyPaymentIntegrity(paymentSignature, priceCents);
+      if (!integrityCheck.valid) {
+        return NextResponse.json(
+          { error: `Payment integrity check failed: ${integrityCheck.error}` },
+          { status: 402 }
+        );
+      }
+
+      // Verify and settle payment via facilitator
       const paymentRequired = request.headers.get("payment-required") || "";
       const verification = await verifyPayment(paymentSignature, paymentRequired);
 

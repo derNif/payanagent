@@ -4,8 +4,10 @@ import { privateKeyToAccount } from "viem/accounts";
 import { base, baseSepolia } from "viem/chains";
 
 const PLATFORM_WALLET = process.env.PLATFORM_WALLET_ADDRESS!;
-const FACILITATOR_URL = process.env.X402_FACILITATOR_URL || "https://x402.org/facilitator";
 const NETWORK = process.env.X402_NETWORK || "base";
+// x402.org/facilitator is testnet only; xpay supports Base mainnet
+const FACILITATOR_URL = process.env.X402_FACILITATOR_URL ||
+  (NETWORK === "base-sepolia" ? "https://x402.org/facilitator" : "https://facilitator.xpay.sh");
 
 // CAIP-2 chain IDs
 const CHAIN_IDS: Record<string, string> = {
@@ -84,6 +86,40 @@ export function buildPaymentRequiredResponse(
       "PAYMENT-REQUIRED": encoded,
     },
   });
+}
+
+// Server-side verification that payment matches expected price and recipient
+export function verifyPaymentIntegrity(
+  paymentSignatureHeader: string,
+  expectedAmountCents: number
+): { valid: boolean; error?: string } {
+  const payload = decodeBase64Header(paymentSignatureHeader);
+  if (!payload) return { valid: false, error: "Cannot decode payment signature" };
+
+  const accepted = payload.accepted;
+  if (!accepted) return { valid: false, error: "Missing accepted requirements in payment" };
+
+  // Verify payTo matches our platform wallet
+  if (accepted.payTo && accepted.payTo.toLowerCase() !== PLATFORM_WALLET.toLowerCase()) {
+    return { valid: false, error: "Payment recipient does not match platform wallet" };
+  }
+
+  // Verify amount matches expected price
+  const expectedBaseUnits = centsToUsdcBaseUnits(expectedAmountCents);
+  if (accepted.amount && String(accepted.amount) !== expectedBaseUnits) {
+    return {
+      valid: false,
+      error: `Payment amount mismatch: expected ${expectedBaseUnits}, got ${accepted.amount}`,
+    };
+  }
+
+  // Verify network matches configured network
+  const expectedNetworkId = CHAIN_IDS[NETWORK] || CHAIN_IDS["base"];
+  if (accepted.network && accepted.network !== expectedNetworkId) {
+    return { valid: false, error: `Network mismatch: expected ${expectedNetworkId}, got ${accepted.network}` };
+  }
+
+  return { valid: true };
 }
 
 // Verify a payment via the facilitator (x402 v2 structured format)
@@ -199,6 +235,9 @@ export async function releaseEscrow(
   const privateKey = process.env.PLATFORM_WALLET_PRIVATE_KEY;
   if (!privateKey) {
     return { success: false, error: "PLATFORM_WALLET_PRIVATE_KEY not configured" };
+  }
+  if (!/^0x[a-fA-F0-9]{64}$/.test(privateKey)) {
+    return { success: false, error: "Invalid private key format" };
   }
 
   try {

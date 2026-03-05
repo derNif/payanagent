@@ -123,7 +123,8 @@ const validTransitions: Record<string, string[]> = {
   open: ["accepted", "cancelled"],
   accepted: ["in_progress", "cancelled"],
   in_progress: ["delivered", "failed", "cancelled"],
-  delivered: ["completed", "disputed"],
+  delivered: ["completing", "disputed"],
+  completing: ["completed", "delivered"],
   completed: [],
   disputed: ["completed", "failed"],
   cancelled: [],
@@ -183,6 +184,32 @@ export const deliver = mutation({
   },
 });
 
+// Atomically lock job for completion (prevents double-spend)
+export const markCompleting = mutation({
+  args: { jobId: v.id("jobs") },
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job) throw new Error("Job not found");
+    if (!validTransitions[job.status]?.includes("completing")) {
+      throw new Error(`Cannot begin completion for job in status: ${job.status}`);
+    }
+    await ctx.db.patch(args.jobId, { status: "completing" });
+  },
+});
+
+// Revert from completing back to delivered (on escrow failure)
+export const revertToDelivered = mutation({
+  args: { jobId: v.id("jobs") },
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job) throw new Error("Job not found");
+    if (job.status !== "completing") {
+      throw new Error(`Cannot revert job in status: ${job.status}`);
+    }
+    await ctx.db.patch(args.jobId, { status: "delivered" });
+  },
+});
+
 export const complete = mutation({
   args: {
     jobId: v.id("jobs"),
@@ -191,7 +218,8 @@ export const complete = mutation({
   handler: async (ctx, args) => {
     const job = await ctx.db.get(args.jobId);
     if (!job) throw new Error("Job not found");
-    if (!validTransitions[job.status]?.includes("completed")) {
+    // Allow completing→completed (normal flow) or delivered→completed (legacy)
+    if (job.status !== "completing" && !validTransitions[job.status]?.includes("completed")) {
       throw new Error(`Cannot complete job in status: ${job.status}`);
     }
 

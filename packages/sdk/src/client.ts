@@ -41,12 +41,12 @@ export class PayanAgent {
   }
 
   /** Unified search across agents, services, and open requests */
-  async discover(query?: string, options?: { category?: string; minRating?: number; maxPrice?: number }): Promise<DiscoverResult> {
+  async discover(query?: string, options?: { category?: string; minRating?: number; maxPriceCents?: number }): Promise<DiscoverResult> {
     const params = new URLSearchParams();
     if (query) params.set("q", query);
     if (options?.category) params.set("category", options.category);
     if (options?.minRating) params.set("minRating", String(options.minRating));
-    if (options?.maxPrice) params.set("maxPrice", String(options.maxPrice));
+    if (options?.maxPriceCents) params.set("maxPriceCents", String(options.maxPriceCents));
     return this._get(`/api/v1/discover?${params}`);
   }
 
@@ -96,9 +96,19 @@ export class PayanAgent {
   }
 
   private async _handleResponse<T>(res: Response): Promise<T> {
-    const data = await res.json();
+    const text = await res.text();
+    let data: unknown;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      if (!res.ok) {
+        throw new PayanAgentError(`HTTP ${res.status}: ${text.slice(0, 200)}`, res.status);
+      }
+      throw new PayanAgentError(`Invalid JSON response: ${text.slice(0, 200)}`, res.status);
+    }
     if (!res.ok) {
-      const msg = data?.error || data?.message || `HTTP ${res.status}`;
+      const obj = data as Record<string, unknown>;
+      const msg = (obj?.error || obj?.message || `HTTP ${res.status}`) as string;
       throw new PayanAgentError(msg, res.status, data);
     }
     return data as T;
@@ -109,7 +119,7 @@ class AgentsAPI {
   constructor(private client: PayanAgent) {}
 
   /** Register a new agent (no auth required for registration) */
-  async register(input: RegisterAgentInput): Promise<{ agentId: string; apiKey: string }> {
+  async register(input: RegisterAgentInput): Promise<{ agentId: string; apiKey: string; apiKeyPrefix: string }> {
     return this.client._post("/api/v1/agents", input);
   }
 
@@ -119,7 +129,7 @@ class AgentsAPI {
   }
 
   /** Update your agent profile */
-  async update(agentId: string, updates: Partial<Pick<Agent, "name" | "description" | "tags" | "agentUrl">>): Promise<{ message: string }> {
+  async update(agentId: string, updates: Partial<Pick<Agent, "name" | "description" | "tags" | "agentUrl" | "ownerEmail" | "a2aCapabilities">>): Promise<{ message: string }> {
     return this.client._patch(`/api/v1/agents/${agentId}`, updates);
   }
 }
@@ -128,10 +138,11 @@ class ServicesAPI {
   constructor(private client: PayanAgent) {}
 
   /** List all services */
-  async list(options?: { category?: string; query?: string }): Promise<{ services: Service[] }> {
+  async list(options?: { category?: string; query?: string; serviceType?: string }): Promise<{ services: Service[] }> {
     const params = new URLSearchParams();
     if (options?.category) params.set("category", options.category);
     if (options?.query) params.set("q", options.query);
+    if (options?.serviceType) params.set("serviceType", options.serviceType);
     return this.client._get(`/api/v1/services?${params}`);
   }
 
@@ -183,7 +194,7 @@ class RequestsAPI {
   }
 
   /** Accept a bid (x402 escrow payment) */
-  async acceptBid(requestId: string, bidId: string): Promise<unknown> {
+  async acceptBid(requestId: string, bidId: string): Promise<{ message: string; requestId: string; bidId: string; agreedPriceCents: number; escrowTransactionId: string }> {
     return this.client._postPaid(`/api/v1/requests/${requestId}/bids/${bidId}/accept`);
   }
 
@@ -198,7 +209,7 @@ class RequestsAPI {
   }
 
   /** Approve and release payment (client) */
-  async complete(requestId: string): Promise<{ message: string; settlementTransactionId: string }> {
+  async complete(requestId: string): Promise<{ message: string; requestId: string; settlementTransactionId: string }> {
     return this.client._post(`/api/v1/requests/${requestId}/complete`);
   }
 

@@ -30,6 +30,13 @@ export async function POST(
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
 
+    if (job.status !== "completed") {
+      return NextResponse.json(
+        { error: "Reviews can only be left on completed jobs" },
+        { status: 400 }
+      );
+    }
+
     // Determine who is being reviewed
     let revieweeAgentId: Id<"agents">;
     if (agent._id === job.clientAgentId) {

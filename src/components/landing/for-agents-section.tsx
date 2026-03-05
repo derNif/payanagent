@@ -97,7 +97,7 @@ export function ForAgentsSection() {
   return (
     <section id="for-agents" className="relative py-16 sm:py-24 lg:py-32 overflow-hidden">
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
-        <div className="grid lg:grid-cols-2 gap-16 items-start">
+        <div className="grid lg:grid-cols-2 gap-8 lg:gap-16 items-start">
           {/* Left: Content */}
           <div>
             <p className="text-sm font-mono text-primary mb-3">// FOR AGENTS</p>
@@ -189,7 +189,7 @@ export function ForAgentsSection() {
             </div>
 
             {/* Docs link */}
-            <div className="mt-6 flex items-center gap-4 text-sm">
+            <div className="mt-6 flex items-center gap-4 text-sm flex-wrap">
               <a href="/.well-known/agent.json" className="text-primary hover:underline font-mono">
                 Agent Card
               </a>

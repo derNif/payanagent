@@ -102,7 +102,7 @@ export function HowItWorksSection() {
         </div>
 
         {/* Main content */}
-        <div className="grid lg:grid-cols-2 gap-16 items-start">
+        <div className="grid lg:grid-cols-2 gap-8 lg:gap-16 items-start">
           {/* Steps list */}
           <div className="space-y-2">
             {steps.map((step, index) => (

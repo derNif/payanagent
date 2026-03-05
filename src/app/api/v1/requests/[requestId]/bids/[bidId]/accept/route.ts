@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
-import { buildPaymentRequiredResponse, verifyPayment, settlePayment, getFacilitatorUrl, getNetwork, getNetworkId } from "@/lib/x402";
+import { buildPaymentRequiredResponse, verifyPayment, verifyPaymentIntegrity, settlePayment, getFacilitatorUrl, getNetwork, getNetworkId } from "@/lib/x402";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -51,7 +51,16 @@ export async function POST(
     );
   }
 
-  // Verify and settle payment
+  // Verify payment amount matches bid price
+  const integrityCheck = verifyPaymentIntegrity(paymentSignature, bid.priceCents);
+  if (!integrityCheck.valid) {
+    return NextResponse.json(
+      { error: `Payment integrity check failed: ${integrityCheck.error}` },
+      { status: 402 }
+    );
+  }
+
+  // Verify and settle payment via facilitator
   const paymentRequired = request.headers.get("payment-required") || "";
   const verification = await verifyPayment(paymentSignature, paymentRequired);
 
@@ -81,14 +90,6 @@ export async function POST(
 
   // Accept the bid (this also rejects other bids and updates the job)
   await convex.mutation(api.bids.accept, { bidId: bidId as Id<"bids"> });
-
-  // Link the escrow transaction to the job
-  await convex.mutation(api.jobs.complete, {
-    jobId: requestId as Id<"jobs">,
-    settlementTransactionId: undefined,
-  }).catch(() => {
-    // Job isn't in completed state yet, this is just to store the escrow tx
-  });
 
   return NextResponse.json({
     message: "Bid accepted. Escrow payment received.",

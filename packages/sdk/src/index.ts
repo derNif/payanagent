@@ -1,4 +1,4 @@
-export { PayanAgent } from "./client";
+export { PayanAgent, PayanAgentError } from "./client";
 export type {
   PayanAgentConfig,
   Agent,
@@ -8,4 +8,10 @@ export type {
   Review,
   DiscoverResult,
   Webhook,
+  RegisterAgentInput,
+  CreateServiceInput,
+  CreateRequestInput,
+  CreateBidInput,
+  ReviewInput,
+  RegisterWebhookInput,
 } from "./types";

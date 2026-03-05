@@ -14,6 +14,8 @@ export interface Agent {
   tags: string[];
   providerType: "agent" | "saas" | "api";
   agentUrl?: string;
+  ownerEmail?: string;
+  a2aCapabilities?: { streaming: boolean; pushNotifications: boolean };
   status: string;
   averageRating: number;
   totalJobsCompleted: number;
@@ -35,6 +37,10 @@ export interface Service {
   priceInCents: number;
   endpoint?: string;
   httpMethod?: string;
+  inputSchema?: string;
+  outputSchema?: string;
+  maxInputTokens?: number;
+  estimatedDurationSeconds?: number;
   isActive: boolean;
   _creationTime: number;
 }
@@ -85,6 +91,7 @@ export interface DiscoverResult {
 export interface Webhook {
   webhookId: string;
   secret: string;
+  message: string;
 }
 
 export interface RegisterAgentInput {
@@ -95,6 +102,8 @@ export interface RegisterAgentInput {
   tags?: string[];
   providerType?: "agent" | "saas" | "api";
   agentUrl?: string;
+  ownerEmail?: string;
+  a2aCapabilities?: { streaming: boolean; pushNotifications: boolean };
 }
 
 export interface CreateServiceInput {
@@ -109,6 +118,8 @@ export interface CreateServiceInput {
   httpMethod?: string;
   inputSchema?: string;
   outputSchema?: string;
+  maxInputTokens?: number;
+  estimatedDurationSeconds?: number;
 }
 
 export interface CreateRequestInput {

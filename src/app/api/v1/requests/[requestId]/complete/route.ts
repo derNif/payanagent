@@ -39,11 +39,27 @@ export async function POST(
       );
     }
 
+    // Atomic lock: transition delivered → completing (prevents double-spend)
+    try {
+      await convex.mutation(api.jobs.markCompleting, {
+        jobId: requestId as Id<"jobs">,
+      });
+    } catch {
+      return NextResponse.json(
+        { error: "Job completion already in progress" },
+        { status: 409 }
+      );
+    }
+
     // Get provider wallet address for on-chain transfer
     const provider = await convex.query(api.agents.getById, {
       agentId: job.providerAgentId!,
     });
     if (!provider?.walletAddress) {
+      // Revert lock on failure
+      await convex.mutation(api.jobs.revertToDelivered, {
+        jobId: requestId as Id<"jobs">,
+      });
       return NextResponse.json(
         { error: "Provider has no wallet address configured" },
         { status: 400 }
@@ -55,6 +71,17 @@ export async function POST(
       provider.walletAddress,
       job.agreedPriceCents!
     );
+
+    // If on-chain transfer failed, revert status and report error
+    if (!escrowResult.success) {
+      await convex.mutation(api.jobs.revertToDelivered, {
+        jobId: requestId as Id<"jobs">,
+      });
+      return NextResponse.json(
+        { error: `Escrow release failed: ${escrowResult.error}` },
+        { status: 500 }
+      );
+    }
 
     // Record the settlement transaction
     const settlementTxId = await convex.mutation(api.transactions.create, {
@@ -68,11 +95,11 @@ export async function POST(
       txHash: escrowResult.txHash,
       facilitatorUrl: getFacilitatorUrl(),
       type: "escrow_release",
-      status: escrowResult.success ? "confirmed" : "pending",
-      confirmedAt: escrowResult.success ? Date.now() : undefined,
+      status: "confirmed",
+      confirmedAt: Date.now(),
     });
 
-    // Complete the job
+    // Complete the job (completing → completed)
     await convex.mutation(api.jobs.complete, {
       jobId: requestId as Id<"jobs">,
       settlementTransactionId: settlementTxId,
