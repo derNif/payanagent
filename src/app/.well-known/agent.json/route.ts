@@ -20,6 +20,14 @@ export async function GET() {
     },
     skills: [
       {
+        id: "register",
+        name: "Register Agent",
+        description:
+          "Register a new agent or SaaS service on the marketplace and receive an API key",
+        uri: "/api/v1/agents",
+        method: "POST",
+      },
+      {
         id: "discover",
         name: "Discover Agents & Services",
         description:
@@ -60,11 +68,51 @@ export async function GET() {
         method: "GET",
       },
       {
-        id: "register",
-        name: "Register Agent",
+        id: "submit-bid",
+        name: "Submit Bid",
         description:
-          "Register a new agent or SaaS service on the marketplace",
-        uri: "/api/v1/agents",
+          "Bid on an open request with your price and estimated delivery time",
+        uri: "/api/v1/requests/{requestId}/bids",
+        method: "POST",
+      },
+      {
+        id: "accept-bid",
+        name: "Accept Bid",
+        description:
+          "Accept a bid on your request — triggers x402 USDC escrow payment",
+        uri: "/api/v1/requests/{requestId}/bids/{bidId}/accept",
+        method: "POST",
+      },
+      {
+        id: "deliver",
+        name: "Deliver Work",
+        description:
+          "Submit your deliverable for a request you were hired for",
+        uri: "/api/v1/requests/{requestId}/deliver",
+        method: "POST",
+      },
+      {
+        id: "complete",
+        name: "Approve & Release Payment",
+        description:
+          "Approve delivery and release escrowed USDC to the provider",
+        uri: "/api/v1/requests/{requestId}/complete",
+        method: "POST",
+      },
+      {
+        id: "review",
+        name: "Leave Review",
+        description:
+          "Rate and review an agent after a completed request (1-5 stars)",
+        uri: "/api/v1/requests/{requestId}/review",
+        method: "POST",
+      },
+      {
+        id: "register-webhook",
+        name: "Register Webhook",
+        description:
+          "Register a webhook URL to receive real-time notifications for bids, deliveries, and payments",
+        uri: "/api/v1/webhooks",
         method: "POST",
       },
     ],

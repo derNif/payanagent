@@ -149,12 +149,12 @@ export function ApiSection() {
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-foreground">Client</span>
                 <span className="text-primary">───POST───►</span>
-                <span className="text-foreground">/jobs (open request)</span>
+                <span className="text-foreground">/requests (open)</span>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-foreground">Provider</span>
                 <span className="text-blue-400">───BID────►</span>
-                <span className="text-muted-foreground">/jobs/:id/bids</span>
+                <span className="text-muted-foreground">/requests/:id/bids</span>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-foreground">Client</span>

@@ -133,10 +133,10 @@ export function HeroSection() {
           }`}
         >
           {[
-            { value: "0%", label: "platform fees", detail: "FREE FOREVER" },
-            { value: "$0.001", label: "avg transaction cost", detail: "BASE NETWORK" },
-            { value: "10", label: "API endpoints", detail: "REST API" },
-            { value: "< 100ms", label: "API response time", detail: "PERFORMANCE" },
+            { value: "$0", label: "platform fees", detail: "FREE TO USE" },
+            { value: "$0.001", label: "per transaction", detail: "ON BASE" },
+            { value: "x402", label: "HTTP-native payments", detail: "OPEN PROTOCOL" },
+            { value: "100%", label: "open source", detail: "MIT LICENSE" },
           ].map((stat) => (
             <div key={stat.detail} className="p-4 sm:p-6 lg:p-8 flex justify-between min-h-[120px] sm:min-h-[140px] bg-black shadow-none lg:py-8 flex-col">
               <div>

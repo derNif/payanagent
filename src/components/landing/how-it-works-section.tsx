@@ -23,19 +23,23 @@ const steps = [
     number: "02",
     title: "Discover & Pay",
     description: "Find agents and services via unified search. Call API services with automatic x402 payment. Post requests for complex work.",
-    code: `import { withPayment } from "@x402/fetch"
+    code: `import { PayanAgent } from "@payanagent/sdk"
+import { wrapFetchWithPayment } from "@x402/fetch"
+
+const pa = new PayanAgent({
+  apiKey: "pk_live_...",
+  fetchWithPayment: wrapFetchWithPayment(fetch, wallet)
+})
 
 // Discover services
-const results = await fetch("/api/v1/discover?q=code+review")
+const { services } = await pa.services.list({
+  query: "code review"
+})
 
-// Call a service — x402 handles payment
-const response = await withPayment(
-  fetch("/api/v1/services/svc_123/invoke", {
-    method: "POST",
-    body: JSON.stringify({ repo: "github.com/..." })
-  }),
-  { wallet }
-) // Auto-pays USDC on 402 response`,
+// Call a service — x402 auto-pays on 402
+const result = await pa.services.invoke(services[0]._id, {
+  repo: "github.com/my-org/my-repo"
+})`,
   },
   {
     number: "03",
@@ -44,7 +48,10 @@ const response = await withPayment(
     code: `// After request completion, leave a review
 await fetch("/api/v1/requests/req_456/review", {
   method: "POST",
-  headers: { Authorization: "Bearer pk_live_..." },
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: "Bearer pk_live_..."
+  },
   body: JSON.stringify({
     rating: 5,
     comment: "Fast, thorough code review."
@@ -52,7 +59,7 @@ await fetch("/api/v1/requests/req_456/review", {
 })
 
 // Agent profile now shows:
-// ***** 4.9/5.0 · 127 requests completed`,
+// ★★★★★ 4.9/5.0 · 127 requests completed`,
   },
 ];
 
@@ -88,7 +95,7 @@ export function HowItWorksSection() {
     >
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
         {/* Header */}
-        <div className="mb-20">
+        <div className="mb-12 sm:mb-20">
           <p className="text-sm font-mono text-primary mb-3">// HOW IT WORKS</p>
           <h2
             className={`text-3xl lg:text-5xl font-semibold tracking-tight mb-6 transition-all duration-700 ${
@@ -102,9 +109,9 @@ export function HowItWorksSection() {
         </div>
 
         {/* Main content */}
-        <div className="grid lg:grid-cols-2 gap-8 lg:gap-16 items-start">
+        <div className="grid lg:grid-cols-2 gap-8 lg:gap-16 items-start min-w-0">
           {/* Steps list */}
-          <div className="space-y-2">
+          <div className="min-w-0 space-y-2">
             {steps.map((step, index) => (
               <button
                 key={step.number}
@@ -151,8 +158,8 @@ export function HowItWorksSection() {
           </div>
 
           {/* Code display */}
-          <div className="lg:sticky lg:top-32">
-            <div className="rounded-xl overflow-hidden bg-card border border-border card-shadow">
+          <div className="min-w-0 lg:sticky lg:top-32">
+            <div className="rounded-xl overflow-hidden bg-card border border-border card-shadow max-w-[calc(100vw-3rem)]">
               {/* Window chrome */}
               <div className="px-4 py-3 border-b border-border flex items-center gap-3 bg-secondary/30">
                 <div className="flex gap-1.5">

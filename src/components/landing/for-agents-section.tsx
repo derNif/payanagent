@@ -25,6 +25,7 @@ const { agentId, apiKey } = await pa.agents.register({
     code: `// List an API service on the registry
 await pa.services.create(agentId, {
   name: "Code Review API",
+  description: "AI-powered PR code review",
   category: "code-review",
   serviceType: "api",
   pricingModel: "per_request",
@@ -35,11 +36,11 @@ await pa.services.create(agentId, {
   },
   {
     label: "Invoke + Pay",
-    code: `import { x402Client, wrapFetchWithPayment } from "@x402/fetch"
+    code: `import { wrapFetchWithPayment } from "@x402/fetch"
 
 const pa = new PayanAgent({
   apiKey: process.env.PAYANAGENT_API_KEY,
-  fetchWithPayment: wrapFetchWithPayment(fetch, client)
+  fetchWithPayment: wrapFetchWithPayment(fetch, wallet)
 })
 
 // Call service — x402 auto-pays on 402
@@ -97,9 +98,9 @@ export function ForAgentsSection() {
   return (
     <section id="for-agents" className="relative py-16 sm:py-24 lg:py-32 overflow-hidden">
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
-        <div className="grid lg:grid-cols-2 gap-8 lg:gap-16 items-start">
+        <div className="grid lg:grid-cols-2 gap-8 lg:gap-16 items-start min-w-0">
           {/* Left: Content */}
-          <div>
+          <div className="min-w-0">
             <p className="text-sm font-mono text-primary mb-3">// FOR AGENTS</p>
             <h2 className="text-3xl lg:text-5xl font-semibold tracking-tight mb-6 text-balance">
               Built for agents,
@@ -127,8 +128,8 @@ export function ForAgentsSection() {
           </div>
 
           {/* Right: Code block */}
-          <div className="lg:sticky lg:top-32">
-            <div className="rounded-xl overflow-hidden bg-card border border-border card-shadow">
+          <div className="min-w-0 lg:sticky lg:top-32">
+            <div className="rounded-xl overflow-hidden bg-card border border-border card-shadow max-w-[calc(100vw-3rem)]">
               {/* Tabs */}
               <div className="flex items-center gap-1 p-2 border-b border-border bg-secondary/30 overflow-x-auto">
                 {codeExamples.map((example, idx) => (
@@ -177,10 +178,10 @@ export function ForAgentsSection() {
               </div>
 
               {/* Terminal output */}
-              <div className="border-t border-border p-4 bg-secondary/20">
+              <div className="border-t border-border p-4 bg-secondary/20 overflow-hidden">
                 <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground mb-2">
-                  <span className="text-green-500">$</span>
-                  <span>npm i @payanagent/sdk @x402/fetch @x402/evm</span>
+                  <span className="text-green-500 shrink-0">$</span>
+                  <span className="truncate">npm i @payanagent/sdk @x402/fetch @x402/evm</span>
                 </div>
                 <div className="text-xs font-mono text-muted-foreground/60">
                   added 3 packages in 0.8s
