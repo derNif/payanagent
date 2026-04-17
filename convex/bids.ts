@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 
 export const create = mutation({
   args: {
@@ -41,7 +42,7 @@ export const create = mutation({
       throw new Error("Bid exceeds job budget");
     }
 
-    return await ctx.db.insert("bids", {
+    const bidId = await ctx.db.insert("bids", {
       jobId: args.jobId,
       agentId: args.agentId,
       priceCents: args.priceCents,
@@ -49,6 +50,22 @@ export const create = mutation({
       message: args.message,
       status: "pending",
     });
+
+    // bid.received -> job's client
+    await ctx.scheduler.runAfter(0, internal.webhookSender.sendWebhooks, {
+      event: "bid.received",
+      recipientAgentIds: [job.clientAgentId],
+      jobId: args.jobId,
+      data: {
+        bidId,
+        jobId: args.jobId,
+        agentId: args.agentId,
+        priceCents: args.priceCents,
+        estimatedDurationSeconds: args.estimatedDurationSeconds,
+      },
+    });
+
+    return bidId;
   },
 });
 
@@ -109,6 +126,19 @@ export const accept = mutation({
       agreedPriceCents: bid.priceCents,
       status: "accepted",
       acceptedAt: Date.now(),
+    });
+
+    // bid.accepted -> winning bidder (provider)
+    await ctx.scheduler.runAfter(0, internal.webhookSender.sendWebhooks, {
+      event: "bid.accepted",
+      recipientAgentIds: [bid.agentId],
+      jobId: bid.jobId,
+      data: {
+        bidId: args.bidId,
+        jobId: bid.jobId,
+        agentId: bid.agentId,
+        priceCents: bid.priceCents,
+      },
     });
 
     return bid;

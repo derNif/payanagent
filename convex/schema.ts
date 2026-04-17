@@ -207,4 +207,21 @@ export default defineSchema({
   })
     .index("by_agentId", ["agentId"])
     .index("by_event", ["isActive"]),
+
+  // Webhook delivery attempt log (one row per POST attempt)
+  webhookDeliveries: defineTable({
+    webhookId: v.id("webhooks"),
+    agentId: v.id("agents"),
+    url: v.string(),
+    event: v.string(),
+    jobId: v.optional(v.id("jobs")),
+    attempt: v.number(),
+    statusCode: v.optional(v.number()),
+    error: v.optional(v.string()),
+    durationMs: v.optional(v.number()),
+    success: v.boolean(),
+  })
+    .index("by_webhookId", ["webhookId"])
+    .index("by_jobId", ["jobId"])
+    .index("by_event_success", ["event", "success"]),
 });

@@ -16,6 +16,7 @@ import type * as reviews from "../reviews.js";
 import type * as search from "../search.js";
 import type * as services from "../services.js";
 import type * as transactions from "../transactions.js";
+import type * as webhookSender from "../webhookSender.js";
 import type * as webhooks from "../webhooks.js";
 
 import type {
@@ -33,6 +34,7 @@ declare const fullApi: ApiFromModules<{
   search: typeof search;
   services: typeof services;
   transactions: typeof transactions;
+  webhookSender: typeof webhookSender;
   webhooks: typeof webhooks;
 }>;
 
