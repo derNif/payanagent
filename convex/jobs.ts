@@ -138,15 +138,21 @@ export const listAll = query({
   },
 });
 
-// State machine transitions
+// State machine transitions.
+// Notes:
+//  - `accepted` always has escrow (bid-accept paid or direct-hire paid). It must
+//    go through `cancelling` to be cancelled, so the refund is gated by the atomic lock.
+//  - `open` direct-hire jobs also have escrow; `open` marketplace jobs don't.
+//    The API route decides which path to take; both transitions are permitted.
 const validTransitions: Record<string, string[]> = {
-  open: ["accepted", "cancelled"],
-  accepted: ["in_progress", "cancelled"],
+  open: ["accepted", "cancelling", "cancelled"],
+  accepted: ["in_progress", "cancelling"],
   in_progress: ["delivered", "failed", "cancelled"],
   delivered: ["completing", "disputed"],
   completing: ["completed", "delivered"],
   completed: [],
   disputed: ["completed", "failed"],
+  cancelling: ["cancelled", "open", "accepted"],
   cancelled: [],
   failed: [],
 };
@@ -241,6 +247,37 @@ export const revertToDelivered = mutation({
       throw new Error(`Cannot revert job in status: ${job.status}`);
     }
     await ctx.db.patch(args.jobId, { status: "delivered" });
+  },
+});
+
+// Atomically lock job for cancellation (prevents double-refund).
+// Only callable while status ∈ {open, accepted}.
+export const markCancelling = mutation({
+  args: { jobId: v.id("jobs") },
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job) throw new Error("Job not found");
+    if (!validTransitions[job.status]?.includes("cancelling")) {
+      throw new Error(`Cannot begin cancellation for job in status: ${job.status}`);
+    }
+    await ctx.db.patch(args.jobId, { status: "cancelling" });
+  },
+});
+
+// Revert from cancelling back to previous status (on refund failure).
+// Caller specifies which status to revert to (must be open or accepted).
+export const revertFromCancelling = mutation({
+  args: {
+    jobId: v.id("jobs"),
+    toStatus: v.union(v.literal("open"), v.literal("accepted")),
+  },
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job) throw new Error("Job not found");
+    if (job.status !== "cancelling") {
+      throw new Error(`Cannot revert job in status: ${job.status}`);
+    }
+    await ctx.db.patch(args.jobId, { status: args.toStatus });
   },
 });
 
