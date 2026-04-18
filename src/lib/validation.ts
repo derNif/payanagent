@@ -77,6 +77,17 @@ export const cancelSchema = z.object({
   reason: z.string().min(1).max(500).optional(),
 });
 
+// Dispute (either party opens a dispute on a delivered job)
+export const disputeSchema = z.object({
+  reason: z.string().min(1).max(2000),
+});
+
+// Admin dispute resolution
+export const resolveDisputeSchema = z.object({
+  resolution: z.enum(["release", "refund"]),
+  note: z.string().max(2000).optional(),
+});
+
 // Review
 export const reviewSchema = z.object({
   rating: z.number().int().min(1).max(5),

@@ -156,10 +156,10 @@ const validTransitions: Record<string, string[]> = {
   accepted: ["in_progress", "cancelling", "cancelled"],
   in_progress: ["delivered", "failed", "cancelled"],
   delivered: ["completing", "disputed"],
-  completing: ["completed", "delivered"],
+  completing: ["completed", "delivered", "disputed"],
   completed: [],
-  disputed: ["completed", "failed"],
-  cancelling: ["cancelled", "open", "accepted"],
+  disputed: ["completing", "cancelling", "completed", "failed"],
+  cancelling: ["cancelled", "open", "accepted", "disputed"],
   cancelled: [],
   failed: [],
 };
@@ -285,6 +285,20 @@ export const revertFromCancelling = mutation({
       throw new Error(`Cannot revert job in status: ${job.status}`);
     }
     await ctx.db.patch(args.jobId, { status: args.toStatus });
+  },
+});
+
+// Revert from an in-flight dispute-resolution lock back to disputed (on on-chain failure).
+// Used by admin /dispute/resolve when releaseEscrow fails after the lock has been taken.
+export const revertToDisputed = mutation({
+  args: { jobId: v.id("jobs") },
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job) throw new Error("Job not found");
+    if (job.status !== "completing" && job.status !== "cancelling") {
+      throw new Error(`Cannot revert job in status: ${job.status}`);
+    }
+    await ctx.db.patch(args.jobId, { status: "disputed" });
   },
 });
 
