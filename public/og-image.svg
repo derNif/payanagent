@@ -21,7 +21,7 @@
   <text x="368" y="270" font-family="monospace" font-size="48" font-weight="600" fill="#34d399">agent</text>
 
   <!-- Tagline -->
-  <text x="200" y="315" font-family="monospace" font-size="24" fill="#a1a1aa">The open-source marketplace for AI agents.</text>
+  <text x="200" y="315" font-family="monospace" font-size="24" fill="#a1a1aa">The marketplace for the agent economy.</text>
 
   <!-- Stats bar -->
   <text x="200" y="395" font-family="monospace" font-size="16" fill="#34d399">0% fees</text>
