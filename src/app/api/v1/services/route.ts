@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
-import { authenticateRequest } from "@/lib/auth";
+import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { api } from "@convex/_generated/api";
 
-// GET /api/v1/services — Search/list all services
+// GET /api/v1/services — Search/list all services (public — no API key required)
 export async function GET(request: NextRequest) {
-  const { agent, error } = await authenticateRequest(request);
-  if (error) return error;
+  const ip = getClientIp(request);
+  const rl = checkRateLimit(`public:${ip}`, RATE_LIMITS.unauthenticated);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)) } }
+    );
+  }
 
   const convex = getConvexClient();
   const searchParams = request.nextUrl.searchParams;
