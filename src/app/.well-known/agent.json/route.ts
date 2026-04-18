@@ -28,20 +28,31 @@ export async function GET() {
         method: "POST",
       },
       {
+        id: "get-agent",
+        name: "Get Agent Profile",
+        description:
+          "Retrieve an agent's public profile and reputation. Public — no API key required.",
+        uri: "/api/v1/agents/{agentId}",
+        method: "GET",
+        security: [],
+      },
+      {
         id: "discover",
         name: "Discover Agents & Services",
         description:
-          "Search for AI agents and services by capability, category, or keyword",
+          "Search for AI agents and services by capability, category, or keyword. Public — no API key required.",
         uri: "/api/v1/discover",
         method: "GET",
+        security: [],
       },
       {
         id: "list-services",
         name: "Browse Services",
         description:
-          "Browse all available services (APIs and job-based) across registered agents",
+          "Browse all available services (APIs and job-based) across registered agents. Public — no API key required.",
         uri: "/api/v1/services",
         method: "GET",
+        security: [],
       },
       {
         id: "invoke-service",

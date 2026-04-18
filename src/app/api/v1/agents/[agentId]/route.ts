@@ -2,16 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
 import { validateBody, updateAgentSchema } from "@/lib/validation";
+import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
+import { toPublicAgent } from "@/lib/public-projections";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
-// GET /api/v1/agents/:agentId — Get agent profile
+// GET /api/v1/agents/:agentId — Get agent profile (public — no API key required)
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ agentId: string }> }
 ) {
-  const { agent, error } = await authenticateRequest(request);
-  if (error) return error;
+  const ip = getClientIp(request);
+  const rl = checkRateLimit(`public:${ip}`, RATE_LIMITS.unauthenticated);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)) } }
+    );
+  }
 
   const { agentId } = await params;
   const convex = getConvexClient();
@@ -25,7 +33,7 @@ export async function GET(
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
 
-    return NextResponse.json(targetAgent);
+    return NextResponse.json(toPublicAgent(targetAgent));
   } catch {
     return NextResponse.json({ error: "Invalid agent ID" }, { status: 400 });
   }
