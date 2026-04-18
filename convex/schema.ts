@@ -104,6 +104,7 @@ export default defineSchema({
       v.literal("completing"),
       v.literal("completed"),
       v.literal("disputed"),
+      v.literal("cancelling"),
       v.literal("cancelled"),
       v.literal("failed")
     ),

@@ -72,6 +72,11 @@ export const deliverSchema = z.object({
   outputPayload: z.string().min(1, "outputPayload is required"),
 });
 
+// Cancel
+export const cancelSchema = z.object({
+  reason: z.string().min(1).max(500).optional(),
+});
+
 // Review
 export const reviewSchema = z.object({
   rating: z.number().int().min(1).max(5),
