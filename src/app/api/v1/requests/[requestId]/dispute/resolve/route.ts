@@ -137,6 +137,11 @@ export async function POST(
         confirmedAt: Date.now(),
       });
 
+      await convex.mutation(api.jobs.recordDisputeResolution, {
+        jobId: requestId as Id<"jobs">,
+        note: data.note,
+      });
+
       await convex.mutation(api.jobs.complete, {
         jobId: requestId as Id<"jobs">,
         settlementTransactionId: settlementTxId,
@@ -211,6 +216,11 @@ export async function POST(
       type: "refund",
       status: "confirmed",
       confirmedAt: Date.now(),
+    });
+
+    await convex.mutation(api.jobs.recordDisputeResolution, {
+      jobId: requestId as Id<"jobs">,
+      note: data.note,
     });
 
     await convex.mutation(api.jobs.cancel, {

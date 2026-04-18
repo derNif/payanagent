@@ -302,6 +302,31 @@ export const revertToDisputed = mutation({
   },
 });
 
+// Record the Board's dispute-resolution note on the job row.
+// Called by the admin /dispute/resolve route after on-chain success, before
+// the terminal jobs.complete / jobs.cancel mutation fires the webhook — so
+// subscribers that read the job row after receiving the event see the note.
+// Only valid during the resolve atomic window (status === completing | cancelling).
+export const recordDisputeResolution = mutation({
+  args: {
+    jobId: v.id("jobs"),
+    note: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job) throw new Error("Job not found");
+    if (job.status !== "completing" && job.status !== "cancelling") {
+      throw new Error(
+        `recordDisputeResolution requires the resolve lock; got: ${job.status}`
+      );
+    }
+    await ctx.db.patch(args.jobId, {
+      disputeResolutionNote: args.note,
+      disputeResolvedAt: Date.now(),
+    });
+  },
+});
+
 export const complete = mutation({
   args: {
     jobId: v.id("jobs"),
