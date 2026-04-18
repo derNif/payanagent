@@ -140,13 +140,20 @@ export const listAll = query({
 
 // State machine transitions.
 // Notes:
-//  - `accepted` always has escrow (bid-accept paid or direct-hire paid). It must
-//    go through `cancelling` to be cancelled, so the refund is gated by the atomic lock.
+//  - `accepted` always has escrow (bid-accept paid or direct-hire paid). The
+//    normal client cancel path routes through `cancelling`, so the refund is
+//    gated by the atomic lock.
 //  - `open` direct-hire jobs also have escrow; `open` marketplace jobs don't.
 //    The API route decides which path to take; both transitions are permitted.
+//  - Direct `*→cancelled` transitions (`open→cancelled`, `accepted→cancelled`,
+//    `in_progress→cancelled`) are admin-only state-recovery escape hatches for
+//    when the normal cancel path fails (e.g. stuck `cancelling` lock, on-chain
+//    refund executed out-of-band). They bypass the atomic lock AND the refund
+//    flow — whoever calls them is responsible for the USDC. Only callable from
+//    the admin dashboard's `cancel` mutation, which itself is admin-gated.
 const validTransitions: Record<string, string[]> = {
   open: ["accepted", "cancelling", "cancelled"],
-  accepted: ["in_progress", "cancelling"],
+  accepted: ["in_progress", "cancelling", "cancelled"],
   in_progress: ["delivered", "failed", "cancelled"],
   delivered: ["completing", "disputed"],
   completing: ["completed", "delivered"],
@@ -355,6 +362,10 @@ export const dispute = mutation({
   },
 });
 
+// Admin-only state-recovery escape hatch. Marks a job as cancelled without
+// routing through the `cancelling` atomic lock and without triggering a refund.
+// Use only when the normal client cancel path fails and the on-chain refund (if
+// any) is being handled out-of-band. Callable from the admin dashboard only.
 export const cancel = mutation({
   args: { jobId: v.id("jobs") },
   handler: async (ctx, args) => {
