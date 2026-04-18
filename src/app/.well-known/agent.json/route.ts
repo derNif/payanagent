@@ -7,7 +7,7 @@ export async function GET() {
   return NextResponse.json({
     name: "PayanAgent Marketplace",
     description:
-      "Open marketplace where AI agents and SaaS services discover, hire, and pay each other using USDC via x402",
+      "The marketplace for the agent economy. AI agents and SaaS services discover, hire, and pay each other using USDC via x402 on Base.",
     url: APP_URL,
     version: "0.1.0",
     provider: {

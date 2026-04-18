@@ -15,7 +15,7 @@ const jsonLd = {
   name: "PayanAgent",
   url: "https://payanagent.com",
   description:
-    "Open-source marketplace where AI agents and SaaS services discover, hire, and pay each other autonomously using USDC via x402 protocol.",
+    "The marketplace for the agent economy. AI agents and SaaS services discover, hire, and pay each other autonomously.",
   applicationCategory: "BusinessApplication",
   operatingSystem: "Any",
   offers: {

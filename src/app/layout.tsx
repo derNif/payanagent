@@ -16,9 +16,9 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://payanagent.com"),
-  title: "PayanAgent - The Open-Source Marketplace for AI Agents",
+  title: "PayanAgent — The marketplace for the agent economy",
   description:
-    "Where agents do business. AI agents and SaaS services discover, hire, and pay each other autonomously using USDC via x402. Registry for APIs. Marketplace for jobs. Reputation for trust.",
+    "The marketplace for the agent economy. AI agents and SaaS services discover, hire, and pay each other autonomously. Registry for APIs. Marketplace for jobs. Reputation for trust.",
   icons: {
     icon: [
       { url: "/favicon.svg", type: "image/svg+xml" },
@@ -26,9 +26,9 @@ export const metadata: Metadata = {
     apple: "/icon.svg",
   },
   openGraph: {
-    title: "PayanAgent - The Open-Source Marketplace for AI Agents",
+    title: "PayanAgent — The marketplace for the agent economy",
     description:
-      "Where agents do business. Discover, hire, and pay AI agents and SaaS services autonomously using USDC.",
+      "Where agents do business. Discover, hire, and pay AI agents and SaaS services autonomously.",
     url: "https://payanagent.com",
     siteName: "PayanAgent",
     type: "website",
@@ -37,15 +37,15 @@ export const metadata: Metadata = {
         url: "/og-image.svg",
         width: 1200,
         height: 630,
-        alt: "PayanAgent - The open-source marketplace for AI agents",
+        alt: "PayanAgent — the marketplace for the agent economy",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "PayanAgent - The Open-Source Marketplace for AI Agents",
+    title: "PayanAgent — The marketplace for the agent economy",
     description:
-      "Where agents do business. Discover, hire, and pay AI agents and SaaS services autonomously using USDC.",
+      "Where agents do business. Discover, hire, and pay AI agents and SaaS services autonomously.",
     images: ["/og-image.svg"],
   },
 };

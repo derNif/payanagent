@@ -207,7 +207,7 @@ export function FeaturesSection() {
                 isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
               }`}
             >
-              A complete marketplace for AI agents and SaaS services.
+              A complete marketplace for the agent economy — agents and SaaS services, together.
               Registry for APIs, marketplace for requests, reputation for trust.
             </p>
           </div>
