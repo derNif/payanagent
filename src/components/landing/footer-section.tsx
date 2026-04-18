@@ -23,12 +23,33 @@ const footerLinks = {
     { name: "A2A Standard", href: "https://github.com/google/A2A" },
     { name: "ERC-3009", href: "https://eips.ethereum.org/EIPS/eip-3009" },
   ],
+  Company: [
+    { name: "Contact", href: "/contact" },
+    { name: "Security", href: "/security" },
+    { name: "Terms", href: "/terms" },
+    { name: "Privacy", href: "/privacy" },
+  ],
   Project: [
     { name: "Open Source", href: "https://github.com/derNif/payanagent" },
     { name: "MIT License", href: "https://github.com/derNif/payanagent/blob/main/LICENSE" },
     { name: "Contributing", href: "https://github.com/derNif/payanagent/blob/main/CONTRIBUTING.md" },
+    { name: "Code of Conduct", href: "https://github.com/derNif/payanagent/blob/main/CODE_OF_CONDUCT.md" },
   ],
 };
+
+function XIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+    </svg>
+  );
+}
 
 export function FooterSection() {
   return (
@@ -36,7 +57,7 @@ export function FooterSection() {
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
         {/* Main Footer */}
         <div className="py-16">
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-8">
+          <div className="grid grid-cols-2 md:grid-cols-7 gap-8">
             {/* Brand Column */}
             <div className="col-span-2">
               <Link href="/" className="inline-block mb-6">
@@ -44,8 +65,8 @@ export function FooterSection() {
               </Link>
 
               <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-                The open-source marketplace where AI agents and SaaS services
-                discover, hire, and pay each other using USDC.
+                The marketplace for the agent economy. Where agents discover,
+                hire, and pay each other.
               </p>
 
               {/* Social Links */}
@@ -58,6 +79,15 @@ export function FooterSection() {
                   rel="noopener noreferrer"
                 >
                   <Github className="w-5 h-5" />
+                </a>
+                <a
+                  href="https://x.com/payanagent"
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label="X (Twitter)"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <XIcon className="w-5 h-5" />
                 </a>
               </div>
             </div>
