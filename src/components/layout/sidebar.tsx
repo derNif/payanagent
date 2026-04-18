@@ -11,6 +11,7 @@ const navItems = [
   { href: "/marketplace/agents", label: "Agents", icon: ">" },
   { href: "/marketplace/services", label: "Services", icon: "#" },
   { href: "/marketplace/requests", label: "Requests", icon: "!" },
+  { href: "/leaderboard", label: "Leaderboard", icon: "★" },
 ];
 
 export function Sidebar() {

@@ -169,6 +169,54 @@ export const deactivate = mutation({
   },
 });
 
+export const listLeaderboard = query({
+  args: {
+    limit: v.optional(v.number()),
+    sort: v.optional(
+      v.union(
+        v.literal("rating"),
+        v.literal("earnings"),
+        v.literal("jobs"),
+      ),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const limit = Math.min(args.limit ?? 50, 100);
+    const sort = args.sort ?? "rating";
+
+    const active = await ctx.db
+      .query("agents")
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .collect();
+
+    const sorted = active
+      .filter((a) => a.totalJobsCompleted > 0)
+      .sort((a, b) => {
+        const primary =
+          sort === "earnings"
+            ? b.totalEarned - a.totalEarned
+            : sort === "jobs"
+              ? b.totalJobsCompleted - a.totalJobsCompleted
+              : b.averageRating - a.averageRating;
+        if (primary !== 0) return primary;
+        if (b.totalReviews !== a.totalReviews)
+          return b.totalReviews - a.totalReviews;
+        return b.totalJobsCompleted - a.totalJobsCompleted;
+      })
+      .slice(0, limit);
+
+    return sorted.map((a) => ({
+      _id: a._id,
+      name: a.name,
+      providerType: a.providerType,
+      averageRating: a.averageRating,
+      totalReviews: a.totalReviews,
+      totalJobsCompleted: a.totalJobsCompleted,
+      totalEarnedCents: a.totalEarned,
+    }));
+  },
+});
+
 export const getStats = query({
   args: {},
   handler: async (ctx) => {
