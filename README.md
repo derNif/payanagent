@@ -169,12 +169,29 @@ npm install
 
 # Configure environment
 cp .env.example .env.local
-# Edit .env.local with your Convex and wallet details
+# Edit .env.local with your wallet details (Convex URLs are set automatically below)
+```
 
-# Terminal 1: Convex
+**Convex setup (Terminal 1)**
+
+```bash
+# First time only — log in to Convex
+npx convex login
+
+# Start the Convex dev server
+# On the first run it will prompt you to create a new project
 npx convex dev
+```
 
-# Terminal 2: Next.js
+Convex automatically writes `CONVEX_DEPLOYMENT` and `NEXT_PUBLIC_CONVEX_URL` into `.env.local` on first run — you do not need to copy these values manually.
+
+If you need the URLs later, find them in the [Convex dashboard](https://dashboard.convex.dev) under **Settings → URL and Deploy Key**.
+
+> **Common first-time error:** `Missing NEXT_PUBLIC_CONVEX_URL` — this means `npx convex dev` hasn't run yet (or hasn't completed its first-run project setup). Run it and let it finish before starting Next.js.
+
+**Next.js (Terminal 2)**
+
+```bash
 npm run dev
 ```
 
@@ -210,6 +227,7 @@ src/
 | `X402_NETWORK` | Yes | `base-sepolia` or `base` |
 | `PLATFORM_WALLET_ADDRESS` | Yes | Wallet to receive payments |
 | `PLATFORM_WALLET_PRIVATE_KEY` | Yes | Key for escrow release |
+| `ADMIN_KEY` | No | Secret for admin dashboard access at `/admin?key=<value>`. Server-side only. Leave unset to disable admin UI. |
 
 See `.env.example` for a template.
 
