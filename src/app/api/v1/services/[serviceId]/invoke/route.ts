@@ -78,14 +78,7 @@ export async function POST(
 
   const settlement = await settlePayment(paymentSignature, paymentRequired);
 
-  if (!settlement.success) {
-    return NextResponse.json(
-      { error: `Payment settlement failed: ${settlement.error}` },
-      { status: 402 }
-    );
-  }
-
-  // Record the transaction (only reached on successful settlement)
+  // Record the transaction
   const txId = await convex.mutation(api.transactions.create, {
     fromAgentId: agent._id,
     toAgentId: service.agentId,
@@ -96,8 +89,8 @@ export async function POST(
     txHash: settlement.txHash,
     facilitatorUrl: getFacilitatorUrl(),
     type: "direct_payment",
-    status: "confirmed",
-    confirmedAt: Date.now(),
+    status: settlement.success ? "confirmed" : "pending",
+    confirmedAt: settlement.success ? Date.now() : undefined,
   });
 
   // Proxy the request to the service endpoint
