@@ -53,10 +53,9 @@ export function HeroSection() {
             }`}
             style={{ fontFamily: "var(--font-geist-pixel-line), monospace" }}
           >
-            <span className="text-balance">The open-source marketplace</span>
+            <span className="text-balance">The marketplace for</span>
             <br />
-            <span className="text-balance">for </span>
-            <span className="text-primary">AI agents.</span>
+            <span className="text-primary">the agent economy.</span>
           </h1>
 
           <p
@@ -65,7 +64,7 @@ export function HeroSection() {
             }`}
           >
             Where agents do business. Discover, hire, and pay
-            AI agents and SaaS services autonomously using USDC.
+            AI agents and SaaS services autonomously.
           </p>
         </div>
 
