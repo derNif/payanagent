@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 
 export const create = mutation({
   args: {
@@ -28,7 +29,7 @@ export const create = mutation({
       throw new Error("Open jobs require a budget");
     }
 
-    return await ctx.db.insert("jobs", {
+    const jobId = await ctx.db.insert("jobs", {
       clientAgentId: args.clientAgentId,
       providerAgentId: args.providerAgentId,
       serviceId: args.serviceId,
@@ -41,6 +42,25 @@ export const create = mutation({
       status: args.jobType === "open" ? "open" : "open",
       escrowTransactionId: args.escrowTransactionId,
     });
+
+    // job.received: only meaningful for direct jobs (an open job has no addressed provider)
+    if (args.jobType === "direct" && args.providerAgentId) {
+      await ctx.scheduler.runAfter(0, internal.webhookSender.sendWebhooks, {
+        event: "job.received",
+        recipientAgentIds: [args.providerAgentId],
+        jobId,
+        data: {
+          jobId,
+          clientAgentId: args.clientAgentId,
+          providerAgentId: args.providerAgentId,
+          title: args.title,
+          agreedPriceCents: args.agreedPriceCents,
+          jobType: "direct",
+        },
+      });
+    }
+
+    return jobId;
   },
 });
 
@@ -181,6 +201,20 @@ export const deliver = mutation({
       outputPayload: args.outputPayload,
       deliveredAt: Date.now(),
     });
+
+    // job.delivered -> client
+    await ctx.scheduler.runAfter(0, internal.webhookSender.sendWebhooks, {
+      event: "job.delivered",
+      recipientAgentIds: [job.clientAgentId],
+      jobId: args.jobId,
+      data: {
+        jobId: args.jobId,
+        clientAgentId: job.clientAgentId,
+        providerAgentId: job.providerAgentId,
+        agreedPriceCents: job.agreedPriceCents,
+        deliveredAt: Date.now(),
+      },
+    });
   },
 });
 
@@ -228,6 +262,23 @@ export const complete = mutation({
       completedAt: Date.now(),
       settlementTransactionId: args.settlementTransactionId,
     });
+
+    // job.completed -> both parties
+    const recipients = [job.clientAgentId];
+    if (job.providerAgentId) recipients.push(job.providerAgentId);
+    await ctx.scheduler.runAfter(0, internal.webhookSender.sendWebhooks, {
+      event: "job.completed",
+      recipientAgentIds: recipients,
+      jobId: args.jobId,
+      data: {
+        jobId: args.jobId,
+        clientAgentId: job.clientAgentId,
+        providerAgentId: job.providerAgentId,
+        agreedPriceCents: job.agreedPriceCents,
+        settlementTransactionId: args.settlementTransactionId,
+        completedAt: Date.now(),
+      },
+    });
   },
 });
 
@@ -248,6 +299,22 @@ export const dispute = mutation({
       disputeReason: args.reason,
       disputedAt: Date.now(),
     });
+
+    // job.disputed -> both parties
+    const recipients = [job.clientAgentId];
+    if (job.providerAgentId) recipients.push(job.providerAgentId);
+    await ctx.scheduler.runAfter(0, internal.webhookSender.sendWebhooks, {
+      event: "job.disputed",
+      recipientAgentIds: recipients,
+      jobId: args.jobId,
+      data: {
+        jobId: args.jobId,
+        clientAgentId: job.clientAgentId,
+        providerAgentId: job.providerAgentId,
+        reason: args.reason,
+        disputedAt: Date.now(),
+      },
+    });
   },
 });
 
@@ -263,6 +330,22 @@ export const cancel = mutation({
     await ctx.db.patch(args.jobId, {
       status: "cancelled",
       cancelledAt: Date.now(),
+    });
+
+    // job.cancelled -> both parties (provider may be null for unaccepted open jobs)
+    const recipients = [job.clientAgentId];
+    if (job.providerAgentId) recipients.push(job.providerAgentId);
+    await ctx.scheduler.runAfter(0, internal.webhookSender.sendWebhooks, {
+      event: "job.cancelled",
+      recipientAgentIds: recipients,
+      jobId: args.jobId,
+      data: {
+        jobId: args.jobId,
+        clientAgentId: job.clientAgentId,
+        providerAgentId: job.providerAgentId,
+        agreedPriceCents: job.agreedPriceCents,
+        cancelledAt: Date.now(),
+      },
     });
   },
 });

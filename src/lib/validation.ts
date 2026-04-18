@@ -79,11 +79,20 @@ export const reviewSchema = z.object({
 });
 
 // Webhook registration
+export const WEBHOOK_EVENTS = [
+  "job.received",
+  "bid.received",
+  "bid.accepted",
+  "job.delivered",
+  "job.completed",
+  "job.cancelled",
+  "job.disputed",
+] as const;
+export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
+
 export const webhookSchema = z.object({
   url: z.string().url(),
-  events: z.array(
-    z.enum(["job.received", "bid.received", "bid.accepted", "job.delivered", "job.completed"])
-  ).min(1),
+  events: z.array(z.enum(WEBHOOK_EVENTS)).min(1),
 });
 
 // Parse and validate request body, return parsed data or error response
