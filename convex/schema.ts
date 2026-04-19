@@ -119,6 +119,8 @@ export default defineSchema({
     settlementTransactionId: v.optional(v.id("transactions")),
 
     disputeReason: v.optional(v.string()),
+    disputeResolutionNote: v.optional(v.string()),
+    disputeResolvedAt: v.optional(v.number()),
   })
     .index("by_clientAgentId", ["clientAgentId", "status"])
     .index("by_providerAgentId", ["providerAgentId", "status"])
