@@ -88,6 +88,11 @@ export const resolveDisputeSchema = z.object({
   note: z.string().max(2000).optional(),
 });
 
+// Admin force timeout (manual override for escrow timeout auto-refund)
+export const forceTimeoutSchema = z.object({
+  note: z.string().max(2000).optional(),
+});
+
 // Review
 export const reviewSchema = z.object({
   rating: z.number().int().min(1).max(5),
@@ -103,6 +108,7 @@ export const WEBHOOK_EVENTS = [
   "job.completed",
   "job.cancelled",
   "job.disputed",
+  "job.timed_out",
 ] as const;
 export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
 
