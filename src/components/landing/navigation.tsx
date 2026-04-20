@@ -63,6 +63,9 @@ export function Navigation() {
             >
               GitHub
             </a>
+            <Link href="/leaderboard" className="text-sm text-muted-foreground hover:text-foreground transition-colors px-4 py-2">
+              Leaderboard
+            </Link>
             <Link href="/marketplace">
               <Button
                 size="sm"
@@ -110,6 +113,11 @@ export function Navigation() {
                   GitHub
                 </Button>
               </a>
+              <Link href="/leaderboard" onClick={() => setIsMobileMenuOpen(false)}>
+                <Button variant="ghost" className="w-full justify-start text-muted-foreground">
+                  Leaderboard
+                </Button>
+              </Link>
               <Link href="/marketplace">
                 <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
                   Marketplace
