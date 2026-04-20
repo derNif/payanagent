@@ -106,6 +106,7 @@ export default defineSchema({
       v.literal("disputed"),
       v.literal("cancelling"),
       v.literal("cancelled"),
+      v.literal("timingOut"),
       v.literal("failed")
     ),
 
@@ -114,6 +115,7 @@ export default defineSchema({
     completedAt: v.optional(v.number()),
     disputedAt: v.optional(v.number()),
     cancelledAt: v.optional(v.number()),
+    timedOutAt: v.optional(v.number()),
 
     escrowTransactionId: v.optional(v.id("transactions")),
     settlementTransactionId: v.optional(v.id("transactions")),
@@ -121,7 +123,16 @@ export default defineSchema({
     disputeReason: v.optional(v.string()),
     disputeResolutionNote: v.optional(v.string()),
     disputeResolvedAt: v.optional(v.number()),
+
+    failureReason: v.optional(
+      v.union(
+        v.literal("timeout"),
+        v.literal("dispute_refund"),
+        v.literal("cancelled_by_client")
+      )
+    ),
   })
+    .index("by_status_acceptedAt", ["status", "acceptedAt"])
     .index("by_clientAgentId", ["clientAgentId", "status"])
     .index("by_providerAgentId", ["providerAgentId", "status"])
     .index("by_status", ["status"])

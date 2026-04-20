@@ -153,13 +153,14 @@ export const listAll = query({
 //    the admin dashboard's `cancel` mutation, which itself is admin-gated.
 const validTransitions: Record<string, string[]> = {
   open: ["accepted", "cancelling", "cancelled"],
-  accepted: ["in_progress", "cancelling", "cancelled"],
+  accepted: ["in_progress", "cancelling", "cancelled", "timingOut"],
   in_progress: ["delivered", "failed", "cancelled"],
   delivered: ["completing", "disputed"],
   completing: ["completed", "delivered", "disputed"],
   completed: [],
   disputed: ["completing", "cancelling", "completed", "failed"],
   cancelling: ["cancelled", "open", "accepted", "disputed"],
+  timingOut: ["failed", "accepted"],
   cancelled: [],
   failed: [],
 };
@@ -434,6 +435,99 @@ export const cancel = mutation({
         cancelledAt: Date.now(),
       },
     });
+  },
+});
+
+// Atomically lock an `accepted` job for timeout processing. Callable from both
+// the cron sweep (14-day threshold) and the admin force-timeout route (manual
+// override, no threshold). Only callable while status === "accepted".
+export const markTimingOut = mutation({
+  args: { jobId: v.id("jobs") },
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job) throw new Error("Job not found");
+    if (!validTransitions[job.status]?.includes("timingOut")) {
+      throw new Error(`Cannot begin timeout for job in status: ${job.status}`);
+    }
+    await ctx.db.patch(args.jobId, { status: "timingOut" });
+  },
+});
+
+// Revert from `timingOut` back to `accepted` on on-chain refund failure.
+// Chain state never changed (transfer failed pre-finalize) so the job
+// rejoins the stale pool for the next cron sweep.
+export const revertFromTimingOut = mutation({
+  args: { jobId: v.id("jobs") },
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job) throw new Error("Job not found");
+    if (job.status !== "timingOut") {
+      throw new Error(`Cannot revert job in status: ${job.status}`);
+    }
+    await ctx.db.patch(args.jobId, { status: "accepted" });
+  },
+});
+
+// Finalize a timed-out job: timingOut → failed. Sets failureReason="timeout",
+// stamps timedOutAt, and fires job.timed_out webhook. Caller is responsible
+// for having completed the on-chain refund and recorded the transactions row
+// before invoking this mutation.
+export const finalizeTimeout = mutation({
+  args: { jobId: v.id("jobs") },
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job) throw new Error("Job not found");
+    if (job.status !== "timingOut") {
+      throw new Error(
+        `finalizeTimeout requires the timingOut lock; got: ${job.status}`
+      );
+    }
+    const timedOutAt = Date.now();
+    await ctx.db.patch(args.jobId, {
+      status: "failed",
+      failureReason: "timeout",
+      timedOutAt,
+    });
+
+    // job.timed_out -> both parties (provider must exist; an accepted job has one)
+    const recipients = [job.clientAgentId];
+    if (job.providerAgentId) recipients.push(job.providerAgentId);
+    await ctx.scheduler.runAfter(0, internal.webhookSender.sendWebhooks, {
+      event: "job.timed_out",
+      recipientAgentIds: recipients,
+      jobId: args.jobId,
+      data: {
+        jobId: args.jobId,
+        clientAgentId: job.clientAgentId,
+        providerAgentId: job.providerAgentId,
+        amountCents: job.agreedPriceCents,
+        acceptedAt: job.acceptedAt,
+        timedOutAt,
+      },
+    });
+  },
+});
+
+// Return ids of jobs whose `accepted` window has expired. Cron-only caller.
+// Uses the by_status_acceptedAt compound index so this scales even when the
+// accepted pool is large — we only scan rows with status === "accepted".
+export const listStaleAccepted = query({
+  args: { cutoffMs: v.number(), limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 100;
+    const rows = await ctx.db
+      .query("jobs")
+      .withIndex("by_status_acceptedAt", (q) =>
+        q.eq("status", "accepted").lt("acceptedAt", args.cutoffMs)
+      )
+      .take(limit);
+    return rows.map((row) => ({
+      _id: row._id,
+      clientAgentId: row.clientAgentId,
+      providerAgentId: row.providerAgentId,
+      agreedPriceCents: row.agreedPriceCents,
+      acceptedAt: row.acceptedAt,
+    }));
   },
 });
 
