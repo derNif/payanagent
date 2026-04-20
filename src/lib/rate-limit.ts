@@ -1,24 +1,8 @@
 /**
- * Simple in-memory rate limiter for API routes.
- *
- * Uses a sliding window counter per key (IP or API key prefix).
- * Entries auto-expire to prevent memory leaks.
+ * Rate limiter for API routes. Uses Upstash Redis sliding window when
+ * UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN are set; falls back to
+ * an in-memory Map for local dev and OSS clones.
  */
-
-interface RateLimitEntry {
-  count: number;
-  resetAt: number;
-}
-
-const store = new Map<string, RateLimitEntry>();
-
-// Cleanup stale entries every 5 minutes
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, entry] of store) {
-    if (now > entry.resetAt) store.delete(key);
-  }
-}, 5 * 60 * 1000);
 
 export interface RateLimitConfig {
   /** Max requests allowed in the window */
@@ -39,21 +23,79 @@ export const RATE_LIMITS = {
   invoke: { limit: 60, windowSeconds: 60 },
 } as const;
 
-/**
- * Check and increment rate limit for a key.
- * Returns { allowed, remaining, resetAt } or { allowed: false } if over limit.
- */
-export function checkRateLimit(
+// ─── Upstash path ────────────────────────────────────────────────────────────
+
+type UpstashRatelimit = {
+  limit(identifier: string): Promise<{ success: boolean; remaining: number; reset: number }>;
+};
+
+let upstashLimiters: Map<string, UpstashRatelimit> | null = null;
+let warnedOnce = false;
+
+function buildUpstashKey(config: RateLimitConfig) {
+  return `${config.limit}:${config.windowSeconds}`;
+}
+
+async function getUpstashLimiter(config: RateLimitConfig): Promise<UpstashRatelimit | null> {
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) {
+    if (!warnedOnce) {
+      console.warn(
+        "[rate-limit] UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN is not set — " +
+          "falling back to in-memory rate limiting. State will not persist across serverless instances."
+      );
+      warnedOnce = true;
+    }
+    return null;
+  }
+
+  if (!upstashLimiters) upstashLimiters = new Map();
+
+  const key = buildUpstashKey(config);
+  if (!upstashLimiters.has(key)) {
+    const { Ratelimit } = await import("@upstash/ratelimit");
+    const { Redis } = await import("@upstash/redis");
+    const redis = new Redis({ url, token });
+    const limiter = new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(config.limit, `${config.windowSeconds} s`),
+      prefix: "@payanagent/rl",
+    });
+    upstashLimiters.set(key, limiter);
+  }
+
+  return upstashLimiters.get(key)!;
+}
+
+// ─── In-memory fallback ───────────────────────────────────────────────────────
+
+interface MemEntry {
+  count: number;
+  resetAt: number;
+}
+
+const memStore = new Map<string, MemEntry>();
+
+// Cleanup stale entries every 5 minutes (only active in the in-memory path)
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, e] of memStore) {
+    if (now > e.resetAt) memStore.delete(k);
+  }
+}, 5 * 60 * 1000);
+
+function checkMemory(
   key: string,
   config: RateLimitConfig
 ): { allowed: boolean; remaining: number; resetAt: number } {
   const now = Date.now();
-  const entry = store.get(key);
+  const entry = memStore.get(key);
 
   if (!entry || now > entry.resetAt) {
-    // New window
-    store.set(key, { count: 1, resetAt: now + config.windowSeconds * 1000 });
-    return { allowed: true, remaining: config.limit - 1, resetAt: now + config.windowSeconds * 1000 };
+    const resetAt = now + config.windowSeconds * 1000;
+    memStore.set(key, { count: 1, resetAt });
+    return { allowed: true, remaining: config.limit - 1, resetAt };
   }
 
   if (entry.count >= config.limit) {
@@ -62,6 +104,30 @@ export function checkRateLimit(
 
   entry.count++;
   return { allowed: true, remaining: config.limit - entry.count, resetAt: entry.resetAt };
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+/**
+ * Check and increment rate limit for a key.
+ * Returns { allowed, remaining, resetAt }.
+ */
+export async function checkRateLimit(
+  key: string,
+  config: RateLimitConfig
+): Promise<{ allowed: boolean; remaining: number; resetAt: number }> {
+  const limiter = await getUpstashLimiter(config);
+
+  if (limiter) {
+    const result = await limiter.limit(key);
+    return {
+      allowed: result.success,
+      remaining: result.remaining,
+      resetAt: result.reset,
+    };
+  }
+
+  return checkMemory(key, config);
 }
 
 /**

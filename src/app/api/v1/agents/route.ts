@@ -9,7 +9,7 @@ import { api } from "@convex/_generated/api";
 export async function POST(request: NextRequest) {
   // Rate limit: 5 registrations per hour per IP
   const ip = getClientIp(request);
-  const rl = checkRateLimit(`reg:${ip}`, RATE_LIMITS.registration);
+  const rl = await checkRateLimit(`reg:${ip}`, RATE_LIMITS.registration);
   if (!rl.allowed) return rateLimitResponse(rl.resetAt);
 
   try {
