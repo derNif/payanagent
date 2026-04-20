@@ -31,7 +31,7 @@ export async function authenticateRequest(
 
   if (!authHeader?.startsWith("Bearer ")) {
     const ip = getClientIp(request);
-    const rl = checkRateLimit(`unauth:${ip}`, RATE_LIMITS.unauthenticated);
+    const rl = await checkRateLimit(`unauth:${ip}`, RATE_LIMITS.unauthenticated);
     if (!rl.allowed) return { error: tooManyRequestsResponse(rl.resetAt) };
     return { error: unauthorizedResponse() };
   }
@@ -40,7 +40,7 @@ export async function authenticateRequest(
   const keyPrefix = apiKey.slice(0, 12);
 
   // Rate limit by key prefix before DB lookup
-  const rl = checkRateLimit(`key:${keyPrefix}`, RATE_LIMITS.authenticated);
+  const rl = await checkRateLimit(`key:${keyPrefix}`, RATE_LIMITS.authenticated);
   if (!rl.allowed) return { error: tooManyRequestsResponse(rl.resetAt) };
 
   const keyHash = hashApiKey(apiKey);

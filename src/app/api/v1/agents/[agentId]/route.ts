@@ -13,7 +13,7 @@ export async function GET(
   { params }: { params: Promise<{ agentId: string }> }
 ) {
   const ip = getClientIp(request);
-  const rl = checkRateLimit(`public:${ip}`, RATE_LIMITS.unauthenticated);
+  const rl = await checkRateLimit(`public:${ip}`, RATE_LIMITS.unauthenticated);
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Too many requests. Please try again later." },
