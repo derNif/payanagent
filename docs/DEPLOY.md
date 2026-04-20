@@ -46,3 +46,18 @@ Set these in your Vercel project settings (or `.env.local` for local dev).
 3. Copy **REST Token** → `UPSTASH_REDIS_REST_TOKEN`.
 
 **Development / OSS:** If either variable is absent, the server boots normally and falls back to in-memory rate limiting. A one-time warning is logged at startup.
+
+## CI Deployment
+
+### Convex (GitHub Actions)
+
+Master pushes that touch `convex/**` trigger `.github/workflows/convex-deploy.yml`, which runs `npx convex deploy` using the `CONVEX_DEPLOY_KEY` repo secret.
+
+- **Frontend-only changes do NOT trigger it.** Vercel still handles Next.js autonomously on every master push.
+- **The secret (`CONVEX_DEPLOY_KEY`) is provisioned by the Board.** It is not something engineers rotate — raise it with the Board if the key needs cycling.
+
+### If the workflow goes red
+
+Revert the offending commit on master, then fix-forward in a new PR.
+
+**Do NOT manually deploy Convex from a laptop as a workaround.** That was the PAY-56 pattern we are closing — a lap-top deploy produces an untracked prod state that no one else can reproduce or roll back cleanly.
