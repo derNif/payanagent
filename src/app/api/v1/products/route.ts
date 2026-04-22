@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
       title: data.title,
       description: data.description,
       category: data.category,
-      tags: data.tags,
+      tags: data.tags ?? [],
       priceCents: data.priceCents,
       fileUrl: data.fileUrl,
       previewDescription: data.previewDescription,
