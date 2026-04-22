@@ -103,9 +103,13 @@ export async function POST(
   // Proxy the request to the service endpoint
   try {
     const body = await request.text();
+    const proxyHeaders: Record<string, string> = { "Content-Type": "application/json" };
+    if (process.env.PLATFORM_INTERNAL_KEY) {
+      proxyHeaders["x-platform-internal-key"] = process.env.PLATFORM_INTERNAL_KEY;
+    }
     const proxyResponse = await fetch(service.endpoint, {
       method: service.httpMethod || "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: proxyHeaders,
       body: body || undefined,
     });
 
