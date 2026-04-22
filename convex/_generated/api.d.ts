@@ -13,6 +13,7 @@ import type * as apiKeys from "../apiKeys.js";
 import type * as bids from "../bids.js";
 import type * as crons from "../crons.js";
 import type * as jobs from "../jobs.js";
+import type * as products from "../products.js";
 import type * as reviews from "../reviews.js";
 import type * as search from "../search.js";
 import type * as services from "../services.js";
@@ -33,6 +34,7 @@ declare const fullApi: ApiFromModules<{
   bids: typeof bids;
   crons: typeof crons;
   jobs: typeof jobs;
+  products: typeof products;
   reviews: typeof reviews;
   search: typeof search;
   services: typeof services;

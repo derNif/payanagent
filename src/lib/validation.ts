@@ -99,6 +99,17 @@ export const reviewSchema = z.object({
   comment: z.string().max(2000).optional(),
 });
 
+// Product creation (seller-initiated)
+export const createProductSchema = z.object({
+  title: z.string().min(1).max(200),
+  description: z.string().min(1).max(5000),
+  category: z.string().min(1).max(100),
+  tags,
+  priceCents: z.number().int().min(0).max(10_000_000),
+  fileUrl: z.string().url(),
+  previewDescription: z.string().max(500).optional(),
+});
+
 // Webhook registration
 export const WEBHOOK_EVENTS = [
   "job.received",

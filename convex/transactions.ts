@@ -6,6 +6,7 @@ export const create = mutation({
     fromAgentId: v.id("agents"),
     toAgentId: v.optional(v.id("agents")),
     jobId: v.optional(v.id("jobs")),
+    productId: v.optional(v.id("products")),
     amountCents: v.number(),
     currency: v.string(),
     chain: v.string(),

@@ -7,10 +7,9 @@ import { Menu, X } from "lucide-react";
 import { useState, useEffect } from "react";
 
 const navItems = [
-  { href: "/marketplace", label: "Home", icon: "~" },
+  { href: "/marketplace/products", label: "Products", icon: "$" },
   { href: "/marketplace/services", label: "Services", icon: "#" },
   { href: "/marketplace/requests", label: "Requests", icon: "!" },
-  { href: "/leaderboard", label: "Leaderboard", icon: "★" },
 ];
 
 export function Sidebar() {

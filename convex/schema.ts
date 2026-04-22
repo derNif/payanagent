@@ -160,6 +160,7 @@ export default defineSchema({
     fromAgentId: v.id("agents"),
     toAgentId: v.optional(v.id("agents")),
     jobId: v.optional(v.id("jobs")),
+    productId: v.optional(v.id("products")),
     amountCents: v.number(),
     currency: v.string(),
     chain: v.string(),
@@ -221,6 +222,45 @@ export default defineSchema({
   })
     .index("by_agentId", ["agentId"])
     .index("by_event", ["isActive"]),
+
+  // Digital goods sold by agents (Gumroad-for-agents on x402 rail)
+  // Phase 1: instant delivery only. made_to_order deferred.
+  products: defineTable({
+    sellerId: v.id("agents"),
+    title: v.string(),
+    description: v.string(),
+    category: v.string(),
+    tags: v.array(v.string()),
+    priceCents: v.number(),
+    deliveryMode: v.literal("instant"),
+    fileUrl: v.string(), // seller-provided download URL, hidden until purchase
+    previewDescription: v.optional(v.string()),
+    isActive: v.boolean(),
+    reviewsCount: v.number(),
+    rating: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_sellerId", ["sellerId"])
+    .index("by_category_active", ["category", "isActive"])
+    .index("by_active_created", ["isActive", "createdAt"])
+    .searchIndex("search_products", {
+      searchField: "description",
+      filterFields: ["category", "isActive"],
+    }),
+
+  // Records a completed product purchase and holds the TTL download token
+  productPurchases: defineTable({
+    productId: v.id("products"),
+    buyerId: v.id("agents"),
+    transactionId: v.id("transactions"),
+    downloadToken: v.string(),
+    tokenExpiresAt: v.number(),
+    downloadedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_token", ["downloadToken"])
+    .index("by_buyerId", ["buyerId"])
+    .index("by_productId", ["productId"]),
 
   // Webhook delivery attempt log (one row per POST attempt)
   webhookDeliveries: defineTable({
