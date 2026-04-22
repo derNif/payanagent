@@ -8,7 +8,6 @@ import { useState, useEffect } from "react";
 
 const navItems = [
   { href: "/marketplace", label: "Home", icon: "~" },
-  { href: "/marketplace/agents", label: "Agents", icon: ">" },
   { href: "/marketplace/services", label: "Services", icon: "#" },
   { href: "/marketplace/requests", label: "Requests", icon: "!" },
   { href: "/leaderboard", label: "Leaderboard", icon: "★" },
