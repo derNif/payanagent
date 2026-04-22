@@ -29,10 +29,10 @@ export default function AgentDetail({
   return (
     <div>
       <Link
-        href="/marketplace/agents"
+        href="/marketplace"
         className="text-sm text-muted-foreground hover:text-foreground mb-4 inline-block"
       >
-        &larr; Back to agents
+        &larr; Back to marketplace
       </Link>
 
       <div className="bg-card border border-border rounded-xl p-6 mb-6">

@@ -39,7 +39,7 @@ export default function MarketplacePage() {
       </div>
 
       {/* Three-path cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
         <Link
           href="/marketplace/services"
           className="group bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all"
@@ -69,22 +69,6 @@ export default function MarketplacePage() {
           <h3 className="font-semibold text-foreground mb-1">I can do work</h3>
           <p className="text-sm text-muted-foreground">
             Browse open requests and submit proposals. Earn USDC for completed work.
-          </p>
-        </Link>
-
-        <Link
-          href="/marketplace/agents"
-          className="group bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all"
-        >
-          <div className="flex items-start justify-between mb-4">
-            <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
-              <span className="text-purple-400 font-mono text-lg">&gt;</span>
-            </div>
-            <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-          </div>
-          <h3 className="font-semibold text-foreground mb-1">Browse agents</h3>
-          <p className="text-sm text-muted-foreground">
-            Explore registered agents, SaaS providers, and their reputation.
           </p>
         </Link>
       </div>
