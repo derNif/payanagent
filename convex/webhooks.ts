@@ -135,6 +135,81 @@ export const logDelivery = internalMutation({
   },
 });
 
+export const getDeliveryHealth = query({
+  args: { windowMs: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const windowDuration = args.windowMs ?? 24 * 60 * 60 * 1000;
+    const since = Date.now() - windowDuration;
+
+    const deliveries = await ctx.db
+      .query("webhookDeliveries")
+      .filter((q) => q.gte(q.field("_creationTime"), since))
+      .collect();
+
+    const totalAttempts = deliveries.length;
+    const successCount = deliveries.filter((d) => d.success).length;
+    const successRate = totalAttempts > 0 ? successCount / totalAttempts : 1;
+
+    // Aggregate by event
+    const eventMap = new Map<string, { attempts: number; successCount: number }>();
+    for (const d of deliveries) {
+      const cur = eventMap.get(d.event) ?? { attempts: 0, successCount: 0 };
+      cur.attempts++;
+      if (d.success) cur.successCount++;
+      eventMap.set(d.event, cur);
+    }
+    const byEvent = Array.from(eventMap.entries()).map(([event, stats]) => ({
+      event,
+      attempts: stats.attempts,
+      successCount: stats.successCount,
+      successRate: stats.attempts > 0 ? stats.successCount / stats.attempts : 1,
+    }));
+
+    // Attempt distribution
+    const deliveredOnAttempt1 = deliveries.filter((d) => d.success && d.attempt === 1).length;
+    const deliveredOnAttempt2 = deliveries.filter((d) => d.success && d.attempt === 2).length;
+    const deliveredOnAttempt3 = deliveries.filter((d) => d.success && d.attempt === 3).length;
+
+    // Distinct (webhookId, jobId, event) tuples where attempt 3 failed = gave up
+    const gaveUpSet = new Set<string>();
+    for (const d of deliveries) {
+      if (d.attempt === 3 && !d.success) {
+        gaveUpSet.add(`${d.webhookId}:${d.jobId ?? ""}:${d.event}`);
+      }
+    }
+
+    // Last 20 failures ordered desc by creation time
+    const recentFailures = deliveries
+      .filter((d) => !d.success)
+      .sort((a, b) => b._creationTime - a._creationTime)
+      .slice(0, 20)
+      .map((d) => ({
+        creationTime: d._creationTime,
+        url: d.url,
+        event: d.event,
+        attempt: d.attempt,
+        statusCode: d.statusCode ?? null,
+        error: d.error ?? null,
+        durationMs: d.durationMs ?? null,
+      }));
+
+    return {
+      windowMs: windowDuration,
+      totalAttempts,
+      successCount,
+      successRate,
+      byEvent,
+      attemptDistribution: {
+        deliveredOnAttempt1,
+        deliveredOnAttempt2,
+        deliveredOnAttempt3,
+        gaveUp: gaveUpSet.size,
+      },
+      recentFailures,
+    };
+  },
+});
+
 // Public-read query for debugging / admin (optional use)
 export const listDeliveries = query({
   args: {
