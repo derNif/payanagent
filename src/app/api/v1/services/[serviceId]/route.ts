@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
+import { toPublicService } from "@/lib/public-projections";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -9,7 +10,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ serviceId: string }> }
 ) {
-  const { agent, error } = await authenticateRequest(request);
+  const { error } = await authenticateRequest(request);
   if (error) return error;
 
   const { serviceId } = await params;
@@ -30,7 +31,7 @@ export async function GET(
     });
 
     return NextResponse.json({
-      ...service,
+      ...toPublicService(service),
       provider: providerAgent
         ? {
             agentId: providerAgent._id,

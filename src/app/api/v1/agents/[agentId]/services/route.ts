@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
 import { validateBody, createServiceSchema } from "@/lib/validation";
+import { toPublicService } from "@/lib/public-projections";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -10,7 +11,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ agentId: string }> }
 ) {
-  const { agent, error } = await authenticateRequest(request);
+  const { error } = await authenticateRequest(request);
   if (error) return error;
 
   const { agentId } = await params;
@@ -21,7 +22,7 @@ export async function GET(
       agentId: agentId as Id<"agents">,
     });
 
-    return NextResponse.json({ services });
+    return NextResponse.json({ services: services.map(toPublicService) });
   } catch {
     return NextResponse.json({ error: "Invalid agent ID" }, { status: 400 });
   }

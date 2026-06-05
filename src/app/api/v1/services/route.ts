@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
+import { toPublicService } from "@/lib/public-projections";
 import { api } from "@convex/_generated/api";
 
 // GET /api/v1/services — Search/list all services (public — no API key required)
@@ -28,25 +29,25 @@ export async function GET(request: NextRequest) {
         category: category ?? undefined,
         serviceType: serviceType ?? undefined,
       });
-      return NextResponse.json({ services });
+      return NextResponse.json({ services: services.map(toPublicService) });
     }
 
     if (serviceType) {
       const services = await convex.query(api.services.listActive, {
         serviceType,
       });
-      return NextResponse.json({ services });
+      return NextResponse.json({ services: services.map(toPublicService) });
     }
 
     if (category) {
       const services = await convex.query(api.services.listByCategory, {
         category,
       });
-      return NextResponse.json({ services });
+      return NextResponse.json({ services: services.map(toPublicService) });
     }
 
     const services = await convex.query(api.services.listActive, {});
-    return NextResponse.json({ services });
+    return NextResponse.json({ services: services.map(toPublicService) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });
