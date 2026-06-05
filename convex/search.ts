@@ -20,7 +20,7 @@ export const searchAgents = query({
         return s;
       });
 
-    return await search.collect();
+    return await search.take(50);
   },
 });
 
@@ -45,7 +45,7 @@ export const searchServices = query({
         return s;
       });
 
-    return await search.collect();
+    return await search.take(50);
   },
 });
 
@@ -64,7 +64,7 @@ export const discover = query({
       .withSearchIndex("search_agents", (q) =>
         q.search("description", args.query).eq("status", "active")
       )
-      .collect();
+      .take(50);
 
     // Search services
     let serviceSearch = ctx.db
@@ -77,7 +77,7 @@ export const discover = query({
         return s;
       });
 
-    let services = await serviceSearch.collect();
+    let services = await serviceSearch.take(50);
 
     // Apply price filter
     if (args.maxPriceCents) {
