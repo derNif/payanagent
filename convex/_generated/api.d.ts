@@ -16,7 +16,6 @@ import type * as jobs from "../jobs.js";
 import type * as offers from "../offers.js";
 import type * as products from "../products.js";
 import type * as receipts from "../receipts.js";
-import type * as receiptsSigner from "../receiptsSigner.js";
 import type * as requests from "../requests.js";
 import type * as reviews from "../reviews.js";
 import type * as search from "../search.js";
@@ -41,7 +40,6 @@ declare const fullApi: ApiFromModules<{
   offers: typeof offers;
   products: typeof products;
   receipts: typeof receipts;
-  receiptsSigner: typeof receiptsSigner;
   requests: typeof requests;
   reviews: typeof reviews;
   search: typeof search;

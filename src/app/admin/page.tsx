@@ -111,13 +111,13 @@ function AdminDashboard() {
                           </td>
                           <td className="px-4 py-2 text-muted-foreground">{agent.providerType}</td>
                           <td className="px-4 py-2 font-mono">
-                            {agent.totalReviews > 0
-                              ? `${agent.averageRating.toFixed(1)} (${agent.totalReviews})`
+                            {(agent.totalReviews ?? 0) > 0
+                              ? `${(agent.averageRating ?? 0).toFixed(1)} (${agent.totalReviews ?? 0})`
                               : "—"}
                           </td>
-                          <td className="px-4 py-2 font-mono">{agent.totalJobsCompleted}</td>
+                          <td className="px-4 py-2 font-mono">{agent.totalJobsCompleted ?? 0}</td>
                           <td className="px-4 py-2 font-mono text-primary">
-                            ${(agent.totalEarned / 100).toFixed(2)}
+                            ${((agent.totalEarned ?? 0) / 100).toFixed(2)}
                           </td>
                           <td className="px-4 py-2">
                             <span

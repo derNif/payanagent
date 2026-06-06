@@ -1,16 +1,71 @@
 import { v } from "convex/values";
-import { internalMutation, query } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
 
 // Receipts — the compounding atom of PayanAgent.
-// This file (V8 runtime) holds the public queries and the _insert mutation.
-// HMAC signing lives in receiptsSigner.ts (Node runtime), which calls _insert via
-// internal.receipts._insert after signing.
+// Created exclusively by settlement code paths in the HTTP layer.
+// `recordSettlement` is platform-secret-gated so external callers can't fake receipts.
+// HMAC signing via WebCrypto (works in V8 runtime).
 
-// --- mutation: pure write, signed body already computed by signer action ---
+const PLATFORM_INTERNAL_KEY = process.env.PLATFORM_INTERNAL_KEY ?? "";
+const RECEIPT_SECRET =
+  process.env.PLATFORM_RECEIPT_SECRET ||
+  process.env.PLATFORM_WALLET_PRIVATE_KEY ||
+  "dev-fallback-secret";
 
-export const _insert = internalMutation({
+function canonicalize(body: {
+  buyerId: string;
+  sellerId: string;
+  offerId: string | null;
+  requestId: string | null;
+  amountCents: number;
+  currency: string;
+  chain: string;
+  network: string;
+  txHash: string;
+  settlementType: string;
+  status: string;
+  emittedAt: number;
+}): string {
+  return JSON.stringify({
+    buyerId: body.buyerId,
+    sellerId: body.sellerId,
+    offerId: body.offerId,
+    requestId: body.requestId,
+    amountCents: body.amountCents,
+    currency: body.currency,
+    chain: body.chain,
+    network: body.network,
+    txHash: body.txHash,
+    settlementType: body.settlementType,
+    status: body.status,
+    emittedAt: body.emittedAt,
+  });
+}
+
+async function sign(canonical: string): Promise<string> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(RECEIPT_SECRET),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(canonical));
+  const bytes = new Uint8Array(sig);
+  let hex = "";
+  for (let i = 0; i < bytes.length; i++) {
+    hex += bytes[i].toString(16).padStart(2, "0");
+  }
+  return hex;
+}
+
+// Called by settlement code paths in the HTTP layer.
+// Gated by PLATFORM_INTERNAL_KEY so external callers can't fake receipts.
+export const recordSettlement = mutation({
   args: {
+    platformSecret: v.string(),
     buyerId: v.id("agents"),
     sellerId: v.id("agents"),
     offerId: v.optional(v.id("offers")),
@@ -29,20 +84,43 @@ export const _insert = internalMutation({
     ),
     status: v.union(v.literal("confirmed"), v.literal("failed")),
     latencyMs: v.optional(v.number()),
-    signature: v.string(),
-    emittedAt: v.number(),
   },
   handler: async (ctx, args): Promise<Id<"receipts">> => {
-    return await ctx.db.insert("receipts", args);
+    if (!PLATFORM_INTERNAL_KEY || args.platformSecret !== PLATFORM_INTERNAL_KEY) {
+      throw new Error("unauthorized: invalid platform secret");
+    }
+
+    const emittedAt = Date.now();
+    const canonical = canonicalize({
+      buyerId: args.buyerId as unknown as string,
+      sellerId: args.sellerId as unknown as string,
+      offerId: (args.offerId as unknown as string | undefined) ?? null,
+      requestId: (args.requestId as unknown as string | undefined) ?? null,
+      amountCents: args.amountCents,
+      currency: args.currency,
+      chain: args.chain,
+      network: args.network,
+      txHash: args.txHash,
+      settlementType: args.settlementType,
+      status: args.status,
+      emittedAt,
+    });
+    const signature = await sign(canonical);
+
+    const { platformSecret: _, ...rest } = args;
+    void _;
+    return await ctx.db.insert("receipts", {
+      ...rest,
+      signature,
+      emittedAt,
+    });
   },
 });
 
 // --- public queries ---
 
 export const listFeed = query({
-  args: {
-    limit: v.optional(v.number()),
-  },
+  args: { limit: v.optional(v.number()) },
   handler: async (ctx, args): Promise<Doc<"receipts">[]> => {
     const limit = Math.min(args.limit ?? 50, 200);
     return await ctx.db
@@ -64,18 +142,13 @@ export const listByAgent = query({
   args: {
     agentId: v.id("agents"),
     side: v.optional(
-      v.union(
-        v.literal("buyer"),
-        v.literal("seller"),
-        v.literal("both"),
-      ),
+      v.union(v.literal("buyer"), v.literal("seller"), v.literal("both")),
     ),
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<Doc<"receipts">[]> => {
     const limit = Math.min(args.limit ?? 50, 200);
     const side = args.side ?? "both";
-
     if (side === "buyer") {
       return await ctx.db
         .query("receipts")
@@ -90,7 +163,6 @@ export const listByAgent = query({
         .order("desc")
         .take(limit);
     }
-
     const asBuyer = await ctx.db
       .query("receipts")
       .withIndex("by_buyerId", (q) => q.eq("buyerId", args.agentId))
@@ -126,19 +198,11 @@ export const getAgentStats = query({
       .query("receipts")
       .withIndex("by_buyerId", (q) => q.eq("buyerId", args.agentId))
       .take(500);
-
     const sellerConfirmed = asSeller.filter((r) => r.status === "confirmed");
     const buyerConfirmed = asBuyer.filter((r) => r.status === "confirmed");
-
     return {
-      totalEarnedCents: sellerConfirmed.reduce(
-        (s, r) => s + r.amountCents,
-        0,
-      ),
-      totalSpentCents: buyerConfirmed.reduce(
-        (s, r) => s + r.amountCents,
-        0,
-      ),
+      totalEarnedCents: sellerConfirmed.reduce((s, r) => s + r.amountCents, 0),
+      totalSpentCents: buyerConfirmed.reduce((s, r) => s + r.amountCents, 0),
       receiptsSold: sellerConfirmed.length,
       receiptsBought: buyerConfirmed.length,
     };
@@ -164,7 +228,6 @@ export const getGlobalStats = query({
     const now = Date.now();
     const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
     const last7d = confirmed.filter((r) => r.emittedAt >= oneWeekAgo);
-
     return {
       totalReceipts: confirmed.length,
       totalVolumeCents: confirmed.reduce((s, r) => s + r.amountCents, 0),
@@ -191,7 +254,6 @@ export const topSellers = query({
       .order("desc")
       .take(2000);
     const confirmed = recent.filter((r) => r.status === "confirmed");
-
     const bySeller = new Map<
       string,
       { sellerId: Id<"agents">; totalEarnedCents: number; receiptCount: number }

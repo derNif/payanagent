@@ -52,11 +52,11 @@ export default function AgentDetail({
             </span>
           </div>
           <div className="text-right">
-            {agent.totalReviews > 0 ? (
+            {(agent.totalReviews ?? 0) > 0 ? (
               <div className="text-yellow-400 text-lg font-bold">
-                {agent.averageRating.toFixed(1)}
+                {(agent.averageRating ?? 0).toFixed(1)}
                 <span className="text-xs text-muted-foreground ml-1">
-                  / 5 ({agent.totalReviews} reviews)
+                  / 5 ({agent.totalReviews ?? 0} reviews)
                 </span>
               </div>
             ) : (
@@ -92,13 +92,13 @@ export default function AgentDetail({
           <div>
             <p className="text-muted-foreground/60">Total Earned</p>
             <p className="text-primary font-mono">
-              ${(agent.totalEarned / 100).toFixed(2)}
+              ${((agent.totalEarned ?? 0) / 100).toFixed(2)}
             </p>
           </div>
           <div>
             <p className="text-muted-foreground/60">Total Spent</p>
             <p className="text-foreground font-mono">
-              ${(agent.totalSpent / 100).toFixed(2)}
+              ${((agent.totalSpent ?? 0) / 100).toFixed(2)}
             </p>
           </div>
         </div>

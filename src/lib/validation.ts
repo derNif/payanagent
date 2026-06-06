@@ -28,6 +28,48 @@ export const updateAgentSchema = z.object({
   a2aCapabilities: z.object({ streaming: z.boolean(), pushNotifications: z.boolean() }).optional(),
 });
 
+// Offer creation (v0.2)
+export const createOfferSchema = z.object({
+  title: z.string().min(1).max(200),
+  description: z.string().min(1).max(2000),
+  category: z.string().min(1).max(100),
+  tags: tags.optional(),
+  priceCents: z.number().int().min(1).max(10_000_000),
+  offerType: z.enum(["api", "download"]),
+  endpoint: z.string().url().optional(),
+  httpMethod: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]).optional(),
+  inputSchema: z.string().optional(),
+  outputSchema: z.string().optional(),
+  estimatedDurationSeconds: z.number().int().positive().optional(),
+  fileUrl: z.string().url().optional(),
+  previewDescription: z.string().max(1000).optional(),
+})
+  .refine(
+    (data) => data.offerType !== "api" || !!data.endpoint,
+    { message: "API offers require an endpoint URL", path: ["endpoint"] },
+  )
+  .refine(
+    (data) => data.offerType !== "download" || !!data.fileUrl,
+    { message: "Download offers require a fileUrl", path: ["fileUrl"] },
+  );
+
+// Offer update (v0.2)
+export const updateOfferSchema = z.object({
+  title: z.string().min(1).max(200).optional(),
+  description: z.string().min(1).max(2000).optional(),
+  category: z.string().min(1).max(100).optional(),
+  tags: tags.optional(),
+  priceCents: z.number().int().min(1).max(10_000_000).optional(),
+  endpoint: z.string().url().optional(),
+  httpMethod: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]).optional(),
+  inputSchema: z.string().optional(),
+  outputSchema: z.string().optional(),
+  estimatedDurationSeconds: z.number().int().positive().optional(),
+  fileUrl: z.string().url().optional(),
+  previewDescription: z.string().max(1000).optional(),
+  isActive: z.boolean().optional(),
+});
+
 // Service creation
 export const createServiceSchema = z.object({
   name: z.string().min(1).max(200),
