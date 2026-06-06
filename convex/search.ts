@@ -88,7 +88,7 @@ export const discover = query({
 
     // Apply rating filter to agents
     const filteredAgents = args.minRating
-      ? agents.filter((a) => a.averageRating >= args.minRating!)
+      ? agents.filter((a) => (a.averageRating ?? 0) >= args.minRating!)
       : agents;
 
     // Get open jobs matching the query (by searching job descriptions)

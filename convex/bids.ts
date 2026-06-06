@@ -121,8 +121,8 @@ export const accept = mutation({
     }
 
     // Update the job with provider and agreed price
-    await ctx.db.patch(bid.jobId, {
-      providerAgentId: bid.agentId,
+    await ctx.db.patch(bid.jobId!, {
+      providerAgentId: bid.agentId!,
       agreedPriceCents: bid.priceCents,
       status: "accepted",
       acceptedAt: Date.now(),
@@ -131,7 +131,7 @@ export const accept = mutation({
     // bid.accepted -> winning bidder (provider)
     await ctx.scheduler.runAfter(0, internal.webhookSender.sendWebhooks, {
       event: "bid.accepted",
-      recipientAgentIds: [bid.agentId],
+      recipientAgentIds: [bid.agentId!],
       jobId: bid.jobId,
       data: {
         bidId: args.bidId,

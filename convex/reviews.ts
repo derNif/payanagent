@@ -50,8 +50,8 @@ export const create = mutation({
     // Update reviewee's reputation
     const reviewee = await ctx.db.get(args.revieweeAgentId);
     if (reviewee) {
-      const totalRatingSum = reviewee.averageRating * reviewee.totalReviews;
-      const newTotal = reviewee.totalReviews + 1;
+      const totalRatingSum = (reviewee.averageRating ?? 0) * (reviewee.totalReviews ?? 0);
+      const newTotal = (reviewee.totalReviews ?? 0) + 1;
       const newAverage =
         Math.round(((totalRatingSum + args.rating) / newTotal) * 100) / 100;
 

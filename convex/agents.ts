@@ -133,27 +133,27 @@ export const updateReputation = mutation({
     const updates: Record<string, unknown> = {};
 
     if (args.newRating !== undefined) {
-      const totalRatingSum = agent.averageRating * agent.totalReviews;
-      const newTotal = agent.totalReviews + 1;
+      const totalRatingSum = (agent.averageRating ?? 0) * (agent.totalReviews ?? 0);
+      const newTotal = (agent.totalReviews ?? 0) + 1;
       updates.averageRating =
         Math.round(((totalRatingSum + args.newRating) / newTotal) * 100) / 100;
       updates.totalReviews = newTotal;
     }
 
     if (args.jobCompleted) {
-      updates.totalJobsCompleted = agent.totalJobsCompleted + 1;
+      updates.totalJobsCompleted = (agent.totalJobsCompleted ?? 0) + 1;
     }
 
     if (args.jobFailed) {
-      updates.totalJobsFailed = agent.totalJobsFailed + 1;
+      updates.totalJobsFailed = (agent.totalJobsFailed ?? 0) + 1;
     }
 
     if (args.earned) {
-      updates.totalEarned = agent.totalEarned + args.earned;
+      updates.totalEarned = (agent.totalEarned ?? 0) + args.earned;
     }
 
     if (args.spent) {
-      updates.totalSpent = agent.totalSpent + args.spent;
+      updates.totalSpent = (agent.totalSpent ?? 0) + args.spent;
     }
 
     await ctx.db.patch(args.agentId, updates);
@@ -190,18 +190,18 @@ export const listLeaderboard = query({
       .collect();
 
     const sorted = active
-      .filter((a) => a.totalJobsCompleted > 0)
+      .filter((a) => (a.totalJobsCompleted ?? 0) > 0)
       .sort((a, b) => {
         const primary =
           sort === "earnings"
-            ? b.totalEarned - a.totalEarned
+            ? (b.totalEarned ?? 0) - (a.totalEarned ?? 0)
             : sort === "jobs"
-              ? b.totalJobsCompleted - a.totalJobsCompleted
-              : b.averageRating - a.averageRating;
+              ? (b.totalJobsCompleted ?? 0) - (a.totalJobsCompleted ?? 0)
+              : (b.averageRating ?? 0) - (a.averageRating ?? 0);
         if (primary !== 0) return primary;
-        if (b.totalReviews !== a.totalReviews)
-          return b.totalReviews - a.totalReviews;
-        return b.totalJobsCompleted - a.totalJobsCompleted;
+        if ((b.totalReviews ?? 0) !== (a.totalReviews ?? 0))
+          return (b.totalReviews ?? 0) - (a.totalReviews ?? 0);
+        return (b.totalJobsCompleted ?? 0) - (a.totalJobsCompleted ?? 0);
       })
       .slice(0, limit);
 
@@ -209,10 +209,10 @@ export const listLeaderboard = query({
       _id: a._id,
       name: a.name,
       providerType: a.providerType,
-      averageRating: a.averageRating,
-      totalReviews: a.totalReviews,
-      totalJobsCompleted: a.totalJobsCompleted,
-      totalEarnedCents: a.totalEarned,
+      averageRating: a.averageRating ?? 0,
+      totalReviews: a.totalReviews ?? 0,
+      totalJobsCompleted: a.totalJobsCompleted ?? 0,
+      totalEarnedCents: a.totalEarned ?? 0,
     }));
   },
 });
