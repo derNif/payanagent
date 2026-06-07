@@ -10,6 +10,10 @@ Every PR body follows `.github/pull_request_template.md`: what changed · is it
 safe · impact · what to check · decisions made. The PR body is meant to be
 readable in about a minute. Fill it out — it's how changes get reviewed and merged.
 
+The operating model behind this — the charter, roadmap, decisions, and the agent
+loops that drive development — lives in a separate private control-plane repo
+(`payanagent-inc`). This repo just carries the digest contract below.
+
 ## 2. Money and keys are hard-stopped
 
 Changes that move real value or touch secrets are **never** made autonomously and
