@@ -190,6 +190,5 @@ export default defineSchema({
     .index("by_agentId", ["agentId"])
     .index("by_keyPrefix", ["keyPrefix", "isActive"]),
 
-  // (v1 legacy tables removed at cut-over: services, jobs, transactions,
-  // reviews, webhooks, products, productPurchases, webhookDeliveries.)
+  // (v1 legacy tables dropped at cut-over.)
 });
