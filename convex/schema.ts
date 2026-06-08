@@ -161,6 +161,23 @@ export default defineSchema({
     .index("by_emittedAt", ["emittedAt"])
     .index("by_settlementType", ["settlementType", "emittedAt"]),
 
+  // Bids on open requests.
+  bids: defineTable({
+    requestId: v.id("requests"),
+    bidderId: v.id("agents"),
+    priceCents: v.number(),
+    estimatedDurationSeconds: v.optional(v.number()),
+    message: v.optional(v.string()),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("accepted"),
+      v.literal("rejected"),
+      v.literal("withdrawn"),
+    ),
+  })
+    .index("by_requestId", ["requestId", "status"])
+    .index("by_bidderId", ["bidderId", "status"]),
+
   apiKeys: defineTable({
     agentId: v.id("agents"),
     keyHash: v.string(),
@@ -173,215 +190,6 @@ export default defineSchema({
     .index("by_agentId", ["agentId"])
     .index("by_keyPrefix", ["keyPrefix", "isActive"]),
 
-  // ============================================================
-  // v1 LEGACY — dropped during Step 10 cut-over. v0.2 code MUST NOT write here.
-  // Definitions preserved so existing rows pass validation during the build.
-  // ============================================================
-
-  services: defineTable({
-    agentId: v.id("agents"),
-    name: v.string(),
-    description: v.string(),
-    category: v.string(),
-    tags: v.array(v.string()),
-    serviceType: v.union(v.literal("api"), v.literal("job")),
-    pricingModel: v.union(
-      v.literal("per_request"),
-      v.literal("per_job"),
-      v.literal("per_token"),
-      v.literal("hourly"),
-    ),
-    priceInCents: v.number(),
-    endpoint: v.optional(v.string()),
-    httpMethod: v.optional(v.string()),
-    inputSchema: v.optional(v.string()),
-    outputSchema: v.optional(v.string()),
-    maxInputTokens: v.optional(v.number()),
-    estimatedDurationSeconds: v.optional(v.number()),
-    isActive: v.boolean(),
-  })
-    .index("by_agentId", ["agentId"])
-    .index("by_category", ["category", "isActive"])
-    .index("by_serviceType", ["serviceType", "isActive"])
-    .searchIndex("search_services", {
-      searchField: "description",
-      filterFields: ["category", "isActive", "serviceType"],
-    }),
-
-  jobs: defineTable({
-    clientAgentId: v.id("agents"),
-    providerAgentId: v.optional(v.id("agents")),
-    serviceId: v.optional(v.id("services")),
-    title: v.string(),
-    description: v.string(),
-    inputPayload: v.optional(v.string()),
-    outputPayload: v.optional(v.string()),
-    agreedPriceCents: v.optional(v.number()),
-    budgetMaxCents: v.optional(v.number()),
-    jobType: v.union(v.literal("direct"), v.literal("open")),
-    status: v.union(
-      v.literal("open"),
-      v.literal("accepted"),
-      v.literal("in_progress"),
-      v.literal("delivered"),
-      v.literal("completing"),
-      v.literal("completed"),
-      v.literal("disputed"),
-      v.literal("cancelling"),
-      v.literal("cancelled"),
-      v.literal("timingOut"),
-      v.literal("failed"),
-    ),
-    acceptedAt: v.optional(v.number()),
-    deliveredAt: v.optional(v.number()),
-    completedAt: v.optional(v.number()),
-    disputedAt: v.optional(v.number()),
-    cancelledAt: v.optional(v.number()),
-    timedOutAt: v.optional(v.number()),
-    escrowTransactionId: v.optional(v.id("transactions")),
-    settlementTransactionId: v.optional(v.id("transactions")),
-    disputeReason: v.optional(v.string()),
-    disputeResolutionNote: v.optional(v.string()),
-    disputeResolvedAt: v.optional(v.number()),
-    failureReason: v.optional(
-      v.union(
-        v.literal("timeout"),
-        v.literal("dispute_refund"),
-        v.literal("cancelled_by_client"),
-      ),
-    ),
-  })
-    .index("by_status_acceptedAt", ["status", "acceptedAt"])
-    .index("by_clientAgentId", ["clientAgentId", "status"])
-    .index("by_providerAgentId", ["providerAgentId", "status"])
-    .index("by_status", ["status"])
-    .index("by_jobType_status", ["jobType", "status"]),
-
-  // v1 bids (on legacy jobs). The new v0.2 bids live on the requests table.
-  // Kept here to satisfy historic rows.
-  bids: defineTable({
-    // v1 fields
-    jobId: v.optional(v.id("jobs")),
-    agentId: v.optional(v.id("agents")),
-    // v0.2 fields
-    requestId: v.optional(v.id("requests")),
-    bidderId: v.optional(v.id("agents")),
-    priceCents: v.number(),
-    estimatedDurationSeconds: v.optional(v.number()),
-    message: v.optional(v.string()),
-    status: v.union(
-      v.literal("pending"),
-      v.literal("accepted"),
-      v.literal("rejected"),
-      v.literal("withdrawn"),
-    ),
-  })
-    .index("by_jobId", ["jobId", "status"])
-    .index("by_agentId", ["agentId", "status"])
-    .index("by_requestId", ["requestId", "status"])
-    .index("by_bidderId", ["bidderId", "status"]),
-
-  transactions: defineTable({
-    fromAgentId: v.id("agents"),
-    toAgentId: v.optional(v.id("agents")),
-    jobId: v.optional(v.id("jobs")),
-    productId: v.optional(v.id("products")),
-    amountCents: v.number(),
-    currency: v.string(),
-    chain: v.string(),
-    network: v.string(),
-    txHash: v.optional(v.string()),
-    facilitatorUrl: v.string(),
-    type: v.union(
-      v.literal("escrow_deposit"),
-      v.literal("escrow_release"),
-      v.literal("direct_payment"),
-      v.literal("refund"),
-      v.literal("platform_fee"),
-    ),
-    status: v.union(
-      v.literal("pending"),
-      v.literal("confirmed"),
-      v.literal("failed"),
-      v.literal("refunded"),
-    ),
-    confirmedAt: v.optional(v.number()),
-  })
-    .index("by_fromAgentId", ["fromAgentId"])
-    .index("by_toAgentId", ["toAgentId"])
-    .index("by_jobId", ["jobId"])
-    .index("by_type_status", ["type", "status"]),
-
-  reviews: defineTable({
-    jobId: v.id("jobs"),
-    reviewerAgentId: v.id("agents"),
-    revieweeAgentId: v.id("agents"),
-    rating: v.number(),
-    comment: v.optional(v.string()),
-  })
-    .index("by_jobId", ["jobId"])
-    .index("by_revieweeAgentId", ["revieweeAgentId"])
-    .index("by_reviewerAgentId", ["reviewerAgentId"]),
-
-  webhooks: defineTable({
-    agentId: v.id("agents"),
-    url: v.string(),
-    events: v.array(v.string()),
-    secret: v.string(),
-    isActive: v.boolean(),
-  })
-    .index("by_agentId", ["agentId"])
-    .index("by_event", ["isActive"]),
-
-  products: defineTable({
-    sellerId: v.id("agents"),
-    title: v.string(),
-    description: v.string(),
-    category: v.string(),
-    tags: v.array(v.string()),
-    priceCents: v.number(),
-    deliveryMode: v.literal("instant"),
-    fileUrl: v.string(),
-    previewDescription: v.optional(v.string()),
-    isActive: v.boolean(),
-    reviewsCount: v.number(),
-    rating: v.number(),
-    createdAt: v.number(),
-  })
-    .index("by_sellerId", ["sellerId"])
-    .index("by_category_active", ["category", "isActive"])
-    .index("by_active_created", ["isActive", "createdAt"])
-    .searchIndex("search_products", {
-      searchField: "description",
-      filterFields: ["category", "isActive"],
-    }),
-
-  productPurchases: defineTable({
-    productId: v.id("products"),
-    buyerId: v.id("agents"),
-    transactionId: v.id("transactions"),
-    downloadToken: v.string(),
-    tokenExpiresAt: v.number(),
-    downloadedAt: v.optional(v.number()),
-    createdAt: v.number(),
-  })
-    .index("by_token", ["downloadToken"])
-    .index("by_buyerId", ["buyerId"])
-    .index("by_productId", ["productId"]),
-
-  webhookDeliveries: defineTable({
-    webhookId: v.id("webhooks"),
-    agentId: v.id("agents"),
-    url: v.string(),
-    event: v.string(),
-    jobId: v.optional(v.id("jobs")),
-    attempt: v.number(),
-    statusCode: v.optional(v.number()),
-    error: v.optional(v.string()),
-    durationMs: v.optional(v.number()),
-    success: v.boolean(),
-  })
-    .index("by_webhookId", ["webhookId"])
-    .index("by_jobId", ["jobId"])
-    .index("by_event_success", ["event", "success"]),
+  // (v1 legacy tables removed at cut-over: services, jobs, transactions,
+  // reviews, webhooks, products, productPurchases, webhookDeliveries.)
 });

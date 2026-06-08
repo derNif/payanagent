@@ -117,103 +117,12 @@ export const update = mutation({
   },
 });
 
-export const updateReputation = mutation({
-  args: {
-    agentId: v.id("agents"),
-    newRating: v.optional(v.number()),
-    jobCompleted: v.optional(v.boolean()),
-    jobFailed: v.optional(v.boolean()),
-    earned: v.optional(v.number()),
-    spent: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const agent = await ctx.db.get(args.agentId);
-    if (!agent) throw new Error("Agent not found");
-
-    const updates: Record<string, unknown> = {};
-
-    if (args.newRating !== undefined) {
-      const totalRatingSum = (agent.averageRating ?? 0) * (agent.totalReviews ?? 0);
-      const newTotal = (agent.totalReviews ?? 0) + 1;
-      updates.averageRating =
-        Math.round(((totalRatingSum + args.newRating) / newTotal) * 100) / 100;
-      updates.totalReviews = newTotal;
-    }
-
-    if (args.jobCompleted) {
-      updates.totalJobsCompleted = (agent.totalJobsCompleted ?? 0) + 1;
-    }
-
-    if (args.jobFailed) {
-      updates.totalJobsFailed = (agent.totalJobsFailed ?? 0) + 1;
-    }
-
-    if (args.earned) {
-      updates.totalEarned = (agent.totalEarned ?? 0) + args.earned;
-    }
-
-    if (args.spent) {
-      updates.totalSpent = (agent.totalSpent ?? 0) + args.spent;
-    }
-
-    await ctx.db.patch(args.agentId, updates);
-  },
-});
-
 export const deactivate = mutation({
   args: { agentId: v.id("agents") },
   handler: async (ctx, args) => {
     const agent = await ctx.db.get(args.agentId);
     if (!agent) throw new Error("Agent not found");
     await ctx.db.patch(args.agentId, { status: "deactivated" });
-  },
-});
-
-export const listLeaderboard = query({
-  args: {
-    limit: v.optional(v.number()),
-    sort: v.optional(
-      v.union(
-        v.literal("rating"),
-        v.literal("earnings"),
-        v.literal("jobs"),
-      ),
-    ),
-  },
-  handler: async (ctx, args) => {
-    const limit = Math.min(args.limit ?? 50, 100);
-    const sort = args.sort ?? "rating";
-
-    const active = await ctx.db
-      .query("agents")
-      .withIndex("by_status", (q) => q.eq("status", "active"))
-      .collect();
-
-    const sorted = active
-      .filter((a) => (a.totalJobsCompleted ?? 0) > 0)
-      .sort((a, b) => {
-        const primary =
-          sort === "earnings"
-            ? (b.totalEarned ?? 0) - (a.totalEarned ?? 0)
-            : sort === "jobs"
-              ? (b.totalJobsCompleted ?? 0) - (a.totalJobsCompleted ?? 0)
-              : (b.averageRating ?? 0) - (a.averageRating ?? 0);
-        if (primary !== 0) return primary;
-        if ((b.totalReviews ?? 0) !== (a.totalReviews ?? 0))
-          return (b.totalReviews ?? 0) - (a.totalReviews ?? 0);
-        return (b.totalJobsCompleted ?? 0) - (a.totalJobsCompleted ?? 0);
-      })
-      .slice(0, limit);
-
-    return sorted.map((a) => ({
-      _id: a._id,
-      name: a.name,
-      providerType: a.providerType,
-      averageRating: a.averageRating ?? 0,
-      totalReviews: a.totalReviews ?? 0,
-      totalJobsCompleted: a.totalJobsCompleted ?? 0,
-      totalEarnedCents: a.totalEarned ?? 0,
-    }));
   },
 });
 
