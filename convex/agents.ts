@@ -75,13 +75,15 @@ export const list = query({
     ),
   },
   handler: async (ctx, args) => {
+    // Defensive cap so this can't become the next services.listByAgent.
+    const LIMIT = 500;
     if (args.status) {
       return await ctx.db
         .query("agents")
         .withIndex("by_status", (q) => q.eq("status", args.status!))
-        .collect();
+        .take(LIMIT);
     }
-    return await ctx.db.query("agents").collect();
+    return await ctx.db.query("agents").take(LIMIT);
   },
 });
 
@@ -129,7 +131,11 @@ export const deactivate = mutation({
 export const getStats = query({
   args: {},
   handler: async (ctx) => {
-    const allAgents = await ctx.db.query("agents").collect();
+    // Index-only counts via `.take()` ceiling — cheap if there are few agents,
+    // bounded if there are many. Worst-case I/O = 1500 row reads instead of
+    // the entire table.
+    const LIMIT = 500;
+    const allAgents = await ctx.db.query("agents").take(LIMIT);
     const active = allAgents.filter((a) => a.status === "active").length;
     return {
       total: allAgents.length,
