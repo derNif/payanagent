@@ -1,23 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
-import { validateBody, cancelSchema } from "@/lib/validation";
 import {
+  releaseEscrow,
   getFacilitatorUrl,
   getNetwork,
   getNetworkId,
-  releaseEscrow,
 } from "@/lib/x402";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
-// POST /api/v1/requests/:requestId/cancel — Buyer cancels.
-// v0.2 path.
-//
-// Allowed: status ∈ {open, accepted, fulfilled} and caller is the buyer.
-// If escrow=true: refund buyer's USDC on-chain via releaseEscrow,
-//   emit escrow_refund receipt, link as settlementReceiptId.
-// If escrow=false: just mark cancelled.
+// POST /api/v1/requests/:requestId/approve — Buyer approves the fulfilled work.
+// Releases escrow on-chain to the provider's wallet, emits escrow_release receipt,
+// marks the request as approved.
+// v0.2 path. Replaces v1 /complete.
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ requestId: string }> },
@@ -25,9 +21,6 @@ export async function POST(
   const startedAt = Date.now();
   const { agent, error } = await authenticateRequest(request);
   if (error) return error;
-
-  const { data, error: validationError } = await validateBody(request, cancelSchema);
-  if (validationError) return validationError;
 
   const { requestId } = await params;
   const convex = getConvexClient();
@@ -45,47 +38,59 @@ export async function POST(
   }
   if (req.buyerId !== agent._id) {
     return NextResponse.json(
-      { error: "Only the buyer can cancel" },
+      { error: "Only the buyer can approve" },
       { status: 403 },
     );
   }
-  const cancellable = ["open", "accepted", "fulfilled"];
-  if (!cancellable.includes(req.status)) {
+  if (req.status !== "fulfilled") {
     return NextResponse.json(
-      { error: `Cannot cancel a request in status: ${req.status}` },
+      { error: `Cannot approve a request in status: ${req.status}` },
       { status: 400 },
     );
   }
-
-  // No escrow → straight cancel
+  if (!req.providerId) {
+    return NextResponse.json(
+      { error: "Request has no assigned provider" },
+      { status: 500 },
+    );
+  }
+  if (!req.agreedPriceCents) {
+    return NextResponse.json(
+      { error: "Request has no agreed price" },
+      { status: 500 },
+    );
+  }
   if (!req.escrow) {
-    await convex.mutation(api.requests.markCancelled, {
-      requestId: req._id,
-      reason: data.reason,
-    });
-    return NextResponse.json({ ok: true, refunded: false });
-  }
-
-  // Escrow → refund + emit receipt
-  const buyer = await convex.query(api.agents.getById, {
-    agentId: req.buyerId,
-  });
-  if (!buyer?.walletAddress) {
+    // For non-escrow requests, payment is buyer-pull. v0.2 expects buy-side
+    // escrow for marketplace mode; non-escrow approvals are out of scope here
+    // and will be revisited when buyer-pull settlement is wired.
     return NextResponse.json(
-      { error: "Buyer has no wallet address configured" },
+      { error: "Non-escrow approve not yet supported in v0.2" },
       { status: 400 },
     );
   }
-  const refundAmount = req.agreedPriceCents ?? req.budgetMaxCents;
 
-  const refund = await releaseEscrow(buyer.walletAddress, refundAmount);
-  if (!refund.success || !refund.txHash) {
+  // Look up provider wallet
+  const provider = await convex.query(api.agents.getById, {
+    agentId: req.providerId,
+  });
+  if (!provider) {
+    return NextResponse.json({ error: "Provider not found" }, { status: 500 });
+  }
+
+  // Release escrow on-chain
+  const release = await releaseEscrow(
+    provider.walletAddress,
+    req.agreedPriceCents,
+  );
+  if (!release.success || !release.txHash) {
     return NextResponse.json(
-      { error: `Refund failed: ${refund.error || "unknown"}` },
+      { error: `Escrow release failed: ${release.error || "unknown"}` },
       { status: 502 },
     );
   }
 
+  // Emit escrow_release receipt
   const platformSecret = process.env.PLATFORM_INTERNAL_KEY || "";
   if (!platformSecret) {
     return NextResponse.json(
@@ -93,36 +98,34 @@ export async function POST(
       { status: 500 },
     );
   }
-
   const receiptId: Id<"receipts"> = await convex.mutation(
     api.receipts.recordSettlement,
     {
       platformSecret,
       buyerId: req.buyerId,
-      sellerId: req.providerId ?? req.buyerId,
+      sellerId: req.providerId,
       requestId: req._id,
-      amountCents: refundAmount,
+      amountCents: req.agreedPriceCents,
       currency: "USDC",
       chain: getNetwork(),
       network: getNetworkId(),
-      txHash: refund.txHash,
+      txHash: release.txHash,
       facilitatorUrl: getFacilitatorUrl(),
-      settlementType: "escrow_refund",
+      settlementType: "escrow_release",
       status: "confirmed",
       latencyMs: Date.now() - startedAt,
     },
   );
 
-  await convex.mutation(api.requests.markCancelled, {
+  // Mark the request approved
+  await convex.mutation(api.requests.markApproved, {
     requestId: req._id,
-    reason: data.reason,
-    refundReceiptId: receiptId,
+    settlementReceiptId: receiptId,
   });
 
   return NextResponse.json({
     ok: true,
-    refunded: true,
     receiptId,
-    txHash: refund.txHash,
+    txHash: release.txHash,
   });
 }

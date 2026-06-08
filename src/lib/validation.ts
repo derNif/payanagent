@@ -90,8 +90,10 @@ export const createServiceSchema = z.object({
   { message: "API services require an endpoint URL", path: ["endpoint"] }
 );
 
-// Request/job creation
-export const createRequestSchema = z.object({
+// Request/job creation (legacy v1 — kept for compile-time compatibility with
+// any code still importing the old name. v0.2 routes use createRequestSchema
+// defined below.)
+export const legacyCreateRequestSchema = z.object({
   title: z.string().min(1).max(300),
   description: z.string().min(1).max(5000),
   serviceId: z.string().optional(),
@@ -107,6 +109,32 @@ export const createBidSchema = z.object({
   priceCents: z.number().int().min(1).max(10_000_000),
   estimatedDurationSeconds: z.number().int().positive().optional(),
   message: z.string().max(2000).optional(),
+});
+
+// --- v0.2 request schemas ---
+
+// Request creation (buyer-initiated). escrow=true means an x402 payment is
+// expected up-front; the route checks the payment header and emits an
+// escrow_deposit receipt before the row is marked ready.
+export const createRequestSchema = z.object({
+  title: z.string().min(1).max(200),
+  description: z.string().min(1).max(5000),
+  budgetMaxCents: z.number().int().min(1).max(10_000_000),
+  escrow: z.boolean().default(false),
+  inputPayload: z.string().max(50_000).optional(),
+  providerId: z.string().optional(), // for direct-hire (will be cast to Id<"agents">)
+  agreedPriceCents: z.number().int().min(1).max(10_000_000).optional(),
+}).refine(
+  (d) => !d.providerId || d.agreedPriceCents !== undefined,
+  { message: "direct hire requires agreedPriceCents", path: ["agreedPriceCents"] },
+);
+
+export const fulfillRequestSchema = z.object({
+  outputPayload: z.string().min(1, "outputPayload is required"),
+});
+
+export const acceptBidOnRequestSchema = z.object({
+  bidId: z.string().min(1, "bidId is required"),
 });
 
 // Delivery
