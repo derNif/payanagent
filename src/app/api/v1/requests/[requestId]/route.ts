@@ -1,41 +1,43 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
-import { authenticateRequest } from "@/lib/auth";
+import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
-// GET /api/v1/requests/:requestId — Get job details
+// GET /api/v1/requests/:requestId — Public detail, including bids.
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ requestId: string }> }
+  { params }: { params: Promise<{ requestId: string }> },
 ) {
-  const { agent, error } = await authenticateRequest(request);
-  if (error) return error;
+  const ip = getClientIp(request);
+  const rl = await checkRateLimit(`public:${ip}`, RATE_LIMITS.unauthenticated);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests" },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)),
+        },
+      },
+    );
+  }
 
   const { requestId } = await params;
   const convex = getConvexClient();
 
   try {
-    const job = await convex.query(api.jobs.getById, {
-      jobId: requestId as Id<"jobs">,
+    const result = await convex.query(api.requests.getWithBids, {
+      requestId: requestId as Id<"requests">,
     });
-
-    if (!job) {
-      return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    if (!result.request) {
+      return NextResponse.json({ error: "Request not found" }, { status: 404 });
     }
-
-    // Get bids if open job
-    const bids = job.jobType === "open"
-      ? await convex.query(api.bids.listByJob, { jobId: requestId as Id<"jobs"> })
-      : [];
-
-    // Get reviews
-    const reviews = job.status === "completed"
-      ? await convex.query(api.reviews.listByJob, { jobId: requestId as Id<"jobs"> })
-      : [];
-
-    return NextResponse.json({ ...job, bids, reviews });
+    return NextResponse.json({
+      request: result.request,
+      bids: result.bids,
+    });
   } catch {
-    return NextResponse.json({ error: "Invalid job ID" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid request ID" }, { status: 400 });
   }
 }

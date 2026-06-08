@@ -39,3 +39,21 @@ export function toPublicService<T extends EndpointBearing>(
     endpoint: redactEndpoint(service.endpoint),
   };
 }
+
+// Offers — same endpoint-redaction logic as services. fileUrl is private until
+// the buyer settles; never exposed in public projections.
+type OfferShape = { endpoint?: string; fileUrl?: string };
+
+export function toPublicOffer<T extends OfferShape>(offer: T) {
+  const { fileUrl, endpoint, ...rest } = offer;
+  void fileUrl;
+  return {
+    ...rest,
+    endpoint: redactEndpoint(endpoint),
+  };
+}
+
+// Receipts are already public — pseudonymous, no PII to strip. Identity projection.
+export function toPublicReceipt<T>(receipt: T): T {
+  return receipt;
+}

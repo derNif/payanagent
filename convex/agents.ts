@@ -117,103 +117,12 @@ export const update = mutation({
   },
 });
 
-export const updateReputation = mutation({
-  args: {
-    agentId: v.id("agents"),
-    newRating: v.optional(v.number()),
-    jobCompleted: v.optional(v.boolean()),
-    jobFailed: v.optional(v.boolean()),
-    earned: v.optional(v.number()),
-    spent: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const agent = await ctx.db.get(args.agentId);
-    if (!agent) throw new Error("Agent not found");
-
-    const updates: Record<string, unknown> = {};
-
-    if (args.newRating !== undefined) {
-      const totalRatingSum = agent.averageRating * agent.totalReviews;
-      const newTotal = agent.totalReviews + 1;
-      updates.averageRating =
-        Math.round(((totalRatingSum + args.newRating) / newTotal) * 100) / 100;
-      updates.totalReviews = newTotal;
-    }
-
-    if (args.jobCompleted) {
-      updates.totalJobsCompleted = agent.totalJobsCompleted + 1;
-    }
-
-    if (args.jobFailed) {
-      updates.totalJobsFailed = agent.totalJobsFailed + 1;
-    }
-
-    if (args.earned) {
-      updates.totalEarned = agent.totalEarned + args.earned;
-    }
-
-    if (args.spent) {
-      updates.totalSpent = agent.totalSpent + args.spent;
-    }
-
-    await ctx.db.patch(args.agentId, updates);
-  },
-});
-
 export const deactivate = mutation({
   args: { agentId: v.id("agents") },
   handler: async (ctx, args) => {
     const agent = await ctx.db.get(args.agentId);
     if (!agent) throw new Error("Agent not found");
     await ctx.db.patch(args.agentId, { status: "deactivated" });
-  },
-});
-
-export const listLeaderboard = query({
-  args: {
-    limit: v.optional(v.number()),
-    sort: v.optional(
-      v.union(
-        v.literal("rating"),
-        v.literal("earnings"),
-        v.literal("jobs"),
-      ),
-    ),
-  },
-  handler: async (ctx, args) => {
-    const limit = Math.min(args.limit ?? 50, 100);
-    const sort = args.sort ?? "rating";
-
-    const active = await ctx.db
-      .query("agents")
-      .withIndex("by_status", (q) => q.eq("status", "active"))
-      .collect();
-
-    const sorted = active
-      .filter((a) => a.totalJobsCompleted > 0)
-      .sort((a, b) => {
-        const primary =
-          sort === "earnings"
-            ? b.totalEarned - a.totalEarned
-            : sort === "jobs"
-              ? b.totalJobsCompleted - a.totalJobsCompleted
-              : b.averageRating - a.averageRating;
-        if (primary !== 0) return primary;
-        if (b.totalReviews !== a.totalReviews)
-          return b.totalReviews - a.totalReviews;
-        return b.totalJobsCompleted - a.totalJobsCompleted;
-      })
-      .slice(0, limit);
-
-    return sorted.map((a) => ({
-      _id: a._id,
-      name: a.name,
-      providerType: a.providerType,
-      averageRating: a.averageRating,
-      totalReviews: a.totalReviews,
-      totalJobsCompleted: a.totalJobsCompleted,
-      totalEarnedCents: a.totalEarned,
-    }));
   },
 });
 

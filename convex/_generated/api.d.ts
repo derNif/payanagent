@@ -10,17 +10,10 @@
 
 import type * as agents from "../agents.js";
 import type * as apiKeys from "../apiKeys.js";
-import type * as bids from "../bids.js";
-import type * as crons from "../crons.js";
-import type * as jobs from "../jobs.js";
-import type * as products from "../products.js";
-import type * as reviews from "../reviews.js";
+import type * as offers from "../offers.js";
+import type * as receipts from "../receipts.js";
+import type * as requests from "../requests.js";
 import type * as search from "../search.js";
-import type * as services from "../services.js";
-import type * as timeouts from "../timeouts.js";
-import type * as transactions from "../transactions.js";
-import type * as webhookSender from "../webhookSender.js";
-import type * as webhooks from "../webhooks.js";
 
 import type {
   ApiFromModules,
@@ -31,17 +24,10 @@ import type {
 declare const fullApi: ApiFromModules<{
   agents: typeof agents;
   apiKeys: typeof apiKeys;
-  bids: typeof bids;
-  crons: typeof crons;
-  jobs: typeof jobs;
-  products: typeof products;
-  reviews: typeof reviews;
+  offers: typeof offers;
+  receipts: typeof receipts;
+  requests: typeof requests;
   search: typeof search;
-  services: typeof services;
-  timeouts: typeof timeouts;
-  transactions: typeof transactions;
-  webhookSender: typeof webhookSender;
-  webhooks: typeof webhooks;
 }>;
 
 /**

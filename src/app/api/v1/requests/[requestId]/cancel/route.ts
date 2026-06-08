@@ -11,163 +11,118 @@ import {
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
-// POST /api/v1/requests/:requestId/cancel
+// POST /api/v1/requests/:requestId/cancel — Buyer cancels.
+// v0.2 path.
 //
-// Client-only. Only while status ∈ {open, accepted}.
-//
-// - Open direct-hire OR accepted job: escrow was deposited → refund USDC to client
-//   wallet on-chain via releaseEscrow (same function used for release; it's
-//   recipient-agnostic — the security property is enforced by the caller's
-//   auth + job.status gate, not by a distinct helper).
-// - Open marketplace job (no bid accepted yet, no escrow): no refund, just cancel.
-//
-// Flow when refund needed:
-//   1. markCancelling (atomic lock — prevents double-refund)
-//   2. on-chain USDC transfer to client wallet
-//   3. record transactions row (type: refund)
-//   4. jobs.cancel (fires job.cancelled webhook via scheduler)
-//
-// On on-chain failure, revertFromCancelling back to the previous status.
+// Allowed: status ∈ {open, accepted, fulfilled} and caller is the buyer.
+// If escrow=true: refund buyer's USDC on-chain via releaseEscrow,
+//   emit escrow_refund receipt, link as settlementReceiptId.
+// If escrow=false: just mark cancelled.
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ requestId: string }> }
+  { params }: { params: Promise<{ requestId: string }> },
 ) {
+  const startedAt = Date.now();
   const { agent, error } = await authenticateRequest(request);
   if (error) return error;
-
-  const { requestId } = await params;
-  const convex = getConvexClient();
 
   const { data, error: validationError } = await validateBody(request, cancelSchema);
   if (validationError) return validationError;
 
+  const { requestId } = await params;
+  const convex = getConvexClient();
+
+  let req;
   try {
-    const job = await convex.query(api.jobs.getById, {
-      jobId: requestId as Id<"jobs">,
+    req = await convex.query(api.requests.getById, {
+      requestId: requestId as Id<"requests">,
     });
-
-    if (!job) {
-      return NextResponse.json({ error: "Job not found" }, { status: 404 });
-    }
-
-    if (job.clientAgentId !== agent._id) {
-      return NextResponse.json(
-        { error: "Only the client can cancel this job" },
-        { status: 403 }
-      );
-    }
-
-    if (job.status !== "open" && job.status !== "accepted") {
-      return NextResponse.json(
-        { error: `Cannot cancel job in status: ${job.status}` },
-        { status: 400 }
-      );
-    }
-
-    // Determine whether escrow needs to be refunded.
-    // Escrow exists if: direct-hire job (paid at creation) OR accepted open job (paid at bid accept).
-    const needsRefund =
-      job.jobType === "direct" ||
-      (job.jobType === "open" && job.status === "accepted");
-
-    if (!needsRefund) {
-      // No escrow deposited — straight cancel.
-      await convex.mutation(api.jobs.cancel, {
-        jobId: requestId as Id<"jobs">,
-      });
-      return NextResponse.json({
-        message: "Job cancelled (no escrow to refund).",
-        requestId,
-        refunded: false,
-      });
-    }
-
-    if (!job.agreedPriceCents) {
-      return NextResponse.json(
-        { error: "Job has no agreed price but is marked for refund — data integrity error" },
-        { status: 500 }
-      );
-    }
-
-    // Fetch client wallet address — refund destination.
-    const client = await convex.query(api.agents.getById, {
-      agentId: job.clientAgentId,
-    });
-    if (!client?.walletAddress) {
-      return NextResponse.json(
-        { error: "Client has no wallet address configured" },
-        { status: 400 }
-      );
-    }
-
-    // Remember pre-cancelling status so we can revert if refund fails.
-    const previousStatus = job.status as "open" | "accepted";
-
-    // Atomic lock: status → cancelling (prevents double-refund).
-    try {
-      await convex.mutation(api.jobs.markCancelling, {
-        jobId: requestId as Id<"jobs">,
-      });
-    } catch {
-      return NextResponse.json(
-        { error: "Job cancellation already in progress" },
-        { status: 409 }
-      );
-    }
-
-    // Transfer USDC from platform wallet back to client wallet on-chain.
-    // releaseEscrow is recipient-agnostic; it's the same ERC-20 transfer used for
-    // release-to-provider. Caller authz + markCancelling lock are the security gates.
-    const refundResult = await releaseEscrow(
-      client.walletAddress,
-      job.agreedPriceCents
+  } catch {
+    return NextResponse.json({ error: "Invalid request ID" }, { status: 400 });
+  }
+  if (!req) {
+    return NextResponse.json({ error: "Request not found" }, { status: 404 });
+  }
+  if (req.buyerId !== agent._id) {
+    return NextResponse.json(
+      { error: "Only the buyer can cancel" },
+      { status: 403 },
     );
+  }
+  const cancellable = ["open", "accepted", "fulfilled"];
+  if (!cancellable.includes(req.status)) {
+    return NextResponse.json(
+      { error: `Cannot cancel a request in status: ${req.status}` },
+      { status: 400 },
+    );
+  }
 
-    if (!refundResult.success) {
-      // Revert lock on failure.
-      await convex.mutation(api.jobs.revertFromCancelling, {
-        jobId: requestId as Id<"jobs">,
-        toStatus: previousStatus,
-      });
-      return NextResponse.json(
-        { error: `Refund failed: ${refundResult.error}` },
-        { status: 500 }
-      );
-    }
+  // No escrow → straight cancel
+  if (!req.escrow) {
+    await convex.mutation(api.requests.markCancelled, {
+      requestId: req._id,
+      reason: data.reason,
+    });
+    return NextResponse.json({ ok: true, refunded: false });
+  }
 
-    // Record the refund transaction.
-    const refundTxId = await convex.mutation(api.transactions.create, {
-      fromAgentId: job.clientAgentId, // symbolic — funds originate from platform wallet
-      toAgentId: job.clientAgentId,
-      jobId: requestId as Id<"jobs">,
-      amountCents: job.agreedPriceCents,
+  // Escrow → refund + emit receipt
+  const buyer = await convex.query(api.agents.getById, {
+    agentId: req.buyerId,
+  });
+  if (!buyer?.walletAddress) {
+    return NextResponse.json(
+      { error: "Buyer has no wallet address configured" },
+      { status: 400 },
+    );
+  }
+  const refundAmount = req.agreedPriceCents ?? req.budgetMaxCents;
+
+  const refund = await releaseEscrow(buyer.walletAddress, refundAmount);
+  if (!refund.success || !refund.txHash) {
+    return NextResponse.json(
+      { error: `Refund failed: ${refund.error || "unknown"}` },
+      { status: 502 },
+    );
+  }
+
+  const platformSecret = process.env.PLATFORM_INTERNAL_KEY || "";
+  if (!platformSecret) {
+    return NextResponse.json(
+      { error: "Platform misconfigured: missing PLATFORM_INTERNAL_KEY" },
+      { status: 500 },
+    );
+  }
+
+  const receiptId: Id<"receipts"> = await convex.mutation(
+    api.receipts.recordSettlement,
+    {
+      platformSecret,
+      buyerId: req.buyerId,
+      sellerId: req.providerId ?? req.buyerId,
+      requestId: req._id,
+      amountCents: refundAmount,
       currency: "USDC",
       chain: getNetwork(),
       network: getNetworkId(),
-      txHash: refundResult.txHash,
+      txHash: refund.txHash,
       facilitatorUrl: getFacilitatorUrl(),
-      type: "refund",
+      settlementType: "escrow_refund",
       status: "confirmed",
-      confirmedAt: Date.now(),
-    });
+      latencyMs: Date.now() - startedAt,
+    },
+  );
 
-    // Finalize: cancelling → cancelled. Fires job.cancelled webhook via scheduler.
-    await convex.mutation(api.jobs.cancel, {
-      jobId: requestId as Id<"jobs">,
-    });
+  await convex.mutation(api.requests.markCancelled, {
+    requestId: req._id,
+    reason: data.reason,
+    refundReceiptId: receiptId,
+  });
 
-    return NextResponse.json({
-      message: `Job cancelled. $${(job.agreedPriceCents / 100).toFixed(
-        2
-      )} USDC refunded to client.`,
-      requestId,
-      refunded: true,
-      refundTransactionId: refundTxId,
-      txHash: refundResult.txHash,
-      reason: data.reason,
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+  return NextResponse.json({
+    ok: true,
+    refunded: true,
+    receiptId,
+    txHash: refund.txHash,
+  });
 }

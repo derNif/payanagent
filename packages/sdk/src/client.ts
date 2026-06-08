@@ -1,240 +1,351 @@
 import type {
   PayanAgentConfig,
   Agent,
-  Service,
-  Request,
+  Offer,
+  Request as PaRequest,
   Bid,
-  Review,
-  DiscoverResult,
-  Webhook,
+  Receipt,
+  AgentReceiptStats,
   RegisterAgentInput,
-  CreateServiceInput,
+  UpdateAgentInput,
+  CreateOfferInput,
+  UpdateOfferInput,
   CreateRequestInput,
-  CreateBidInput,
-  ReviewInput,
-  RegisterWebhookInput,
+  SubmitBidInput,
+  BuyInput,
+  BuyResult,
+  FulfillInput,
+  DiscoverResult,
+  ListReceiptsInput,
+  RegisterAgentResult,
 } from "./types";
 
 const DEFAULT_BASE_URL = "https://payanagent.com";
 
+export class PayanAgentError extends Error {
+  status?: number;
+  body?: unknown;
+  constructor(message: string, status?: number, body?: unknown) {
+    super(message);
+    this.name = "PayanAgentError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
+// PayanAgent v0.2 SDK.
+// Four primary verbs: buy, offer, request, fulfill.
+// Namespaced controls: agents, offers, requests, receipts. Plus discover().
 export class PayanAgent {
-  private apiKey: string;
-  private baseUrl: string;
-  private fetchFn: typeof fetch;
-  private paidFetchFn: typeof fetch | null;
+  readonly baseUrl: string;
+  private readonly apiKey?: string;
+  private readonly fetchImpl: typeof fetch;
+  private readonly fetchWithPayment?: typeof fetch;
 
   readonly agents: AgentsAPI;
-  readonly services: ServicesAPI;
+  readonly offers: OffersAPI;
   readonly requests: RequestsAPI;
-  readonly webhooks: WebhooksAPI;
+  readonly receipts: ReceiptsAPI;
 
-  constructor(config: PayanAgentConfig) {
+  constructor(config: PayanAgentConfig = {}) {
     this.apiKey = config.apiKey;
-    this.baseUrl = (config.baseUrl || DEFAULT_BASE_URL).replace(/\/$/, "");
-    this.fetchFn = fetch;
-    this.paidFetchFn = config.fetchWithPayment || null;
+    this.baseUrl = (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, "");
+    this.fetchImpl = globalThis.fetch;
+    this.fetchWithPayment = config.fetchWithPayment;
 
     this.agents = new AgentsAPI(this);
-    this.services = new ServicesAPI(this);
+    this.offers = new OffersAPI(this);
     this.requests = new RequestsAPI(this);
-    this.webhooks = new WebhooksAPI(this);
+    this.receipts = new ReceiptsAPI(this);
   }
 
-  /** Unified search across agents, services, and open requests */
-  async discover(query?: string, options?: { category?: string; minRating?: number; maxPriceCents?: number }): Promise<DiscoverResult> {
-    const params = new URLSearchParams();
-    if (query) params.set("q", query);
-    if (options?.category) params.set("category", options.category);
-    if (options?.minRating) params.set("minRating", String(options.minRating));
-    if (options?.maxPriceCents) params.set("maxPriceCents", String(options.maxPriceCents));
-    return this._get(`/api/v1/discover?${params}`);
+  // --- internal HTTP helpers (public so namespace classes can use them) ---
+
+  authHeaders(): Record<string, string> {
+    return this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {};
   }
 
-  // Internal HTTP helpers
-  async _get<T>(path: string): Promise<T> {
-    const res = await this.fetchFn(`${this.baseUrl}${path}`, {
-      headers: this._headers(),
-    });
-    return this._handleResponse(res);
+  url(path: string): string {
+    return `${this.baseUrl}${path}`;
   }
 
-  async _post<T>(path: string, body?: unknown): Promise<T> {
-    const res = await this.fetchFn(`${this.baseUrl}${path}`, {
-      method: "POST",
-      headers: this._headers(),
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    return this._handleResponse(res);
-  }
-
-  async _patch<T>(path: string, body: unknown): Promise<T> {
-    const res = await this.fetchFn(`${this.baseUrl}${path}`, {
-      method: "PATCH",
-      headers: this._headers(),
-      body: JSON.stringify(body),
-    });
-    return this._handleResponse(res);
-  }
-
-  /** POST with x402 auto-payment (requires fetchWithPayment) */
-  async _postPaid<T>(path: string, body?: unknown): Promise<T> {
-    const fn = this.paidFetchFn;
-    if (!fn) throw new Error("fetchWithPayment not configured. Pass it in the constructor for paid endpoints.");
-    const res = await fn(`${this.baseUrl}${path}`, {
-      method: "POST",
-      headers: this._headers(),
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    return this._handleResponse(res);
-  }
-
-  private _headers(): Record<string, string> {
-    return {
+  async req<T>(method: string, path: string, body?: unknown, useX402 = false): Promise<T> {
+    const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${this.apiKey}`,
+      ...this.authHeaders(),
+    };
+    const init: RequestInit = {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    };
+    const f = useX402 && this.fetchWithPayment ? this.fetchWithPayment : this.fetchImpl;
+    const res = await f(this.url(path), init);
+    const text = await res.text();
+    let parsed: unknown = undefined;
+    try {
+      parsed = text ? JSON.parse(text) : undefined;
+    } catch {
+      parsed = text;
+    }
+    if (!res.ok) {
+      const message =
+        parsed && typeof parsed === "object" && "error" in parsed && typeof (parsed as { error?: unknown }).error === "string"
+          ? (parsed as { error: string }).error
+          : `Request failed: ${res.status}`;
+      throw new PayanAgentError(message, res.status, parsed);
+    }
+    return parsed as T;
+  }
+
+  // --- the four primary verbs ---
+
+  /**
+   * Buy an offer. For api-type offers, the SDK must have fetchWithPayment
+   * configured because the route returns HTTP 402 with an x402 challenge.
+   */
+  async buy<TInput = unknown, TOutput = unknown>(
+    input: BuyInput<TInput>,
+  ): Promise<BuyResult<TOutput>> {
+    if (!this.apiKey) {
+      throw new PayanAgentError("buy requires an apiKey");
+    }
+    if (!this.fetchWithPayment) {
+      throw new PayanAgentError(
+        "buy requires fetchWithPayment. Install @x402/fetch and pass it to the SDK config.",
+      );
+    }
+    const res = await this.fetchWithPayment(
+      this.url(`/api/v1/offers/${input.offerId}/buy`),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...this.authHeaders() },
+        body: JSON.stringify(input.input ?? {}),
+      },
+    );
+    const text = await res.text();
+    let parsed: unknown = undefined;
+    try {
+      parsed = text ? JSON.parse(text) : undefined;
+    } catch {
+      parsed = text;
+    }
+    if (!res.ok) {
+      const message =
+        parsed && typeof parsed === "object" && "error" in parsed && typeof (parsed as { error?: unknown }).error === "string"
+          ? (parsed as { error: string }).error
+          : `buy failed: ${res.status}`;
+      throw new PayanAgentError(message, res.status, parsed);
+    }
+    const receiptId = res.headers.get("X-Receipt-Id") ?? "";
+    const txHash = res.headers.get("X-Tx-Hash") ?? "";
+    // Download-type offers return JSON { receiptId, fileUrl, txHash }.
+    // Api-type offers return the seller's body verbatim; the receipt is in headers.
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      "fileUrl" in parsed &&
+      typeof (parsed as { fileUrl?: unknown }).fileUrl === "string"
+    ) {
+      const p = parsed as { fileUrl: string; receiptId?: string; txHash?: string };
+      return {
+        output: undefined,
+        fileUrl: p.fileUrl,
+        receiptId: p.receiptId ?? receiptId,
+        txHash: p.txHash ?? txHash,
+      };
+    }
+    return {
+      output: parsed as TOutput,
+      receiptId,
+      txHash,
     };
   }
 
-  private async _handleResponse<T>(res: Response): Promise<T> {
-    const text = await res.text();
-    let data: unknown;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      if (!res.ok) {
-        throw new PayanAgentError(`HTTP ${res.status}: ${text.slice(0, 200)}`, res.status);
-      }
-      throw new PayanAgentError(`Invalid JSON response: ${text.slice(0, 200)}`, res.status);
+  /** Create a new offer (seller-initiated). */
+  async offer(input: CreateOfferInput): Promise<{ offerId: string }> {
+    if (!this.apiKey) throw new PayanAgentError("offer requires an apiKey");
+    return this.req<{ offerId: string }>("POST", "/api/v1/offers", input);
+  }
+
+  /**
+   * Create a new request (buyer-initiated).
+   * If escrow=true, the SDK must have fetchWithPayment configured.
+   */
+  async request(input: CreateRequestInput): Promise<{
+    requestId: string;
+    status: string;
+    escrow: boolean;
+    escrowAmountCents?: number;
+  }> {
+    if (!this.apiKey) throw new PayanAgentError("request requires an apiKey");
+    const useX402 = !!input.escrow;
+    if (useX402 && !this.fetchWithPayment) {
+      throw new PayanAgentError(
+        "request({escrow:true}) requires fetchWithPayment. Install @x402/fetch.",
+      );
     }
-    if (!res.ok) {
-      const obj = data as Record<string, unknown>;
-      const msg = (obj?.error || obj?.message || `HTTP ${res.status}`) as string;
-      throw new PayanAgentError(msg, res.status, data);
-    }
-    return data as T;
+    return this.req("POST", "/api/v1/requests", input, useX402);
+  }
+
+  /** Provider delivers their output for a request. */
+  async fulfill(input: FulfillInput): Promise<{ ok: true }> {
+    if (!this.apiKey) throw new PayanAgentError("fulfill requires an apiKey");
+    return this.req("POST", `/api/v1/requests/${input.requestId}/fulfill`, {
+      outputPayload: input.output,
+    });
+  }
+
+  /** Unified search across agents, offers, open requests. Public. */
+  async discover(
+    query: string,
+    options?: {
+      category?: string;
+      maxPriceCents?: number;
+      offerType?: "api" | "download";
+      limit?: number;
+    },
+  ): Promise<DiscoverResult> {
+    const sp = new URLSearchParams({ q: query });
+    if (options?.category) sp.set("category", options.category);
+    if (options?.maxPriceCents !== undefined) sp.set("maxPriceCents", String(options.maxPriceCents));
+    if (options?.offerType) sp.set("offerType", options.offerType);
+    if (options?.limit !== undefined) sp.set("limit", String(options.limit));
+    return this.req("GET", `/api/v1/discover?${sp.toString()}`);
   }
 }
 
-class AgentsAPI {
-  constructor(private client: PayanAgent) {}
+// --- namespaced controllers ---
 
-  /** Register a new agent (no auth required for registration) */
-  async register(input: RegisterAgentInput): Promise<{ agentId: string; apiKey: string; apiKeyPrefix: string }> {
-    return this.client._post("/api/v1/agents", input);
+export class AgentsAPI {
+  constructor(private readonly client: PayanAgent) {}
+
+  /** Register a new agent. Returns the agent id + a fresh API key. */
+  async register(input: RegisterAgentInput): Promise<RegisterAgentResult> {
+    return this.client.req("POST", "/api/v1/agents", input);
   }
 
-  /** Get agent profile */
   async get(agentId: string): Promise<Agent> {
-    return this.client._get(`/api/v1/agents/${agentId}`);
+    const res = await this.client.req<{ agent?: Agent } | Agent>(
+      "GET",
+      `/api/v1/agents/${agentId}`,
+    );
+    if (res && typeof res === "object" && "agent" in res && res.agent) {
+      return res.agent as Agent;
+    }
+    return res as Agent;
   }
 
-  /** Update your agent profile */
-  async update(agentId: string, updates: Partial<Pick<Agent, "name" | "description" | "tags" | "agentUrl" | "ownerEmail" | "a2aCapabilities">>): Promise<{ message: string }> {
-    return this.client._patch(`/api/v1/agents/${agentId}`, updates);
-  }
-}
-
-class ServicesAPI {
-  constructor(private client: PayanAgent) {}
-
-  /** List all services */
-  async list(options?: { category?: string; query?: string; serviceType?: string }): Promise<{ services: Service[] }> {
-    const params = new URLSearchParams();
-    if (options?.category) params.set("category", options.category);
-    if (options?.query) params.set("q", options.query);
-    if (options?.serviceType) params.set("serviceType", options.serviceType);
-    return this.client._get(`/api/v1/services?${params}`);
-  }
-
-  /** Get service details */
-  async get(serviceId: string): Promise<Service> {
-    return this.client._get(`/api/v1/services/${serviceId}`);
-  }
-
-  /** Create a service for an agent */
-  async create(agentId: string, input: CreateServiceInput): Promise<{ serviceId: string }> {
-    return this.client._post(`/api/v1/agents/${agentId}/services`, input);
-  }
-
-  /** Invoke a service with x402 auto-payment */
-  async invoke(serviceId: string, payload?: unknown): Promise<unknown> {
-    return this.client._postPaid(`/api/v1/services/${serviceId}/invoke`, payload);
+  async update(agentId: string, input: UpdateAgentInput): Promise<{ ok: true }> {
+    return this.client.req("PATCH", `/api/v1/agents/${agentId}`, input);
   }
 }
 
-class RequestsAPI {
-  constructor(private client: PayanAgent) {}
+export class OffersAPI {
+  constructor(private readonly client: PayanAgent) {}
 
-  /** Create a request (open or direct) */
-  async create(input: CreateRequestInput): Promise<{ jobId: string; status: string }> {
-    return this.client._post("/api/v1/requests", input);
+  async list(options?: {
+    q?: string;
+    category?: string;
+    offerType?: "api" | "download";
+    limit?: number;
+  }): Promise<Offer[]> {
+    const sp = new URLSearchParams();
+    if (options?.q) sp.set("q", options.q);
+    if (options?.category) sp.set("category", options.category);
+    if (options?.offerType) sp.set("offerType", options.offerType);
+    if (options?.limit !== undefined) sp.set("limit", String(options.limit));
+    const q = sp.toString();
+    const path = q ? `/api/v1/offers?${q}` : "/api/v1/offers";
+    const res = await this.client.req<{ offers: Offer[] }>("GET", path);
+    return res.offers;
   }
 
-  /** List requests */
-  async list(options?: { status?: string; type?: string }): Promise<{ jobs: Request[] }> {
-    const params = new URLSearchParams();
-    if (options?.status) params.set("status", options.status);
-    if (options?.type) params.set("type", options.type);
-    return this.client._get(`/api/v1/requests?${params}`);
+  async get(offerId: string): Promise<Offer> {
+    const res = await this.client.req<{ offer: Offer }>("GET", `/api/v1/offers/${offerId}`);
+    return res.offer;
   }
 
-  /** Get request details */
-  async get(requestId: string): Promise<Request> {
-    return this.client._get(`/api/v1/requests/${requestId}`);
+  async update(offerId: string, input: UpdateOfferInput): Promise<{ ok: true }> {
+    return this.client.req("PATCH", `/api/v1/offers/${offerId}`, input);
   }
 
-  /** Submit a bid on an open request */
-  async bid(requestId: string, input: CreateBidInput): Promise<{ bidId: string }> {
-    return this.client._post(`/api/v1/requests/${requestId}/bids`, input);
-  }
-
-  /** List bids on a request */
-  async listBids(requestId: string): Promise<{ bids: Bid[] }> {
-    return this.client._get(`/api/v1/requests/${requestId}/bids`);
-  }
-
-  /** Accept a bid (x402 escrow payment) */
-  async acceptBid(requestId: string, bidId: string): Promise<{ message: string; requestId: string; bidId: string; agreedPriceCents: number; escrowTransactionId: string }> {
-    return this.client._postPaid(`/api/v1/requests/${requestId}/bids/${bidId}/accept`);
-  }
-
-  /** Accept a direct hire request (provider) */
-  async accept(requestId: string): Promise<{ message: string }> {
-    return this.client._post(`/api/v1/requests/${requestId}/accept`);
-  }
-
-  /** Submit deliverable */
-  async deliver(requestId: string, outputPayload: string): Promise<{ message: string }> {
-    return this.client._post(`/api/v1/requests/${requestId}/deliver`, { outputPayload });
-  }
-
-  /** Approve and release payment (client) */
-  async complete(requestId: string): Promise<{ message: string; requestId: string; settlementTransactionId: string }> {
-    return this.client._post(`/api/v1/requests/${requestId}/complete`);
-  }
-
-  /** Leave a review */
-  async review(requestId: string, input: ReviewInput): Promise<{ reviewId: string }> {
-    return this.client._post(`/api/v1/requests/${requestId}/review`, input);
+  async deactivate(offerId: string): Promise<{ ok: true }> {
+    return this.client.req("DELETE", `/api/v1/offers/${offerId}`);
   }
 }
 
-class WebhooksAPI {
-  constructor(private client: PayanAgent) {}
+export class RequestsAPI {
+  constructor(private readonly client: PayanAgent) {}
 
-  /** Register a webhook for events */
-  async register(input: RegisterWebhookInput): Promise<Webhook> {
-    return this.client._post("/api/v1/webhooks", input);
+  async list(options?: { q?: string; status?: string; limit?: number }): Promise<PaRequest[]> {
+    const sp = new URLSearchParams();
+    if (options?.q) sp.set("q", options.q);
+    if (options?.status) sp.set("status", options.status);
+    if (options?.limit !== undefined) sp.set("limit", String(options.limit));
+    const q = sp.toString();
+    const path = q ? `/api/v1/requests?${q}` : "/api/v1/requests";
+    const res = await this.client.req<{ requests: PaRequest[] }>("GET", path);
+    return res.requests;
+  }
+
+  async get(requestId: string): Promise<{ request: PaRequest; bids: Bid[] }> {
+    return this.client.req("GET", `/api/v1/requests/${requestId}`);
+  }
+
+  /** Submit a bid on an open request. */
+  async bid(requestId: string, input: SubmitBidInput): Promise<{ bidId: string }> {
+    return this.client.req("POST", `/api/v1/requests/${requestId}/bid`, input);
+  }
+
+  /** Buyer accepts a bid. */
+  async accept(requestId: string, bidId: string): Promise<{ ok: true }> {
+    return this.client.req("POST", `/api/v1/requests/${requestId}/accept`, { bidId });
+  }
+
+  /** Buyer approves fulfilled work — releases escrow, emits receipt. */
+  async approve(requestId: string): Promise<{ ok: true; receiptId: string; txHash: string }> {
+    return this.client.req("POST", `/api/v1/requests/${requestId}/approve`);
+  }
+
+  /** Buyer cancels — refund (if escrow) + receipt. */
+  async cancel(
+    requestId: string,
+    reason?: string,
+  ): Promise<{ ok: true; refunded: boolean; receiptId?: string; txHash?: string }> {
+    return this.client.req("POST", `/api/v1/requests/${requestId}/cancel`, { reason });
   }
 }
 
-export class PayanAgentError extends Error {
-  constructor(
-    message: string,
-    public status: number,
-    public data?: unknown
-  ) {
-    super(message);
-    this.name = "PayanAgentError";
+export class ReceiptsAPI {
+  constructor(private readonly client: PayanAgent) {}
+
+  /** Public live feed. Newest first. */
+  async feed(limit?: number): Promise<Receipt[]> {
+    const path = limit !== undefined ? `/api/v1/receipts?limit=${limit}` : "/api/v1/receipts";
+    const res = await this.client.req<{ receipts: Receipt[] }>("GET", path);
+    return res.receipts;
+  }
+
+  async get(receiptId: string): Promise<Receipt> {
+    const res = await this.client.req<{ receipt: Receipt }>("GET", `/api/v1/receipts/${receiptId}`);
+    return res.receipt;
+  }
+
+  /** Receipts for a specific agent (as buyer, seller, or both). */
+  async list(
+    input: ListReceiptsInput,
+  ): Promise<{ stats: AgentReceiptStats; receipts: Receipt[] }> {
+    if (!input.agentId) {
+      throw new PayanAgentError("receipts.list requires an agentId");
+    }
+    const sp = new URLSearchParams();
+    if (input.side) sp.set("side", input.side);
+    if (input.limit !== undefined) sp.set("limit", String(input.limit));
+    const q = sp.toString();
+    const path = q
+      ? `/api/v1/agents/${input.agentId}/receipts?${q}`
+      : `/api/v1/agents/${input.agentId}/receipts`;
+    return this.client.req("GET", path);
   }
 }

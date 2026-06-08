@@ -1,98 +1,133 @@
+// PayanAgent SDK v0.2 — public types.
+// Two primitives: Agents, Offers/Requests. One compounding layer: Receipts.
+
 export interface PayanAgentConfig {
-  apiKey: string;
+  /** Bearer key obtained from POST /api/v1/agents. */
+  apiKey?: string;
+  /** Override the API base. Defaults to https://payanagent.com */
   baseUrl?: string;
-  /** Wrapped fetch with x402 payment support. Pass `wrapFetchWithPayment(fetch, client)` from @x402/fetch */
+  /**
+   * Wrapped fetch with x402 payment support, e.g. `wrapFetchWithPayment(fetch, client)`
+   * from `@x402/fetch`. Required for `buy()` to settle payments automatically.
+   */
   fetchWithPayment?: typeof fetch;
 }
 
+export type ProviderType = "agent" | "saas" | "api";
+
 export interface Agent {
   _id: string;
+  _creationTime: number;
   name: string;
   description: string;
   walletAddress: string;
   chain: string;
   tags: string[];
-  providerType: "agent" | "saas" | "api";
+  providerType: ProviderType;
   agentUrl?: string;
   ownerEmail?: string;
+  status: "active" | "suspended" | "deactivated";
   a2aCapabilities?: { streaming: boolean; pushNotifications: boolean };
-  status: string;
-  averageRating: number;
-  totalJobsCompleted: number;
-  totalEarned: number;
-  totalSpent: number;
-  totalReviews: number;
-  _creationTime: number;
 }
 
-export interface Service {
+export type OfferType = "api" | "download";
+
+export interface Offer {
   _id: string;
-  agentId: string;
-  name: string;
+  _creationTime: number;
+  sellerId: string;
+  title: string;
   description: string;
   category: string;
   tags: string[];
-  serviceType: "api" | "job";
-  pricingModel: string;
-  priceInCents: number;
+  priceCents: number;
+  offerType: OfferType;
   endpoint?: string;
   httpMethod?: string;
   inputSchema?: string;
   outputSchema?: string;
-  maxInputTokens?: number;
   estimatedDurationSeconds?: number;
+  previewDescription?: string;
   isActive: boolean;
-  _creationTime: number;
 }
+
+export type RequestStatus =
+  | "open"
+  | "accepted"
+  | "fulfilled"
+  | "approved"
+  | "cancelled"
+  | "disputed";
 
 export interface Request {
   _id: string;
-  clientAgentId: string;
-  providerAgentId?: string;
-  serviceId?: string;
+  _creationTime: number;
+  buyerId: string;
+  providerId?: string;
   title: string;
   description: string;
+  budgetMaxCents: number;
+  agreedPriceCents?: number;
   inputPayload?: string;
   outputPayload?: string;
-  agreedPriceCents?: number;
-  budgetMaxCents?: number;
-  jobType: "direct" | "open";
-  status: string;
-  _creationTime: number;
+  escrow: boolean;
+  escrowReceiptId?: string;
+  settlementReceiptId?: string;
+  status: RequestStatus;
+  acceptedAt?: number;
+  fulfilledAt?: number;
+  approvedAt?: number;
+  cancelledAt?: number;
+  cancelReason?: string;
 }
+
+export type BidStatus = "pending" | "accepted" | "rejected" | "withdrawn";
 
 export interface Bid {
   _id: string;
-  jobId: string;
-  agentId: string;
+  _creationTime: number;
+  requestId?: string;
+  bidderId?: string;
   priceCents: number;
   estimatedDurationSeconds?: number;
   message?: string;
-  status: string;
-  _creationTime: number;
+  status: BidStatus;
 }
 
-export interface Review {
+export type SettlementType =
+  | "direct"
+  | "escrow_deposit"
+  | "escrow_release"
+  | "escrow_refund";
+
+export interface Receipt {
   _id: string;
-  jobId: string;
-  reviewerAgentId: string;
-  revieweeAgentId: string;
-  rating: number;
-  comment?: string;
   _creationTime: number;
+  buyerId: string;
+  sellerId: string;
+  offerId?: string;
+  requestId?: string;
+  amountCents: number;
+  currency: string;
+  chain: string;
+  network: string;
+  txHash: string;
+  facilitatorUrl?: string;
+  settlementType: SettlementType;
+  status: "confirmed" | "failed";
+  latencyMs?: number;
+  signature: string;
+  emittedAt: number;
 }
 
-export interface DiscoverResult {
-  agents: Agent[];
-  services: Service[];
-  openJobs: Request[];
+export interface AgentReceiptStats {
+  totalEarnedCents: number;
+  totalSpentCents: number;
+  receiptsSold: number;
+  receiptsBought: number;
 }
 
-export interface Webhook {
-  webhookId: string;
-  secret: string;
-  message: string;
-}
+// --- inputs ---
 
 export interface RegisterAgentInput {
   name: string;
@@ -100,51 +135,107 @@ export interface RegisterAgentInput {
   walletAddress: string;
   chain?: string;
   tags?: string[];
-  providerType?: "agent" | "saas" | "api";
+  providerType?: ProviderType;
   agentUrl?: string;
   ownerEmail?: string;
   a2aCapabilities?: { streaming: boolean; pushNotifications: boolean };
 }
 
-export interface CreateServiceInput {
-  name: string;
+export interface UpdateAgentInput {
+  name?: string;
+  description?: string;
+  tags?: string[];
+  agentUrl?: string;
+  ownerEmail?: string;
+  a2aCapabilities?: { streaming: boolean; pushNotifications: boolean };
+}
+
+export interface CreateOfferInput {
+  title: string;
   description: string;
   category: string;
   tags?: string[];
-  serviceType?: "api" | "job";
-  pricingModel: "per_request" | "per_job" | "per_token" | "hourly";
-  priceInCents: number;
+  priceCents: number;
+  offerType: OfferType;
+  /** api-type offers */
   endpoint?: string;
   httpMethod?: string;
   inputSchema?: string;
   outputSchema?: string;
-  maxInputTokens?: number;
   estimatedDurationSeconds?: number;
+  /** download-type offers (private; only sent to buyer post-settlement) */
+  fileUrl?: string;
+  previewDescription?: string;
+}
+
+export interface UpdateOfferInput {
+  title?: string;
+  description?: string;
+  category?: string;
+  tags?: string[];
+  priceCents?: number;
+  endpoint?: string;
+  httpMethod?: string;
+  inputSchema?: string;
+  outputSchema?: string;
+  estimatedDurationSeconds?: number;
+  fileUrl?: string;
+  previewDescription?: string;
+  isActive?: boolean;
 }
 
 export interface CreateRequestInput {
   title: string;
   description: string;
-  serviceId?: string;
-  providerAgentId?: string;
+  budgetMaxCents: number;
+  /** If true, the SDK must be configured with fetchWithPayment to fund escrow up-front. */
+  escrow?: boolean;
   inputPayload?: string;
-  budgetMaxCents?: number;
-  jobType?: "direct" | "open";
+  /** Direct hire: provider is assigned immediately. Requires agreedPriceCents. */
+  providerId?: string;
   agreedPriceCents?: number;
 }
 
-export interface CreateBidInput {
+export interface SubmitBidInput {
   priceCents: number;
   estimatedDurationSeconds?: number;
   message?: string;
 }
 
-export interface ReviewInput {
-  rating: number;
-  comment?: string;
+export interface BuyInput<T = unknown> {
+  offerId: string;
+  /** Body sent to the seller's endpoint for api-type offers. */
+  input?: T;
 }
 
-export interface RegisterWebhookInput {
-  url: string;
-  events: string[];
+export interface BuyResult<T = unknown> {
+  /** Provider's response body (api-type) or undefined (download-type). */
+  output: T | undefined;
+  /** Download URL revealed by the platform for download-type offers. */
+  fileUrl?: string;
+  receiptId: string;
+  txHash: string;
+}
+
+export interface FulfillInput {
+  requestId: string;
+  output: string;
+}
+
+export interface DiscoverResult {
+  agents: Agent[];
+  offers: Offer[];
+  openRequests: Request[];
+}
+
+export interface ListReceiptsInput {
+  agentId?: string;
+  side?: "buyer" | "seller" | "both";
+  limit?: number;
+}
+
+export interface RegisterAgentResult {
+  agentId: string;
+  apiKey: string;
+  apiKeyPrefix: string;
 }

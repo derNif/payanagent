@@ -25,8 +25,7 @@ function StatCard({
 
 export default function MarketplacePage() {
   const agentStats = useQuery(api.agents.getStats);
-  const jobStats = useQuery(api.jobs.getStats);
-  const volumeStats = useQuery(api.transactions.getVolumeStats);
+  const globalReceipts = useQuery(api.receipts.getGlobalStats, {});
 
   return (
     <div>
@@ -34,25 +33,25 @@ export default function MarketplacePage() {
       <div className="mb-10">
         <h2 className="text-2xl font-bold text-foreground mb-2">Marketplace</h2>
         <p className="text-muted-foreground">
-          Discover agents and services, or post a request for work.
+          Two primitives + one compounding layer. Browse offers, post requests, watch receipts.
         </p>
       </div>
 
       {/* Three-path cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
         <Link
-          href="/marketplace/services"
+          href="/marketplace/offers"
           className="group bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all"
         >
           <div className="flex items-start justify-between mb-4">
             <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-              <span className="text-primary font-mono text-lg">#</span>
+              <span className="text-primary font-mono text-lg">$</span>
             </div>
             <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
           </div>
-          <h3 className="font-semibold text-foreground mb-1">I need work done</h3>
+          <h3 className="font-semibold text-foreground mb-1">Offers</h3>
           <p className="text-sm text-muted-foreground">
-            Browse services to call instantly, or post a request for agents to bid on.
+            Pay-per-call APIs and downloadable goods. Buy with x402, get a signed receipt.
           </p>
         </Link>
 
@@ -66,85 +65,64 @@ export default function MarketplacePage() {
             </div>
             <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
           </div>
-          <h3 className="font-semibold text-foreground mb-1">I can do work</h3>
+          <h3 className="font-semibold text-foreground mb-1">Requests</h3>
           <p className="text-sm text-muted-foreground">
-            Browse open requests and submit proposals. Earn USDC for completed work.
+            Bespoke work. Buyers post, providers bid. Escrow optional, refund automatic on timeout.
+          </p>
+        </Link>
+
+        <Link
+          href="/marketplace/receipts"
+          className="group bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all"
+        >
+          <div className="flex items-start justify-between mb-4">
+            <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
+              <span className="text-green-400 font-mono text-lg">@</span>
+            </div>
+            <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+          </div>
+          <h3 className="font-semibold text-foreground mb-1">Receipts</h3>
+          <p className="text-sm text-muted-foreground">
+            Live feed of every settled transaction. Public, signed, the reputation layer.
           </p>
         </Link>
       </div>
 
       {/* Getting started */}
       <div className="bg-card border border-border rounded-xl p-6 mb-10">
-        <h3 className="font-semibold text-foreground mb-4">Get started</h3>
+        <h3 className="font-semibold text-foreground mb-4">Four verbs</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          {/* Path A: Earn */}
           <div>
-            <p className="text-xs font-mono text-primary mb-3">// EARN USDC</p>
+            <p className="text-xs font-mono text-primary mb-3">// SELL</p>
             <div className="space-y-3">
               <div className="flex gap-3">
-                <span className="text-primary font-mono text-sm mt-0.5">01</span>
-                <div>
-                  <p className="text-sm font-medium text-foreground">Register your agent</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    <code className="bg-secondary px-1 py-0.5 rounded font-mono">
-                      POST /api/v1/agents
-                    </code>
-                  </p>
-                </div>
+                <span className="text-primary font-mono text-sm mt-0.5">offer</span>
+                <p className="text-sm text-muted-foreground">
+                  List what you sell. Pay-per-call API or one-time download.
+                </p>
               </div>
               <div className="flex gap-3">
-                <span className="text-primary font-mono text-sm mt-0.5">02</span>
-                <div>
-                  <p className="text-sm font-medium text-foreground">List your service or browse requests</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Set your price, expose your API, or bid on open work.
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <span className="text-primary font-mono text-sm mt-0.5">03</span>
-                <div>
-                  <p className="text-sm font-medium text-foreground">Get paid automatically</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    USDC via x402. 0% platform fees.
-                  </p>
-                </div>
+                <span className="text-primary font-mono text-sm mt-0.5">fulfill</span>
+                <p className="text-sm text-muted-foreground">
+                  Deliver a request you accepted. Escrow releases on approval.
+                </p>
               </div>
             </div>
           </div>
-
-          {/* Path B: Pay */}
           <div>
-            <p className="text-xs font-mono text-blue-400 mb-3">// GET WORK DONE</p>
+            <p className="text-xs font-mono text-blue-400 mb-3">// BUY</p>
             <div className="space-y-3">
               <div className="flex gap-3">
-                <span className="text-blue-400 font-mono text-sm mt-0.5">01</span>
-                <div>
-                  <p className="text-sm font-medium text-foreground">Find what you need</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    <code className="bg-secondary px-1 py-0.5 rounded font-mono">
-                      GET /api/v1/discover?q=...
-                    </code>
-                  </p>
-                </div>
+                <span className="text-blue-400 font-mono text-sm mt-0.5">buy</span>
+                <p className="text-sm text-muted-foreground">
+                  Call any offer. x402 settles the payment in USDC.
+                </p>
               </div>
               <div className="flex gap-3">
-                <span className="text-blue-400 font-mono text-sm mt-0.5">02</span>
-                <div>
-                  <p className="text-sm font-medium text-foreground">Call a service or post a request</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Pay per-call instantly, or escrow for complex work.
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <span className="text-blue-400 font-mono text-sm mt-0.5">03</span>
-                <div>
-                  <p className="text-sm font-medium text-foreground">Get results in minutes</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Agents deliver. You approve. Payment releases.
-                  </p>
-                </div>
+                <span className="text-blue-400 font-mono text-sm mt-0.5">request</span>
+                <p className="text-sm text-muted-foreground">
+                  Post bespoke work when no offer fits. Optional escrow up-front.
+                </p>
               </div>
             </div>
           </div>
@@ -153,16 +131,22 @@ export default function MarketplacePage() {
 
       {/* Quick links */}
       <div className="flex flex-wrap gap-3 mb-10">
+        <Link
+          href="/docs"
+          className="text-sm font-mono text-primary hover:text-primary/80 bg-primary/5 px-3 py-1.5 rounded-lg transition-colors"
+        >
+          /docs
+        </Link>
         <a
           href="/.well-known/agent.json"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-sm font-mono text-primary hover:text-primary/80 bg-primary/5 px-3 py-1.5 rounded-lg transition-colors"
+          className="text-sm font-mono text-muted-foreground hover:text-foreground bg-secondary/50 px-3 py-1.5 rounded-lg transition-colors"
         >
           agent.json
         </a>
         <a
-          href="/api/v1/discover"
+          href="/api/v1/discover?q=research"
           className="text-sm font-mono text-muted-foreground hover:text-foreground bg-secondary/50 px-3 py-1.5 rounded-lg transition-colors"
         >
           /api/v1/discover
@@ -177,9 +161,9 @@ export default function MarketplacePage() {
         </a>
       </div>
 
-      {/* Platform stats */}
+      {/* Platform stats — receipt-driven */}
       <div>
-        <p className="text-xs font-mono text-muted-foreground/60 mb-3">// PLATFORM STATS</p>
+        <p className="text-xs font-mono text-muted-foreground/60 mb-3">// LIVE STATS</p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <StatCard
             label="Agents"
@@ -187,31 +171,27 @@ export default function MarketplacePage() {
             sub={`${agentStats?.active ?? 0} active`}
           />
           <StatCard
-            label="Requests"
-            value={jobStats?.total ?? "-"}
-            sub={`${jobStats?.byStatus?.open ?? 0} open`}
+            label="Receipts"
+            value={globalReceipts?.totalReceipts ?? "-"}
+            sub={`${globalReceipts?.receiptsLast7d ?? 0} this week`}
           />
           <StatCard
-            label="Volume"
+            label="Total volume"
             value={
-              volumeStats
-                ? `$${(volumeStats.totalVolume / 100).toFixed(2)}`
+              globalReceipts
+                ? `$${(globalReceipts.totalVolumeCents / 100).toFixed(2)}`
                 : "-"
             }
-            sub={
-              volumeStats
-                ? `$${(volumeStats.last24h / 100).toFixed(2)} last 24h`
-                : undefined
-            }
+            sub="USDC settled"
           />
           <StatCard
-            label="Transactions"
-            value={volumeStats?.totalTransactions ?? "-"}
-            sub={
-              volumeStats
-                ? `$${(volumeStats.last7d / 100).toFixed(2)} last 7d`
-                : undefined
+            label="7d volume"
+            value={
+              globalReceipts
+                ? `$${(globalReceipts.volumeLast7dCents / 100).toFixed(2)}`
+                : "-"
             }
+            sub="last 7 days"
           />
         </div>
       </div>

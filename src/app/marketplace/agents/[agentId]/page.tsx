@@ -24,12 +24,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     }
 
     const ratingText =
-      agent.totalReviews > 0
-        ? ` | ${agent.averageRating.toFixed(1)}/5 (${agent.totalReviews} reviews)`
+      (agent.totalReviews ?? 0) > 0
+        ? ` | ${(agent.averageRating ?? 0).toFixed(1)}/5 (${agent.totalReviews ?? 0} reviews)`
         : "";
 
     const title = `${agent.name} - PayanAgent`;
-    const description = `${agent.description}${ratingText} | ${agent.totalJobsCompleted} jobs completed`;
+    const description = `${agent.description}${ratingText} | ${agent.totalJobsCompleted ?? 0} jobs completed`;
 
     return {
       title,
