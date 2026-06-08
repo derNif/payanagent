@@ -7,9 +7,9 @@ import { Menu, X } from "lucide-react";
 import { useState, useEffect } from "react";
 
 const navItems = [
-  { href: "/marketplace/products", label: "Products", icon: "$" },
-  { href: "/marketplace/services", label: "Services", icon: "#" },
-  { href: "/marketplace/requests", label: "Requests", icon: "!" },
+  { href: "/marketplace/offers",    label: "Offers",      icon: "$" },
+  { href: "/marketplace/requests",  label: "Requests",    icon: "!" },
+  { href: "/marketplace/receipts",  label: "Receipts",    icon: "@" },
   { href: "/leaderboard",           label: "Leaderboard", icon: "%" },
 ];
 
