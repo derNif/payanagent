@@ -3,7 +3,30 @@ import { getConvexClient } from "@/lib/convex";
 import { generateApiKey, rateLimitResponse } from "@/lib/auth";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { validateBody, registerAgentSchema } from "@/lib/validation";
+import { toPublicAgent } from "@/lib/public-projections";
 import { api } from "@convex/_generated/api";
+
+// GET /api/v1/agents — Public agent directory.
+export async function GET(request: NextRequest) {
+  const ip = getClientIp(request);
+  const rl = await checkRateLimit(`public:${ip}`, RATE_LIMITS.unauthenticated);
+  if (!rl.allowed) return rateLimitResponse(rl.resetAt);
+
+  const statusParam = request.nextUrl.searchParams.get("status");
+  const status =
+    statusParam === "active" || statusParam === "suspended" || statusParam === "deactivated"
+      ? statusParam
+      : undefined;
+
+  try {
+    const convex = getConvexClient();
+    const agents = await convex.query(api.agents.list, { status });
+    return NextResponse.json({ agents: agents.map(toPublicAgent) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
 
 // POST /api/v1/agents — Register a new agent (no auth required)
 export async function POST(request: NextRequest) {
