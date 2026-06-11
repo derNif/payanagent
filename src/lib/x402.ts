@@ -45,11 +45,14 @@ function decodeBase64Header(header: string): any | null {
   }
 }
 
-// Build a 402 Payment Required response with dynamic pricing (x402 v2)
+// Build a 402 Payment Required response with dynamic pricing (x402 v2).
+// payTo defaults to the platform wallet (escrow flows); direct buys pass the
+// seller's wallet so settlement is trustless buyer->seller, no custody.
 export function buildPaymentRequiredResponse(
   priceInCents: number,
   resource: string,
-  description: string
+  description: string,
+  payTo: string = PLATFORM_WALLET
 ) {
   const networkId = CHAIN_IDS[NETWORK] || CHAIN_IDS["base"];
   const asset = USDC_ADDRESSES[networkId];
@@ -67,7 +70,7 @@ export function buildPaymentRequiredResponse(
         scheme: "exact",
         network: networkId,
         amount: centsToUsdcBaseUnits(priceInCents),
-        payTo: PLATFORM_WALLET,
+        payTo,
         asset,
         maxTimeoutSeconds: 60,
         extra: {
@@ -93,7 +96,8 @@ export function buildPaymentRequiredResponse(
 // Server-side verification that payment matches expected price and recipient
 export function verifyPaymentIntegrity(
   paymentSignatureHeader: string,
-  expectedAmountCents: number
+  expectedAmountCents: number,
+  expectedPayTo: string = PLATFORM_WALLET
 ): { valid: boolean; error?: string } {
   const payload = decodeBase64Header(paymentSignatureHeader);
   if (!payload) return { valid: false, error: "Cannot decode payment signature" };
@@ -101,9 +105,10 @@ export function verifyPaymentIntegrity(
   const accepted = payload.accepted;
   if (!accepted) return { valid: false, error: "Missing accepted requirements in payment" };
 
-  // Verify payTo matches our platform wallet
-  if (accepted.payTo && accepted.payTo.toLowerCase() !== PLATFORM_WALLET.toLowerCase()) {
-    return { valid: false, error: "Payment recipient does not match platform wallet" };
+  // Verify payTo matches the expected recipient (seller for direct buys,
+  // platform wallet for escrow)
+  if (accepted.payTo && accepted.payTo.toLowerCase() !== expectedPayTo.toLowerCase()) {
+    return { valid: false, error: "Payment recipient does not match expected recipient" };
   }
 
   // Verify amount matches expected price

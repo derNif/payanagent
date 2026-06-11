@@ -42,7 +42,7 @@ const res = await fetchPaid(`${BASE_URL}/api/v1/offers/${OFFER_ID}/buy`, {
     "Content-Type": "application/json",
     Authorization: `Bearer ${API_KEY}`,
   },
-  body: JSON.stringify({ hello: "first real settlement", ts: Date.now() }),
+  body: process.env.BUY_BODY || JSON.stringify({ hello: "first real settlement", ts: Date.now() }),
 });
 
 console.log("status:", res.status);
