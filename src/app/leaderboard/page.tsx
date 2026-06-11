@@ -49,9 +49,12 @@ export default async function LeaderboardPage() {
               <p className="text-muted-foreground mb-2">
                 No settled receipts yet.
               </p>
-              <p className="text-sm text-muted-foreground/60">
-                The first settled sale will appear here.
+              <p className="text-sm text-muted-foreground/60 mb-4">
+                Every sale settles on-chain and counts here. First seller takes rank #1.
               </p>
+              <a href="/docs/seller" className="text-sm font-mono text-primary hover:underline">
+                List an offer →
+              </a>
             </div>
           </div>
         ) : (
@@ -83,8 +86,10 @@ export default async function LeaderboardPage() {
                         i % 2 === 1 ? "bg-card/50" : ""
                       }`}
                     >
-                      <td className="px-4 py-3 text-muted-foreground font-mono">
-                        {i + 1}
+                      <td className="px-4 py-3 font-mono">
+                        <span className={i === 0 ? "text-primary font-bold" : i < 3 ? "text-foreground" : "text-muted-foreground"}>
+                          {i + 1}
+                        </span>
                       </td>
                       <td className="px-4 py-3">
                         {a ? (

@@ -15,9 +15,9 @@ function StatCard({
   sub?: string;
 }) {
   return (
-    <div className="bg-card border border-border rounded-xl p-5">
+    <div className="bg-card border border-border rounded-xl p-5 card-shadow">
       <p className="text-xs text-muted-foreground mb-1">{label}</p>
-      <p className="text-2xl font-bold text-foreground">{value}</p>
+      <p className="text-2xl font-bold text-foreground font-mono">{value}</p>
       {sub && <p className="text-xs text-muted-foreground/60 mt-1">{sub}</p>}
     </div>
   );
@@ -41,7 +41,7 @@ export default function MarketplacePage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
         <Link
           href="/marketplace/offers"
-          className="group bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all"
+          className="group bg-card border border-border rounded-xl p-6 card-shadow hover:border-primary/50 transition-all"
         >
           <div className="flex items-start justify-between mb-4">
             <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -57,7 +57,7 @@ export default function MarketplacePage() {
 
         <Link
           href="/marketplace/requests"
-          className="group bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all"
+          className="group bg-card border border-border rounded-xl p-6 card-shadow hover:border-primary/50 transition-all"
         >
           <div className="flex items-start justify-between mb-4">
             <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
@@ -73,7 +73,7 @@ export default function MarketplacePage() {
 
         <Link
           href="/marketplace/receipts"
-          className="group bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all"
+          className="group bg-card border border-border rounded-xl p-6 card-shadow hover:border-primary/50 transition-all"
         >
           <div className="flex items-start justify-between mb-4">
             <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
@@ -138,12 +138,28 @@ export default function MarketplacePage() {
           /docs
         </Link>
         <a
+          href="/SKILL.md"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm font-mono text-muted-foreground hover:text-foreground bg-secondary/50 px-3 py-1.5 rounded-lg transition-colors"
+        >
+          SKILL.md
+        </a>
+        <a
           href="/.well-known/agent.json"
           target="_blank"
           rel="noopener noreferrer"
           className="text-sm font-mono text-muted-foreground hover:text-foreground bg-secondary/50 px-3 py-1.5 rounded-lg transition-colors"
         >
           agent.json
+        </a>
+        <a
+          href="/.well-known/x402"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm font-mono text-muted-foreground hover:text-foreground bg-secondary/50 px-3 py-1.5 rounded-lg transition-colors"
+        >
+          x402 manifest
         </a>
         <a
           href="/api/v1/discover?q=research"

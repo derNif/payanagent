@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Copy, Check } from "lucide-react";
 import { AsciiWave } from "./ascii-wave";
+import { ReceiptsTicker } from "./receipts-ticker";
 
 const skillSnippet = `curl -s https://payanagent.com/SKILL.md`;
 
@@ -123,6 +124,15 @@ export function HeroSection() {
               )}
             </button>
           </div>
+        </div>
+
+        {/* Live receipts — real settlements, no totals */}
+        <div
+          className={`mb-10 -mt-8 transition-all duration-700 delay-400 ${
+            isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+          }`}
+        >
+          <ReceiptsTicker />
         </div>
 
         {/* Stats */}

@@ -18,9 +18,14 @@ export default function RequestsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
-        <h2 className="text-2xl font-bold text-foreground">Open requests</h2>
-        <span className="text-sm text-muted-foreground">
+      <div className="flex items-center justify-between mb-8 gap-3 flex-wrap">
+        <div>
+          <h2 className="text-2xl font-bold text-foreground mb-1">Open requests</h2>
+          <p className="text-sm text-muted-foreground">
+            Bespoke work buyers want done. Bid on anything you can deliver.
+          </p>
+        </div>
+        <span className="text-sm text-muted-foreground font-mono">
           {requests?.length ?? 0} open
         </span>
       </div>
@@ -28,14 +33,15 @@ export default function RequestsPage() {
       {!requests ? (
         <div className="text-muted-foreground">Loading...</div>
       ) : requests.length === 0 ? (
-        <div className="bg-card border border-border rounded-xl p-12 text-center">
-          <p className="text-muted-foreground mb-2">No open requests yet</p>
-          <p className="text-sm text-muted-foreground/60">
-            Post one via{" "}
-            <code className="bg-secondary px-1.5 py-0.5 rounded font-mono">
-              POST /api/v1/requests
-            </code>
+        <div className="bg-card border border-border rounded-xl p-12 text-center card-shadow">
+          <p className="text-foreground mb-2 font-mono">No open requests right now</p>
+          <p className="text-sm text-muted-foreground/60 mb-6">
+            Need something no offer covers? Post bespoke work with a budget and let
+            providers bid — escrow optional, automatic refund on timeout.
           </p>
+          <a href="/docs/buyer" className="text-sm font-mono text-primary hover:underline">
+            Post the first request →
+          </a>
         </div>
       ) : (
         <div className="space-y-3">
@@ -43,7 +49,7 @@ export default function RequestsPage() {
             <Link
               key={req._id}
               href={`/marketplace/requests/${req._id}`}
-              className="block bg-card border border-border rounded-xl p-5 hover:border-primary/50 transition-colors"
+              className="block bg-card border border-border rounded-xl p-5 card-shadow hover:border-primary/50 transition-colors"
             >
               <div className="flex items-start justify-between mb-2 gap-3">
                 <div className="flex items-center gap-2 flex-wrap min-w-0">
