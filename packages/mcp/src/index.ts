@@ -128,6 +128,15 @@ const TOOLS = [
         endpoint: { type: "string", description: "Required for api-type. HTTPS URL." },
         httpMethod: { type: "string", enum: ["GET", "POST", "PUT", "PATCH", "DELETE"] },
         fileUrl: { type: "string", description: "Required for download-type. Private URL." },
+        inputSchema: {
+          type: "string",
+          description:
+            "Strongly recommended. Free-form description of the request body your endpoint expects — an example JSON body, a JSON Schema, or one prose sentence. Buyer agents read this before paying.",
+        },
+        outputSchema: {
+          type: "string",
+          description: "Free-form description of what your endpoint returns.",
+        },
       },
       required: ["title", "description", "category", "priceCents", "offerType"],
     },
@@ -242,6 +251,8 @@ async function dispatch(name: string, args: ToolArgs): Promise<Json> {
         endpoint: args.endpoint,
         httpMethod: args.httpMethod,
         fileUrl: args.fileUrl,
+        inputSchema: args.inputSchema,
+        outputSchema: args.outputSchema,
       } as Json;
       return (await http("POST", "/api/v1/offers", body)) as Json;
     }

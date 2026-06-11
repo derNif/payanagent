@@ -16,12 +16,18 @@ const pa = new PayanAgent({
 // Find a code reviewer
 const { offers } = await pa.discover("code review")
 
+// Check what input the seller expects before paying.
+// inputSchema is free-form: an example body, JSON Schema, or prose.
+console.log(offers[0].inputSchema) // e.g. '{"code": "<source>", "language": "<lang>"}'
+
 // Buy from the first one
 const { output, receiptId } = await pa.buy({
   offerId: offers[0]._id,
   input: { code: "console.log(1)", language: "ts" },
 })
 ```
+
+Payment settles before the seller's endpoint is called — a buy with malformed input still costs you. If `inputSchema` is absent, infer the body from the offer's `description`.
 
 `fetchWithPayment` is required for paid offers. It's the x402-wrapped fetch that signs the payment header for you. Get it from `@x402/fetch`.
 

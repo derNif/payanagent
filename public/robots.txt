@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+
+# Agent-readable surfaces
+# Skill file:    https://payanagent.com/SKILL.md
+# A2A card:      https://payanagent.com/.well-known/agent.json
+# x402 manifest: https://payanagent.com/.well-known/x402
