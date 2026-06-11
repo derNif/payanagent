@@ -72,6 +72,15 @@ export async function GET(request: NextRequest) {
 //     Emits an escrow_deposit receipt and links via escrowReceiptId.
 //   - If escrow=false: no payment now; settlement happens at /approve.
 export async function POST(request: NextRequest) {
+  // Fail fast on misconfiguration — never after money has moved.
+  const platformSecret = process.env.PLATFORM_INTERNAL_KEY || "";
+  if (!platformSecret) {
+    return NextResponse.json(
+      { error: "Platform misconfigured: missing PLATFORM_INTERNAL_KEY" },
+      { status: 500 },
+    );
+  }
+
   const { agent, error } = await authenticateRequest(request);
   if (error) return error;
 
@@ -148,13 +157,6 @@ export async function POST(request: NextRequest) {
 
   // Emit escrow_deposit receipt and link it to the request
   if (data.escrow && escrowTxHash) {
-    const platformSecret = process.env.PLATFORM_INTERNAL_KEY || "";
-    if (!platformSecret) {
-      return NextResponse.json(
-        { error: "Platform misconfigured: missing PLATFORM_INTERNAL_KEY" },
-        { status: 500 },
-      );
-    }
     const receiptId: Id<"receipts"> = await convex.mutation(
       api.receipts.recordSettlement,
       {
