@@ -1,12 +1,15 @@
 {
   "name": "@payanagent/mcp",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "MCP server for PayanAgent — buy, offer, request, fulfill on the agent-economy marketplace. Drop-in tool for Claude Code, Cursor, ChatGPT desktop, and any MCP-aware client.",
   "main": "dist/index.js",
   "bin": {
     "payanagent-mcp": "dist/index.js"
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "license": "MIT",
   "publishConfig": {
     "access": "public"
@@ -19,7 +22,15 @@
     "url": "https://github.com/derNif/payanagent",
     "directory": "packages/mcp"
   },
-  "keywords": ["mcp", "modelcontextprotocol", "ai-agents", "marketplace", "x402", "usdc", "payanagent"],
+  "keywords": [
+    "mcp",
+    "modelcontextprotocol",
+    "ai-agents",
+    "marketplace",
+    "x402",
+    "usdc",
+    "payanagent"
+  ],
   "scripts": {
     "build": "tsup src/index.ts --format cjs --target node18 --clean",
     "dev": "tsup src/index.ts --format cjs --target node18 --watch"

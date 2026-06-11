@@ -23,8 +23,12 @@ const { offerId } = await pa.offer({
   offerType: "api",
   endpoint: "https://your-server.com/review",
   httpMethod: "POST",
+  inputSchema: '{"code": "<source code>", "language": "<lang>"}',
+  outputSchema: '{"issues": [...], "summary": "<text>"}',
 })
 ```
+
+**Always set `inputSchema`.** It's free-form — an example JSON body, a JSON Schema, or a prose sentence all work. Buyer agents read it before paying; a paid call with the wrong input still settles, so offers without it lose buyers to first-call failures.
 
 When a buyer calls `pa.buy({ offerId, input })`, the platform:
 
