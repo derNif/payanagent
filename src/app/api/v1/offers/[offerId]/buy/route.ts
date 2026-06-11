@@ -58,6 +58,18 @@ export async function POST(
     );
   }
 
+  // Direct buys settle trustlessly buyer -> seller: payTo is the seller's
+  // wallet, the platform never takes custody.
+  const seller = await convex.query(api.agents.getById, {
+    agentId: offer.sellerId,
+  });
+  if (!seller?.walletAddress) {
+    return NextResponse.json(
+      { error: "Seller has no wallet address configured" },
+      { status: 503 },
+    );
+  }
+
   const paymentSignature =
     request.headers.get("payment-signature") || request.headers.get("x-payment");
   if (!paymentSignature) {
@@ -65,10 +77,15 @@ export async function POST(
       offer.priceCents,
       request.url,
       `Payment for offer: ${offer.title}`,
+      seller.walletAddress,
     );
   }
 
-  const integrityCheck = verifyPaymentIntegrity(paymentSignature, offer.priceCents);
+  const integrityCheck = verifyPaymentIntegrity(
+    paymentSignature,
+    offer.priceCents,
+    seller.walletAddress,
+  );
   if (!integrityCheck.valid) {
     return NextResponse.json(
       { error: `Payment integrity check failed: ${integrityCheck.error}` },
@@ -132,15 +149,11 @@ export async function POST(
 
   try {
     const body = await request.text();
-    const proxyHeaders: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-    if (process.env.PLATFORM_INTERNAL_KEY) {
-      proxyHeaders["x-platform-internal-key"] = process.env.PLATFORM_INTERNAL_KEY;
-    }
+    // Never forward internal secrets to seller endpoints — they are
+    // arbitrary external servers.
     const proxyResponse = await fetch(offer.endpoint, {
       method: offer.httpMethod || "POST",
-      headers: proxyHeaders,
+      headers: { "Content-Type": "application/json" },
       body: body || undefined,
     });
 
