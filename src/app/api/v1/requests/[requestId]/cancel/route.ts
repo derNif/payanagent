@@ -23,6 +23,16 @@ export async function POST(
   { params }: { params: Promise<{ requestId: string }> },
 ) {
   const startedAt = Date.now();
+
+  // Fail fast on misconfiguration — never after money has moved.
+  const platformSecret = process.env.PLATFORM_INTERNAL_KEY || "";
+  if (!platformSecret) {
+    return NextResponse.json(
+      { error: "Platform misconfigured: missing PLATFORM_INTERNAL_KEY" },
+      { status: 500 },
+    );
+  }
+
   const { agent, error } = await authenticateRequest(request);
   if (error) return error;
 
@@ -83,14 +93,6 @@ export async function POST(
     return NextResponse.json(
       { error: `Refund failed: ${refund.error || "unknown"}` },
       { status: 502 },
-    );
-  }
-
-  const platformSecret = process.env.PLATFORM_INTERNAL_KEY || "";
-  if (!platformSecret) {
-    return NextResponse.json(
-      { error: "Platform misconfigured: missing PLATFORM_INTERNAL_KEY" },
-      { status: 500 },
     );
   }
 

@@ -21,10 +21,12 @@ const USDC_ADDRESSES: Record<string, string> = {
   "eip155:8453": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
 };
 
-// EIP-712 domain parameters for USDC (ERC-3009 transferWithAuthorization)
+// EIP-712 domain parameters for USDC (ERC-3009 transferWithAuthorization).
+// These must match the token contract's name()/version() exactly or the
+// on-chain signature check reverts: mainnet USDC is "USD Coin", testnet "USDC".
 const USDC_DOMAINS: Record<string, { name: string; version: string }> = {
   "eip155:84532": { name: "USDC", version: "2" },
-  "eip155:8453": { name: "USDC", version: "2" },
+  "eip155:8453": { name: "USD Coin", version: "2" },
 };
 
 // Convert cents to USDC base units (6 decimals)
@@ -207,6 +209,14 @@ export async function settlePayment(paymentSignatureHeader: string, paymentRequi
     }
 
     const data = await response.json();
+    // Facilitators return HTTP 200 with { success: false } on settlement
+    // failure — the status code alone is not a settlement guarantee.
+    if (data.success === false || !data.transaction) {
+      return {
+        success: false,
+        error: data.errorReason || data.errorMessage || "Settlement failed (no transaction)",
+      };
+    }
     return { success: true, txHash: data.transaction };
   } catch (error) {
     return {
