@@ -3,13 +3,15 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { AsciiTorus } from "./ascii-torus";
 
+// Strictly single-width glyphs only (ASCII + box-drawing) — characters like
+// ► → ▌ ✓ fall back to non-mono fonts and shift every column after them.
 const asciiAnimations = {
   registry: (frame: number) => {
     const flows = [
-      ["──────────►", "◄───402────", "───USDC───►"],
-      ["═════════►─", "◄──402─────", "──USDC────►"],
-      ["─────────►─", "◄─402──────", "─USDC─────►"],
-      ["══════════►", "◄────402───", "────USDC──►"],
+      ["---------->", "<---402----", "---USDC--->"],
+      ["==========>", "<--402-----", "--USDC---->"],
+      ["---------->", "<-402------", "-USDC----->"],
+      ["==========>", "<----402---", "----USDC-->"],
     ];
     const [a, b, c] = flows[frame % flows.length];
     return `  POST /buy
@@ -19,16 +21,16 @@ const asciiAnimations = {
   200 + receipt`;
   },
   marketplace: (frame: number) => {
-    const arrows = ["──►", "═══", "──►", "···"];
+    const arrows = ["-->", "==>", "-->", "..>"];
     const a = arrows[frame % arrows.length];
-    return `  ┌───┐    ┌───┐
-  │REQ│ ${a}│BID│
-  └─┬─┘    └─┬─┘
-    └─escrow─┘
-        $`;
+    return `  ┌───┐     ┌───┐
+  │REQ│ ${a} │BID│
+  └─┬─┘     └─┬─┘
+    │ escrow  │
+    └────$────┘`;
   },
   receipts: (frame: number) => {
-    const link = ["A ──► B", "A ═══ B", "A ──► B", "A ─── B"];
+    const link = ["A --> B", "A ==> B", "A --> B", "A --- B"];
     const l = link[frame % link.length];
     return `  ┌─────────┐
   │ RECEIPT │
@@ -41,28 +43,28 @@ const asciiAnimations = {
     const bars = [":", "=", "#", "="];
     const l = lock[frame % lock.length];
     const b = bars[frame % bars.length];
-    return `  ╔══════╗
-  ║   ${l}  ║
-  ╠══════╣
-  ║${b}USDC${b}║
-  ╚══════╝`;
+    return `  ┌──────┐
+  │  ${l}   │
+  ├──────┤
+  │${b}USDC${b}│
+  └──────┘`;
   },
   discovery: (frame: number) => {
     const eye = ["(o)", " o ", "(o)", " o "];
     const e = eye[frame % eye.length];
-    return `    .───.
+    return `    .---.
    /     \\
   |  ${e}  |
    \\     /
-    '───'`;
+    '---'`;
   },
   mcp: (frame: number) => {
-    const cursor = ["▌", " ", "▌", " "];
+    const cursor = ["_", " ", "_", " "];
     const c = cursor[frame % cursor.length];
     return `  $ npx -y \\
     @payanagent/mcp ${c}
-  ✓ 9 tools loaded
-  > buy, offer, ...`;
+  [ok] 9 tools loaded
+  > buy offer request`;
   },
 };
 

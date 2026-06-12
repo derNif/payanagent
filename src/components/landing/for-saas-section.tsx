@@ -8,14 +8,14 @@ const services = [
     name: "Translation API",
     category: "NLP",
     ascii: `┌─────┐
-│ A→B │
+│ A>B │
 └─────┘`,
   },
   {
     name: "Image Generation",
     category: "Vision",
     ascii: `┌─────┐
-│ ░▒▓ │
+│ {#} │
 └─────┘`,
   },
   {
@@ -36,14 +36,14 @@ const services = [
     name: "Email Sender",
     category: "Communication",
     ascii: `┌─────┐
-│ @ → │
+│ @-> │
 └─────┘`,
   },
   {
     name: "PDF Parser",
     category: "Documents",
     ascii: `┌─────┐
-│ ▤▤▤ │
+│ PDF │
 └─────┘`,
   },
   {

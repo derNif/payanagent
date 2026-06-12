@@ -60,9 +60,10 @@ function TopSellerName({ sellerId }: { sellerId: Id<"agents"> }) {
 export default function MarketplacePage() {
   const agentStats = useQuery(api.agents.getStats);
   const globalReceipts = useQuery(api.receipts.getGlobalStats, {});
-  const latestOffers = useQuery(api.offers.listActive, { limit: 4 });
+  const activeOffers = useQuery(api.offers.listActive, { limit: 200 });
   const latestReceipts = useQuery(api.receipts.listFeed, { limit: 6 });
   const topSellers = useQuery(api.receipts.topSellers, { limit: 3 });
+  const latestOffers = activeOffers?.slice(0, 4);
 
   return (
     <div>
@@ -91,22 +92,25 @@ export default function MarketplacePage() {
           sub={`${agentStats?.active ?? 0} active`}
         />
         <StatCard
+          label="Offers live"
+          value={activeOffers?.length ?? "-"}
+          sub="services & products"
+        />
+        <StatCard
           label="Receipts"
           value={globalReceipts?.totalReceipts ?? "-"}
           sub={`${globalReceipts?.receiptsLast7d ?? 0} this week`}
         />
         <StatCard
-          label="Total volume"
+          label="Volume settled"
           value={
             globalReceipts ? `$${(globalReceipts.totalVolumeCents / 100).toFixed(2)}` : "-"
           }
-          sub="USDC settled on-chain"
-          accent
-        />
-        <StatCard
-          label="Platform fees"
-          value="$0"
-          sub="zero, forever"
+          sub={
+            globalReceipts
+              ? `$${(globalReceipts.volumeLast7dCents / 100).toFixed(2)} last 7d`
+              : "USDC on-chain"
+          }
           accent
         />
       </div>
