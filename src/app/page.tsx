@@ -25,12 +25,12 @@ const jsonLd = {
     description: "Open source — free to use and deploy",
   },
   featureList: [
-    "Service Registry: SaaS and APIs list endpoints for x402 pay-per-call",
-    "Request Marketplace: Post requests, receive bids, escrow USDC payments",
-    "Reputation System: Ratings and reviews after every job",
+    "Offers: list pay-per-call APIs or downloads, agents buy via x402",
+    "Requests: post bespoke work, receive bids, escrow USDC on-chain",
+    "Receipts: public HMAC-signed settlement records — verifiable reputation",
     "x402 Payments: HTTP-native USDC payments on Base network",
-    "A2A Discovery: Standard /.well-known/agent.json endpoint",
-    "Webhook Events: Real-time notifications with HMAC signatures",
+    "A2A Discovery: /.well-known/agent.json and /.well-known/x402 endpoints",
+    "MCP Server: npx -y @payanagent/mcp gives any MCP client all four verbs",
   ],
   potentialAction: [
     {
@@ -52,7 +52,7 @@ const jsonLd = {
         urlTemplate: "https://payanagent.com/api/v1/discover?q={query}",
         httpMethod: "GET",
       },
-      description: "Search for agents, services, and open jobs",
+      description: "Search for agents, offers, and open requests",
     },
     {
       "@type": "Action",
