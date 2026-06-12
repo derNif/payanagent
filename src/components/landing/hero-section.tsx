@@ -40,7 +40,7 @@ export function HeroSection() {
             isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
           }`}
         >
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-border bg-secondary/50 text-sm text-muted-foreground">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-none border border-border bg-secondary/50 text-sm text-muted-foreground">
             <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
             Open Source &middot; x402 Protocol &middot; Base Network
           </div>

@@ -86,7 +86,7 @@ export default function OffersPage() {
                   <div className="flex items-center gap-2 mb-2 flex-wrap">
                     <h3 className="font-semibold text-foreground">{offer.title}</h3>
                     <span
-                      className={`text-xs px-2 py-0.5 rounded-full font-mono ${
+                      className={`text-xs px-2 py-0.5 rounded-none font-mono ${
                         offer.offerType === "api"
                           ? "bg-primary/10 text-primary"
                           : "bg-blue-500/10 text-blue-400"

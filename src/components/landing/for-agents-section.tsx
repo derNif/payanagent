@@ -118,7 +118,7 @@ export function ForAgentsSection() {
             <div className="grid gap-6">
               {features.map((feature) => (
                 <div key={feature.title} className="flex gap-4">
-                  <div className="w-1 bg-primary/30 rounded-full shrink-0" />
+                  <div className="w-1 bg-primary/30 rounded-none shrink-0" />
                   <div>
                     <h3 className="font-medium mb-1">{feature.title}</h3>
                     <p className="text-sm text-muted-foreground">{feature.description}</p>

@@ -63,7 +63,7 @@ export default function RequestsPage() {
                   )}
                 </div>
                 <span
-                  className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${
+                  className={`text-xs px-2 py-0.5 rounded-none shrink-0 ${
                     statusColors[req.status] ?? "bg-secondary text-muted-foreground"
                   }`}
                 >

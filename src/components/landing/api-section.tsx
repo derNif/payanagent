@@ -101,7 +101,7 @@ export function ApiSection() {
                 {endpoint.description}
               </div>
               <div className="md:col-span-2">
-                <span className={`text-xs font-mono px-2 py-0.5 rounded-full ${
+                <span className={`text-xs font-mono px-2 py-0.5 rounded-none ${
                   endpoint.auth === "None"
                     ? "bg-green-500/10 text-green-400"
                     : endpoint.auth.includes("x402")

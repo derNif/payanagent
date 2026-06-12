@@ -44,7 +44,7 @@ export function Navigation() {
           {/* Desktop Navigation — centered pill */}
           <div className="hidden lg:flex items-center absolute left-1/2 -translate-x-1/2">
             <div
-              className={`flex items-center gap-0.5 rounded-full px-1.5 py-1 transition-all duration-500 ${
+              className={`flex items-center gap-0.5 rounded-none px-1.5 py-1 transition-all duration-500 ${
                 isScrolled
                   ? "border border-border/60 bg-card/60 backdrop-blur-md"
                   : "border border-transparent"
@@ -54,7 +54,7 @@ export function Navigation() {
                 <a
                   key={link.name}
                   href={link.href}
-                  className="px-3.5 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors duration-200 rounded-full hover:bg-secondary/60"
+                  className="px-3.5 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors duration-200 rounded-none hover:bg-secondary/60"
                 >
                   {link.name}
                 </a>

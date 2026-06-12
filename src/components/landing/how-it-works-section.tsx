@@ -145,9 +145,9 @@ export function HowItWorksSection() {
 
                 {activeStep === index && (
                   <div className="mt-4 ml-8">
-                    <div className="h-0.5 bg-border rounded-full overflow-hidden">
+                    <div className="h-0.5 bg-border rounded-none overflow-hidden">
                       <div
-                        className="h-full bg-primary rounded-full animate-[progress_6s_linear]"
+                        className="h-full bg-primary rounded-none animate-[progress_6s_linear]"
                         style={{ width: "100%" }}
                       />
                     </div>

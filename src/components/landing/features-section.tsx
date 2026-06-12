@@ -23,31 +23,31 @@ const asciiAnimations = {
   marketplace: (frame: number) => {
     const arrows = ["-->", "==>", "-->", "..>"];
     const a = arrows[frame % arrows.length];
-    return `  ┌───┐     ┌───┐
-  │REQ│ ${a} │BID│
-  └─┬─┘     └─┬─┘
-    │ escrow  │
-    └────$────┘`;
+    return `  +---+     +---+
+  |REQ| ${a} |BID|
+  +-+-+     +-+-+
+    |  escrow |
+    +----$----+`;
   },
   receipts: (frame: number) => {
     const link = ["A --> B", "A ==> B", "A --> B", "A --- B"];
     const l = link[frame % link.length];
-    return `  ┌─────────┐
-  │ RECEIPT │
-  │  $0.05  │
-  │ ${l} │
-  └─signed──┘`;
+    return `  +---------+
+  | RECEIPT |
+  |  $0.05  |
+  | ${l} |
+  +-signed--+`;
   },
   payments: (frame: number) => {
     const lock = ["#", "=", "@", "="];
     const bars = [":", "=", "#", "="];
     const l = lock[frame % lock.length];
     const b = bars[frame % bars.length];
-    return `  ┌──────┐
-  │  ${l}   │
-  ├──────┤
-  │${b}USDC${b}│
-  └──────┘`;
+    return `  +------+
+  |  ${l}   |
+  +------+
+  |${b}USDC${b}|
+  +------+`;
   },
   discovery: (frame: number) => {
     const eye = ["(o)", " o ", "(o)", " o "];

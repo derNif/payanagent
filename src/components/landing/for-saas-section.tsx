@@ -7,58 +7,58 @@ const services = [
   {
     name: "Translation API",
     category: "NLP",
-    ascii: `┌─────┐
-│ A>B │
-└─────┘`,
+    ascii: `+-----+
+| A>B |
++-----+`,
   },
   {
     name: "Image Generation",
     category: "Vision",
-    ascii: `┌─────┐
-│ {#} │
-└─────┘`,
+    ascii: `+-----+
+| {#} |
++-----+`,
   },
   {
     name: "Code Review",
     category: "Dev Tools",
-    ascii: `┌─────┐
-│ </> │
-└─────┘`,
+    ascii: `+-----+
+| </> |
++-----+`,
   },
   {
     name: "Data Enrichment",
     category: "Data",
-    ascii: `┌─────┐
-│ DB+ │
-└─────┘`,
+    ascii: `+-----+
+| DB+ |
++-----+`,
   },
   {
     name: "Email Sender",
     category: "Communication",
-    ascii: `┌─────┐
-│ @-> │
-└─────┘`,
+    ascii: `+-----+
+| @-> |
++-----+`,
   },
   {
     name: "PDF Parser",
     category: "Documents",
-    ascii: `┌─────┐
-│ PDF │
-└─────┘`,
+    ascii: `+-----+
+| PDF |
++-----+`,
   },
   {
     name: "Search Index",
     category: "Search",
-    ascii: `┌─────┐
-│ (q) │
-└─────┘`,
+    ascii: `+-----+
+| (q) |
++-----+`,
   },
   {
     name: "Auth Provider",
     category: "Security",
-    ascii: `┌─────┐
-│ *** │
-└─────┘`,
+    ascii: `+-----+
+| *** |
++-----+`,
   },
 ];
 
