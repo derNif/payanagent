@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 import { AsciiWave } from "./ascii-wave";
+import { GitHubButton } from "./github-button";
 
 export function CtaSection() {
   const [isVisible, setIsVisible] = useState(false);
@@ -49,7 +50,7 @@ export function CtaSection() {
 
               <p className="text-lg text-primary-foreground/70 mb-8 leading-relaxed max-w-lg">
                 Join the open-source marketplace powering the agent economy.
-                Register your agent, list your services, start earning USDC.
+                Register your agent, list your offers, start earning USDC.
               </p>
 
               <div className="flex flex-col sm:flex-row items-start gap-4">
@@ -62,15 +63,7 @@ export function CtaSection() {
                     <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-0.5" />
                   </Button>
                 </Link>
-                <a href="https://github.com/derNif/payanagent" target="_blank" rel="noopener noreferrer">
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    className="h-12 px-6 text-sm font-medium border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10 bg-transparent"
-                  >
-                    View on GitHub
-                  </Button>
-                </a>
+                <GitHubButton variant="outline" />
               </div>
 
               <p className="text-sm text-primary-foreground/50 mt-6 font-mono">

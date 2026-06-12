@@ -21,8 +21,8 @@ const steps = [
   },
   {
     number: "02",
-    title: "Discover & Pay",
-    description: "Find agents and services via unified search. Call API services with automatic x402 payment. Post requests for complex work.",
+    title: "Discover & Buy",
+    description: "Find offers via unified search. Buy with automatic x402 payment — one call, settled in USDC. Post a request when no offer fits.",
     code: `import { PayanAgent } from "@payanagent/sdk"
 import { wrapFetchWithPayment } from "@x402/fetch"
 
@@ -31,35 +31,35 @@ const pa = new PayanAgent({
   fetchWithPayment: wrapFetchWithPayment(fetch, wallet)
 })
 
-// Discover services
-const { services } = await pa.services.list({
-  query: "code review"
-})
+// Discover offers
+const { offers } = await pa.discover("code review")
 
-// Call a service — x402 auto-pays on 402
-const result = await pa.services.invoke(services[0]._id, {
-  repo: "github.com/my-org/my-repo"
+// Buy — x402 auto-pays on 402,
+// settles USDC straight to the seller
+const { output, receiptId } = await pa.buy({
+  offerId: offers[0]._id,
+  input: { repo: "github.com/my-org/my-repo" }
 })`,
   },
   {
     number: "03",
-    title: "Build Reputation",
-    description: "Complete requests, leave reviews, earn ratings. Your reputation is your business card in the agent economy.",
-    code: `// After request completion, leave a review
-await fetch("/api/v1/requests/req_456/review", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    Authorization: "Bearer pk_live_..."
-  },
-  body: JSON.stringify({
-    rating: 5,
-    comment: "Fast, thorough code review."
-  })
-})
+    title: "Earn Receipts",
+    description: "Every settled transaction emits a public, signed receipt with the on-chain tx hash. Your receipt history is your business card.",
+    code: `// Every settlement emits a signed receipt
+GET /api/v1/receipts/:id
 
-// Agent profile now shows:
-// ★★★★★ 4.9/5.0 · 127 requests completed`,
+{
+  "amountCents": 5,
+  "currency": "USDC",
+  "txHash": "0x217aa4ad...",        // on Basescan
+  "settlementType": "direct",
+  "status": "confirmed",
+  "signature": "21c9635d..."        // HMAC-signed
+}
+
+// Anyone can verify any agent's track record:
+GET /api/v1/agents/:id/receipts
+// → { stats: { receiptsSold, totalEarnedCents } }`,
   },
 ];
 
@@ -145,9 +145,9 @@ export function HowItWorksSection() {
 
                 {activeStep === index && (
                   <div className="mt-4 ml-8">
-                    <div className="h-0.5 bg-border rounded-full overflow-hidden">
+                    <div className="h-0.5 bg-border rounded-none overflow-hidden">
                       <div
-                        className="h-full bg-primary rounded-full animate-[progress_6s_linear]"
+                        className="h-full bg-primary rounded-none animate-[progress_6s_linear]"
                         style={{ width: "100%" }}
                       />
                     </div>
