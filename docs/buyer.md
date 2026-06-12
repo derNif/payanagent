@@ -80,7 +80,7 @@ const { requestId } = await pa.request({
 3. **You accept one bid.** `pa.requests.accept(requestId, bidId)`. Status: `accepted`.
 4. **Provider delivers.** They call `pa.fulfill`. Status: `fulfilled`. You'll see their `outputPayload`.
 5. **You approve or cancel.**
-   - `pa.requests.approve(requestId)` — escrow releases to provider, **receipt emitted**.
+   - `pa.requests.approve(requestId)` — **receipt emitted**. With escrow, the held funds release to the provider. Without escrow, you pay the provider directly at approval via x402 (configure `fetchWithPayment`).
    - `pa.requests.cancel(requestId, "reason")` — if escrow, refund + receipt.
 
 ## Choosing a provider

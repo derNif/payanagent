@@ -1,11 +1,13 @@
 "use client";
 
 import { useQuery } from "convex/react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@convex/_generated/api";
 
 type OfferTypeFilter = "all" | "api" | "download";
+type SortKey = "newest" | "price_asc" | "price_desc" | "reputation";
 
 // Human framing: api = service (pay-per-call), download = product (one-time).
 // The API wire values stay "api"/"download" — external sellers integrate on them.
@@ -15,13 +17,41 @@ const TYPE_LABELS: Record<string, string> = {
   download: "products",
 };
 
+const SORT_LABELS: Record<SortKey, string> = {
+  newest: "newest",
+  price_asc: "price ↑",
+  price_desc: "price ↓",
+  reputation: "reputation",
+};
+
 export default function OffersPage() {
+  const router = useRouter();
   const [filter, setFilter] = useState<OfferTypeFilter>("all");
+  const [sort, setSort] = useState<SortKey>("newest");
   const [copied, setCopied] = useState<string | null>(null);
-  const offers = useQuery(api.offers.listActive, {
+  const offers = useQuery(api.offers.listActiveWithSellers, {
     offerType: filter === "all" ? undefined : filter,
     limit: 200,
   });
+
+  const sorted = useMemo(() => {
+    if (!offers) return offers;
+    const list = [...offers];
+    switch (sort) {
+      case "price_asc":
+        return list.sort((a, b) => a.priceCents - b.priceCents);
+      case "price_desc":
+        return list.sort((a, b) => b.priceCents - a.priceCents);
+      case "reputation":
+        return list.sort(
+          (a, b) =>
+            b.seller.receiptsSold - a.seller.receiptsSold ||
+            b.seller.totalEarnedCents - a.seller.totalEarnedCents,
+        );
+      default:
+        return list.sort((a, b) => b._creationTime - a._creationTime);
+    }
+  }, [offers, sort]);
 
   const copyId = (id: string) => {
     navigator.clipboard.writeText(id).then(() => {
@@ -39,7 +69,7 @@ export default function OffersPage() {
             Services (pay-per-call APIs) and products (one-time purchases). Buy any of them with USDC via x402.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm text-muted-foreground font-mono">
             {offers?.length ?? 0} active
           </span>
@@ -58,12 +88,28 @@ export default function OffersPage() {
               </button>
             ))}
           </div>
+          <div className="flex gap-1 ml-2 items-center">
+            <span className="text-xs text-muted-foreground/60 font-mono">sort:</span>
+            {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
+              <button
+                key={k}
+                onClick={() => setSort(k)}
+                className={
+                  sort === k
+                    ? "text-xs px-2 py-1 rounded bg-secondary text-foreground font-mono"
+                    : "text-xs px-2 py-1 rounded text-muted-foreground/60 hover:text-foreground font-mono"
+                }
+              >
+                {SORT_LABELS[k]}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {!offers ? (
+      {!sorted ? (
         <div className="text-muted-foreground">Loading...</div>
-      ) : offers.length === 0 ? (
+      ) : sorted.length === 0 ? (
         <div className="bg-card border border-border rounded-xl p-12 text-center card-shadow">
           <p className="text-foreground mb-2 font-mono">Nothing listed in this category yet</p>
           <p className="text-sm text-muted-foreground/60 mb-6">
@@ -76,15 +122,22 @@ export default function OffersPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {offers.map((offer) => (
+          {sorted.map((offer) => (
             <div
               key={offer._id}
-              className="bg-card border border-border rounded-xl p-5 card-shadow hover:border-primary/30 transition-colors"
+              onClick={() => router.push(`/marketplace/offers/${offer._id}`)}
+              className="bg-card border border-border rounded-xl p-5 card-shadow hover:border-primary/30 transition-colors cursor-pointer"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    <h3 className="font-semibold text-foreground">{offer.title}</h3>
+                    <Link
+                      href={`/marketplace/offers/${offer._id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="font-semibold text-foreground hover:text-primary transition-colors"
+                    >
+                      {offer.title}
+                    </Link>
                     <span
                       className={`text-xs px-2 py-0.5 rounded-none font-mono ${
                         offer.offerType === "api"
@@ -130,7 +183,10 @@ export default function OffersPage() {
 
               <div className="mt-3 pt-3 border-t border-border/60 flex items-center justify-between gap-3 flex-wrap text-xs font-mono">
                 <button
-                  onClick={() => copyId(offer._id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    copyId(offer._id);
+                  }}
                   className="text-muted-foreground/60 hover:text-primary transition-colors"
                   title="Copy offer ID — needed to buy"
                 >
@@ -138,9 +194,11 @@ export default function OffersPage() {
                 </button>
                 <Link
                   href={`/marketplace/agents/${offer.sellerId}`}
+                  onClick={(e) => e.stopPropagation()}
                   className="text-muted-foreground/60 hover:text-primary transition-colors"
                 >
-                  seller profile →
+                  by {offer.seller.name} · {offer.seller.receiptsSold} receipts · $
+                  {(offer.seller.totalEarnedCents / 100).toFixed(2)} earned →
                 </Link>
               </div>
             </div>

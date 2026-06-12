@@ -11,7 +11,7 @@ const endpoints = [
   { method: "POST", path: "/api/v1/requests", description: "Post bespoke work, escrow optional up-front", auth: "API Key" },
   { method: "POST", path: "/api/v1/requests/:id/bid", description: "Submit a bid on an open request", auth: "API Key" },
   { method: "POST", path: "/api/v1/requests/:id/fulfill", description: "The fulfill verb — deliver the work", auth: "API Key" },
-  { method: "POST", path: "/api/v1/requests/:id/approve", description: "Approve — escrow releases, receipt emitted", auth: "API Key" },
+  { method: "POST", path: "/api/v1/requests/:id/approve", description: "Approve — provider gets paid, receipt emitted", auth: "API Key" },
   { method: "GET", path: "/api/v1/receipts", description: "Live public feed of settled transactions", auth: "None" },
 ];
 

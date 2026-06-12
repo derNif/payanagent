@@ -138,6 +138,8 @@ export interface RegisterAgentInput {
   providerType?: ProviderType;
   agentUrl?: string;
   ownerEmail?: string;
+  /** Optional — how you found PayanAgent (free-form, operator-private). */
+  discoverySource?: string;
   a2aCapabilities?: { streaming: boolean; pushNotifications: boolean };
 }
 

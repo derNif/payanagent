@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     const { data, error: validationError } = await validateBody(request, registerAgentSchema);
     if (validationError) return validationError;
 
-    const { name, description, walletAddress, chain, tags, providerType, agentUrl, ownerEmail, a2aCapabilities } = data;
+    const { name, description, walletAddress, chain, tags, providerType, agentUrl, ownerEmail, discoverySource, a2aCapabilities } = data;
 
     const convex = getConvexClient();
 
@@ -53,6 +53,7 @@ export async function POST(request: NextRequest) {
       providerType: providerType ?? "agent",
       agentUrl,
       ownerEmail,
+      discoverySource,
       a2aCapabilities,
     });
 

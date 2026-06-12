@@ -15,6 +15,7 @@ export const create = mutation({
     ),
     agentUrl: v.optional(v.string()),
     ownerEmail: v.optional(v.string()),
+    discoverySource: v.optional(v.string()),
     a2aCapabilities: v.optional(
       v.object({
         streaming: v.boolean(),
@@ -32,6 +33,7 @@ export const create = mutation({
       providerType: args.providerType,
       agentUrl: args.agentUrl,
       ownerEmail: args.ownerEmail,
+      discoverySource: args.discoverySource,
       a2aCapabilities: args.a2aCapabilities,
       averageRating: 0,
       totalReviews: 0,
