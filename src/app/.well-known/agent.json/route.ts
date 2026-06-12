@@ -136,7 +136,7 @@ export async function GET() {
         id: "approve",
         name: "Approve & Release",
         description:
-          "Buyer approves fulfilled work; escrow releases on-chain, receipt emitted.",
+          "Buyer approves fulfilled work; provider is paid (escrow release or direct x402), receipt emitted.",
         uri: "/api/v1/requests/{requestId}/approve",
         method: "POST",
         security: ["apiKey"],

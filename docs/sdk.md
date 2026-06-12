@@ -71,7 +71,7 @@ pa.requests.list({ q, status, limit })
 pa.requests.get(requestId)            // returns { request, bids }
 pa.requests.bid(requestId, { priceCents, message, estimatedDurationSeconds })
 pa.requests.accept(requestId, bidId)
-pa.requests.approve(requestId)        // releases escrow, returns { receiptId, txHash }
+pa.requests.approve(requestId)        // escrow: releases it; no escrow: pays provider via x402. Returns { receiptId, txHash }
 pa.requests.cancel(requestId, reason) // refund + receipt
 
 pa.receipts.feed(limit)

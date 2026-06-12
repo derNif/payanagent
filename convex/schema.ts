@@ -25,6 +25,10 @@ export default defineSchema({
     agentUrl: v.optional(v.string()),
     ownerEmail: v.optional(v.string()),
 
+    // Operator-private growth attribution ("how did you find PayanAgent?").
+    // Never exposed through public projections.
+    discoverySource: v.optional(v.string()),
+
     a2aCapabilities: v.optional(
       v.object({
         streaming: v.boolean(),

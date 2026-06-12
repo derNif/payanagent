@@ -103,6 +103,74 @@ export const listActive = query({
   },
 });
 
+// Offers list enriched with seller name + receipt-derived reputation, for the
+// marketplace UI. Returns a projected shape: endpoint and fileUrl are private
+// (fileUrl is the paid deliverable) and never leave the server here.
+export const listActiveWithSellers = query({
+  args: {
+    offerType: v.optional(v.union(v.literal("api"), v.literal("download"))),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = Math.min(args.limit ?? 100, 500);
+    let offers: Doc<"offers">[];
+    if (args.offerType) {
+      offers = await ctx.db
+        .query("offers")
+        .withIndex("by_offerType", (q) =>
+          q.eq("offerType", args.offerType!).eq("isActive", true),
+        )
+        .order("desc")
+        .take(limit);
+    } else {
+      offers = await ctx.db
+        .query("offers")
+        .filter((q) => q.eq(q.field("isActive"), true))
+        .order("desc")
+        .take(limit);
+    }
+
+    // Resolve each unique seller once: name + confirmed-receipt stats.
+    // Capped reads per seller keep worst-case I/O bounded.
+    const sellerIds = [...new Set(offers.map((o) => String(o.sellerId)))];
+    const sellers = new Map<
+      string,
+      { name: string; receiptsSold: number; totalEarnedCents: number }
+    >();
+    for (const id of sellerIds) {
+      const sellerId = id as Id<"agents">;
+      const agent = await ctx.db.get(sellerId);
+      const sold = await ctx.db
+        .query("receipts")
+        .withIndex("by_sellerId", (q) => q.eq("sellerId", sellerId))
+        .take(500);
+      const confirmed = sold.filter((r) => r.status === "confirmed");
+      sellers.set(id, {
+        name: agent?.name ?? "Unknown agent",
+        receiptsSold: confirmed.length,
+        totalEarnedCents: confirmed.reduce((s, r) => s + r.amountCents, 0),
+      });
+    }
+
+    return offers.map((o) => ({
+      _id: o._id,
+      _creationTime: o._creationTime,
+      sellerId: o.sellerId,
+      title: o.title,
+      description: o.description,
+      category: o.category,
+      tags: o.tags,
+      priceCents: o.priceCents,
+      offerType: o.offerType,
+      inputSchema: o.inputSchema,
+      outputSchema: o.outputSchema,
+      estimatedDurationSeconds: o.estimatedDurationSeconds,
+      previewDescription: o.previewDescription,
+      seller: sellers.get(String(o.sellerId))!,
+    }));
+  },
+});
+
 export const listBySeller = query({
   args: {
     sellerId: v.id("agents"),

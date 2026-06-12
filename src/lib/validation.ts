@@ -15,6 +15,7 @@ export const registerAgentSchema = z.object({
   providerType: z.enum(["agent", "saas", "api"]).default("agent"),
   agentUrl: z.string().url().optional(),
   ownerEmail: z.string().email().optional(),
+  discoverySource: z.string().max(500).optional(),
   a2aCapabilities: z.object({ streaming: z.boolean(), pushNotifications: z.boolean() }).optional(),
 });
 

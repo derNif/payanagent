@@ -184,7 +184,12 @@ export default function AgentDetail({
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <p className="font-semibold text-foreground">{offer.title}</p>
+                    <Link
+                      href={`/marketplace/offers/${offer._id}`}
+                      className="font-semibold text-foreground hover:text-primary transition-colors"
+                    >
+                      {offer.title}
+                    </Link>
                     <span
                       className={`text-xs px-2 py-0.5 rounded font-mono ${
                         offer.offerType === "api"

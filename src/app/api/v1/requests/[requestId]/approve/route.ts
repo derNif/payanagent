@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
 import {
+  buildPaymentRequiredResponse,
+  verifyPayment,
+  verifyPaymentIntegrity,
+  settlePayment,
   releaseEscrow,
   getFacilitatorUrl,
   getNetwork,
@@ -11,8 +15,10 @@ import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
 // POST /api/v1/requests/:requestId/approve — Buyer approves the fulfilled work.
-// Releases escrow on-chain to the provider's wallet, emits escrow_release receipt,
-// marks the request as approved.
+// Escrow requests: releases escrow on-chain to the provider's wallet and emits
+// an escrow_release receipt. Non-escrow requests: x402-gated — the buyer pays
+// the provider directly (payTo = provider wallet) and a direct receipt is
+// emitted. Either way the request is marked approved.
 // v0.2 path. Replaces v1 /complete.
 export async function POST(
   request: NextRequest,
@@ -70,22 +76,95 @@ export async function POST(
       { status: 500 },
     );
   }
-  if (!req.escrow) {
-    // For non-escrow requests, payment is buyer-pull. v0.2 expects buy-side
-    // escrow for marketplace mode; non-escrow approvals are out of scope here
-    // and will be revisited when buyer-pull settlement is wired.
-    return NextResponse.json(
-      { error: "Non-escrow approve not yet supported in v0.2" },
-      { status: 400 },
-    );
-  }
-
   // Look up provider wallet
   const provider = await convex.query(api.agents.getById, {
     agentId: req.providerId,
   });
   if (!provider) {
     return NextResponse.json({ error: "Provider not found" }, { status: 500 });
+  }
+
+  if (!req.escrow) {
+    // Non-escrow approve: the buyer pays the provider directly via x402 at
+    // approval time — payTo is the provider's wallet, the platform never
+    // takes custody. Same trustless flow as direct offer buys.
+    if (!provider.walletAddress) {
+      return NextResponse.json(
+        { error: "Provider has no wallet address configured" },
+        { status: 503 },
+      );
+    }
+
+    const paymentSignature =
+      request.headers.get("payment-signature") ||
+      request.headers.get("x-payment");
+    if (!paymentSignature) {
+      return buildPaymentRequiredResponse(
+        req.agreedPriceCents,
+        request.url,
+        `Payment for request: ${req.title}`,
+        provider.walletAddress,
+      );
+    }
+
+    const integrityCheck = verifyPaymentIntegrity(
+      paymentSignature,
+      req.agreedPriceCents,
+      provider.walletAddress,
+    );
+    if (!integrityCheck.valid) {
+      return NextResponse.json(
+        { error: `Payment integrity check failed: ${integrityCheck.error}` },
+        { status: 402 },
+      );
+    }
+
+    const paymentRequired = request.headers.get("payment-required") || "";
+    const verification = await verifyPayment(paymentSignature, paymentRequired);
+    if (!verification.valid) {
+      return NextResponse.json(
+        { error: `Payment verification failed: ${verification.error}` },
+        { status: 402 },
+      );
+    }
+
+    const settlement = await settlePayment(paymentSignature, paymentRequired);
+    if (!settlement.success) {
+      return NextResponse.json(
+        { error: `Payment settlement failed: ${settlement.error}` },
+        { status: 402 },
+      );
+    }
+
+    const receiptId: Id<"receipts"> = await convex.mutation(
+      api.receipts.recordSettlement,
+      {
+        platformSecret,
+        buyerId: req.buyerId,
+        sellerId: req.providerId,
+        requestId: req._id,
+        amountCents: req.agreedPriceCents,
+        currency: "USDC",
+        chain: getNetwork(),
+        network: getNetworkId(),
+        txHash: settlement.txHash || "",
+        facilitatorUrl: getFacilitatorUrl(),
+        settlementType: "direct",
+        status: "confirmed",
+        latencyMs: Date.now() - startedAt,
+      },
+    );
+
+    await convex.mutation(api.requests.markApproved, {
+      requestId: req._id,
+      settlementReceiptId: receiptId,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      receiptId,
+      txHash: settlement.txHash,
+    });
   }
 
   // Release escrow on-chain

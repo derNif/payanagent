@@ -157,7 +157,12 @@ export default async function ReceiptPage({ params }: Props) {
           {offer && (
             <div className="sm:col-span-2">
               <p className="text-xs text-muted-foreground/60 mb-1 font-mono uppercase">Offer</p>
-              <p className="text-foreground/90 truncate">{offer.title}</p>
+              <Link
+                href={`/marketplace/offers/${offer._id}`}
+                className="text-foreground/90 hover:text-primary truncate block"
+              >
+                {offer.title}
+              </Link>
             </div>
           )}
           {receipt.latencyMs !== undefined && (

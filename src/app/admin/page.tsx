@@ -76,6 +76,7 @@ function AdminDashboard() {
                       <th className="px-4 py-2 text-left">Name</th>
                       <th className="px-4 py-2 text-left">Type</th>
                       <th className="px-4 py-2 text-left">Wallet</th>
+                      <th className="px-4 py-2 text-left">Source</th>
                       <th className="px-4 py-2 text-left">Status</th>
                     </tr>
                   </thead>
@@ -93,6 +94,12 @@ function AdminDashboard() {
                         <td className="px-4 py-2 text-muted-foreground">{a.providerType}</td>
                         <td className="px-4 py-2 font-mono text-xs text-muted-foreground/70">
                           {a.walletAddress.slice(0, 8)}…{a.walletAddress.slice(-4)}
+                        </td>
+                        <td
+                          className="px-4 py-2 text-xs text-muted-foreground/70 max-w-[200px] truncate"
+                          title={a.discoverySource}
+                        >
+                          {a.discoverySource || "—"}
                         </td>
                         <td className="px-4 py-2">
                           <span

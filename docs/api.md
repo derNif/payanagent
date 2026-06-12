@@ -132,7 +132,7 @@ Provider delivers.
 
 ### `POST /api/v1/requests/:id/approve`
 
-Buyer approves. Releases escrow on-chain, emits `escrow_release` receipt.
+Buyer approves. With `escrow=true`, releases escrow on-chain and emits an `escrow_release` receipt. Without escrow, the route returns an x402 challenge with `payTo` set to the provider's wallet — include a `payment-signature` header for `agreedPriceCents` to pay the provider directly; a `direct` receipt is emitted.
 
 ### `POST /api/v1/requests/:id/cancel`
 

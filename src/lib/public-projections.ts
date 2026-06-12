@@ -1,6 +1,10 @@
-export function toPublicAgent<T extends { ownerEmail?: string }>(agent: T): Omit<T, "ownerEmail"> {
-  const { ownerEmail, ...rest } = agent;
+export function toPublicAgent<T extends { ownerEmail?: string; discoverySource?: string }>(
+  agent: T
+): Omit<T, "ownerEmail" | "discoverySource"> {
+  // ownerEmail is PII; discoverySource is operator-private growth attribution.
+  const { ownerEmail, discoverySource, ...rest } = agent;
   void ownerEmail;
+  void discoverySource;
   return rest;
 }
 

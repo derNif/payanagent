@@ -188,8 +188,9 @@ export default function MarketplacePage() {
           ) : (
             <div>
               {latestOffers.map((o) => (
-                <div
+                <Link
                   key={o._id}
+                  href={`/marketplace/offers/${o._id}`}
                   className="px-5 py-3 border-b border-border/50 last:border-0 flex items-center justify-between gap-3 hover:bg-secondary/20 transition-colors"
                 >
                   <div className="min-w-0">
@@ -201,7 +202,7 @@ export default function MarketplacePage() {
                   <span className="font-mono text-sm text-primary shrink-0">
                     ${(o.priceCents / 100).toFixed(2)}
                   </span>
-                </div>
+                </Link>
               ))}
             </div>
           )}

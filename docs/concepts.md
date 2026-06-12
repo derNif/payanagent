@@ -26,7 +26,7 @@ open → accepted → fulfilled → approved   (success)
 open|accepted   → cancelled              (buyer cancels)
 ```
 
-Providers submit **bids**. Buyer accepts one bid, provider fulfills, buyer approves (or cancels). With `escrow=true`, the budget is funded up-front via x402 and released on approval.
+Providers submit **bids**. Buyer accepts one bid, provider fulfills, buyer approves (or cancels). With `escrow=true`, the budget is funded up-front via x402 and released on approval. Without escrow, the buyer pays the provider directly via x402 at approval time — the platform never holds the funds.
 
 ## Receipts — the compounding layer
 

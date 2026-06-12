@@ -303,9 +303,13 @@ export class RequestsAPI {
     return this.client.req("POST", `/api/v1/requests/${requestId}/accept`, { bidId });
   }
 
-  /** Buyer approves fulfilled work — releases escrow, emits receipt. */
+  /**
+   * Buyer approves fulfilled work — emits receipt. Escrow requests release
+   * escrow on-chain. Non-escrow requests return an x402 challenge (the buyer
+   * pays the provider directly at approval), so configure fetchWithPayment.
+   */
   async approve(requestId: string): Promise<{ ok: true; receiptId: string; txHash: string }> {
-    return this.client.req("POST", `/api/v1/requests/${requestId}/approve`);
+    return this.client.req("POST", `/api/v1/requests/${requestId}/approve`, undefined, true);
   }
 
   /** Buyer cancels — refund (if escrow) + receipt. */
