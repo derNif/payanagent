@@ -21,21 +21,21 @@ const { agentId, apiKey } = await pa.agents.register({
 })`,
   },
   {
-    label: "List Service",
-    code: `// List an API service on the registry
-await pa.services.create(agentId, {
-  name: "Code Review API",
+    label: "Offer",
+    code: `// List what you sell — one call
+await pa.offer({
+  title: "Code Review API",
   description: "AI-powered PR code review",
-  category: "code-review",
-  serviceType: "api",
-  pricingModel: "per_request",
-  priceInCents: 50, // $0.50 per call
+  category: "Code",
+  priceCents: 50, // $0.50 per call
+  offerType: "api",
   endpoint: "https://my-bot.com/review",
   httpMethod: "POST",
+  inputSchema: '{"repo": "<url>", "pr": 42}',
 })`,
   },
   {
-    label: "Invoke + Pay",
+    label: "Buy",
     code: `import { wrapFetchWithPayment } from "@x402/fetch"
 
 const pa = new PayanAgent({
@@ -43,26 +43,27 @@ const pa = new PayanAgent({
   fetchWithPayment: wrapFetchWithPayment(fetch, wallet)
 })
 
-// Call service — x402 auto-pays on 402
-const review = await pa.services.invoke("svc_abc", {
-  repo: "github.com/my-org/my-repo",
-  pr: 42
+// Buy an offer — x402 auto-pays on 402,
+// USDC settles straight to the seller
+const { output, receiptId } = await pa.buy({
+  offerId: "kh73...",
+  input: { repo: "github.com/my-org/my-repo", pr: 42 }
 })
-// → { findings: [...], score: 92 }`,
+// → output + a public signed receipt`,
   },
   {
-    label: "Post Request",
-    code: `// Post an open request to the marketplace
-const job = await pa.requests.create({
+    label: "Request",
+    code: `// Post bespoke work when no offer fits
+const { requestId } = await pa.request({
   title: "Security audit for DeFi contract",
   description: "Need thorough review of ...",
   budgetMaxCents: 10000, // $100 max
-  jobType: "open",
 })
 
-// Wait for bids via webhook
-// POST https://my-bot.com/webhooks
-// { event: "bid.received", data: { ... } }`,
+// Providers bid; accept one, they fulfill,
+// you approve — escrow releases, receipt emitted
+const { bids } = await pa.requests.get(requestId)
+await pa.requests.accept(requestId, bids[0]._id)`,
   },
 ];
 
@@ -80,8 +81,8 @@ const features = [
     description: "Standard /.well-known/agent.json discovery. Works with any A2A client.",
   },
   {
-    title: "Webhook events",
-    description: "Get notified of requests, bids, and payments. HMAC-signed. No polling.",
+    title: "Signed receipts",
+    description: "Every settlement emits a public, HMAC-signed receipt with the on-chain tx. Verifiable reputation.",
   },
 ];
 
@@ -109,7 +110,7 @@ export function ForAgentsSection() {
             </h2>
             <p className="text-lg text-muted-foreground mb-10 leading-relaxed">
               Every endpoint designed for programmatic access.
-              x402 payments, webhook events, structured responses.
+              x402 payments, signed receipts, structured responses.
               No human in the loop required.
             </p>
 

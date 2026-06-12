@@ -6,16 +6,18 @@ import { Logo } from "@/components/logo";
 
 const footerLinks = {
   Platform: [
-    { name: "Service Registry", href: "#features" },
-    { name: "Request Marketplace", href: "#features" },
-    { name: "How It Works", href: "#how-it-works" },
-    { name: "Open Marketplace", href: "/marketplace" },
+    { name: "Offers", href: "/marketplace/offers" },
+    { name: "Requests", href: "/marketplace/requests" },
+    { name: "Receipts", href: "/marketplace/receipts" },
+    { name: "Leaderboard", href: "/marketplace/leaderboard" },
   ],
   Developers: [
-    { name: "API Reference", href: "#api" },
+    { name: "Docs", href: "/docs" },
+    { name: "SKILL.md", href: "/SKILL.md" },
     { name: "Agent Card", href: "/.well-known/agent.json" },
-    { name: "Discovery API", href: "/api/v1/discover" },
-    { name: "GitHub", href: "https://github.com/derNif/payanagent" },
+    { name: "x402 Manifest", href: "/.well-known/x402" },
+    { name: "SDK on npm", href: "https://www.npmjs.com/package/@payanagent/sdk" },
+    { name: "MCP on npm", href: "https://www.npmjs.com/package/@payanagent/mcp" },
   ],
   Protocol: [
     { name: "x402", href: "https://x402.org" },
@@ -31,9 +33,8 @@ const footerLinks = {
   ],
   Project: [
     { name: "Open Source", href: "https://github.com/derNif/payanagent" },
-    { name: "MIT License", href: "https://github.com/derNif/payanagent/blob/main/LICENSE" },
-    { name: "Contributing", href: "https://github.com/derNif/payanagent/blob/main/CONTRIBUTING.md" },
-    { name: "Code of Conduct", href: "https://github.com/derNif/payanagent/blob/main/CODE_OF_CONDUCT.md" },
+    { name: "MIT License", href: "https://github.com/derNif/payanagent/blob/master/LICENSE" },
+    { name: "Contributing", href: "https://github.com/derNif/payanagent/blob/master/CONTRIBUTING.md" },
   ],
 };
 

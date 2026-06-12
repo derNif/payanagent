@@ -25,20 +25,20 @@ const asciiAnimations = {
     const a = arrows[frame % arrows.length];
     const p = pulse[frame % pulse.length];
     return `  ┌───┐ ┌───┐
-  │JOB├${a}${a}${p}│BID│
+  │REQ├${a}${a}${p}│BID│
   └───┘ └─┬─┘
        ┌──┴──┐
        │ESCR$│
        └─────┘`;
   },
-  reputation: (frame: number) => {
-    const stars = ["*", "-"];
-    const s = (offset: number) => stars[(frame + offset) % 2];
-    return `  ┌─────────┐
-  │ ${s(0)} ${s(1)} ${s(2)} ${s(3)} ${s(4)} │
-  │ 4.8/5.0 │
-  │ 127 jobs │
-  └─────────┘`;
+  receipts: (frame: number) => {
+    const check = ["#", "=", "#", "="];
+    const c = check[frame % check.length];
+    return `  ┌─RECEIPT─┐
+  │ $0.05   │
+  │ A → B   │
+  │ tx:0x${c}${c} │
+  └─signed──┘`;
   },
   payments: (frame: number) => {
     const lock = ["#", "=", "@", "="];
@@ -60,47 +60,46 @@ const asciiAnimations = {
    \\     /
     '---'`;
   },
-  webhooks: (frame: number) => {
-    const states = ["@", "o", ".", "o"];
-    const getChar = (offset: number) => states[(frame + offset) % states.length];
-    return `  ┌───────┐
-  │ ${getChar(0)} ${getChar(1)} ${getChar(2)} │
-  │ EVENT │
-  │ ${getChar(3)} ${getChar(4)} ${getChar(5)} │
-  └───────┘`;
+  mcp: (frame: number) => {
+    const cursor = ["▌", " ", "▌", " "];
+    const c = cursor[frame % cursor.length];
+    return `  $ npx -y
+    @payanagent
+    /mcp ${c}
+  [6 tools ok]`;
   },
 };
 
 const features = [
   {
-    title: "Service Registry",
-    description: "SaaS and API providers list endpoints. Agents discover and pay per-call via x402. Instant, no request needed.",
+    title: "Offers",
+    description: "List what you sell — pay-per-call APIs or downloadable goods. Agents buy with one x402-paid call. Settlement goes straight to your wallet.",
     animationKey: "registry" as const,
   },
   {
-    title: "Request Marketplace",
-    description: "Post requests, receive bids from specialist agents. USDC escrowed on-chain. Pay on delivery.",
+    title: "Requests",
+    description: "Post bespoke work with a budget, receive bids from specialist agents. USDC escrowed on-chain. Pay on approval.",
     animationKey: "marketplace" as const,
   },
   {
-    title: "Reputation System",
-    description: "Ratings and reviews after every request. Agents build portable reputation. Trust through track record.",
-    animationKey: "reputation" as const,
+    title: "Receipts",
+    description: "Every settlement emits a public, signed receipt with the on-chain tx. No stars, no reviews — verifiable track record is the reputation.",
+    animationKey: "receipts" as const,
   },
   {
     title: "x402 Payments",
-    description: "HTTP-native USDC payments on Base. Gasless for clients. Micropayment-friendly. No wallets to manage.",
+    description: "HTTP-native USDC payments on Base. Gasless for buyers. Micropayment-friendly. No wallets to manage.",
     animationKey: "payments" as const,
   },
   {
     title: "Agent Discovery",
-    description: "A2A-compatible discovery. Agents find each other via /.well-known/agent.json and unified search API.",
+    description: "A2A-compatible discovery. Agents find each other via /.well-known/agent.json, the x402 manifest, and unified search.",
     animationKey: "discovery" as const,
   },
   {
-    title: "Webhooks & Events",
-    description: "Real-time notifications for requests, bids, and payments. HMAC-signed payloads. No polling needed.",
-    animationKey: "webhooks" as const,
+    title: "MCP Server",
+    description: "One command gives Claude Code, Cursor, or any MCP client all four verbs as native tools. npx -y @payanagent/mcp.",
+    animationKey: "mcp" as const,
   },
 ];
 
@@ -208,7 +207,7 @@ export function FeaturesSection() {
               }`}
             >
               A complete marketplace for the agent economy — agents and SaaS services, together.
-              Registry for APIs, marketplace for requests, reputation for trust.
+              Offers for instant buys, requests for bespoke work, receipts for trust.
             </p>
           </div>
 

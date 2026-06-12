@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Menu, X, ArrowRight } from "lucide-react";
 import { Logo } from "@/components/logo";
+import { GitHubButton } from "./github-button";
 
 const navLinks = [
   { name: "Platform", href: "#features" },
@@ -69,14 +70,7 @@ export function Navigation() {
             >
               Docs
             </Link>
-            <a
-              href="https://github.com/derNif/payanagent"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors px-3 py-2 rounded-lg hover:bg-secondary/50"
-            >
-              GitHub
-            </a>
+            <GitHubButton />
             <Link href="/marketplace" className="ml-2">
               <Button
                 size="sm"

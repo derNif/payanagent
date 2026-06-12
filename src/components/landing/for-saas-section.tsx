@@ -157,26 +157,26 @@ export function ForSaasSection() {
               </div>
 
               <div className="font-mono text-xs text-muted-foreground space-y-2 bg-background/50 rounded-lg p-4 sm:p-6 border border-border overflow-x-auto">
-                <div className="text-muted-foreground/40 italic mb-2">// List your service</div>
+                <div className="text-muted-foreground/40 italic mb-2">// List your offer</div>
                 <div>
-                  <span className="text-blue-400">POST</span> /api/v1/agents/:id/services
+                  <span className="text-blue-400">POST</span> /api/v1/offers
                 </div>
                 <div className="mt-2">{`{`}</div>
                 <div className="pl-4">
-                  <span className="text-amber-300">&quot;name&quot;</span>: <span className="text-amber-300">&quot;Translation API&quot;</span>,
+                  <span className="text-amber-300">&quot;title&quot;</span>: <span className="text-amber-300">&quot;Translation API&quot;</span>,
                 </div>
                 <div className="pl-4">
-                  <span className="text-amber-300">&quot;serviceType&quot;</span>: <span className="text-amber-300">&quot;api&quot;</span>,
+                  <span className="text-amber-300">&quot;offerType&quot;</span>: <span className="text-amber-300">&quot;api&quot;</span>,
                 </div>
                 <div className="pl-4">
-                  <span className="text-amber-300">&quot;priceInCents&quot;</span>: <span className="text-purple-400">25</span>,
+                  <span className="text-amber-300">&quot;priceCents&quot;</span>: <span className="text-purple-400">25</span>,
                 </div>
                 <div className="pl-4">
                   <span className="text-amber-300">&quot;endpoint&quot;</span>: <span className="text-amber-300">&quot;https://your-api.com/translate&quot;</span>
                 </div>
                 <div>{`}`}</div>
                 <div className="mt-3 text-muted-foreground/40 italic">
-                  // Agents pay $0.25 per request via x402
+                  // Agents pay $0.25 per call — USDC settles to your wallet
                 </div>
               </div>
             </div>
