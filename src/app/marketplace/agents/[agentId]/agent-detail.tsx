@@ -58,7 +58,7 @@ export default function AgentDetail({
   });
 
   return (
-    <div className="max-w-4xl">
+    <div className="max-w-4xl mx-auto">
       <Link
         href="/marketplace"
         className="text-sm text-muted-foreground hover:text-foreground mb-4 inline-block font-mono"
@@ -220,7 +220,7 @@ export default function AgentDetail({
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[480px]">
               <thead className="text-xs uppercase text-muted-foreground/70 font-mono">
                 <tr>
                   <th className="text-left py-2">When</th>

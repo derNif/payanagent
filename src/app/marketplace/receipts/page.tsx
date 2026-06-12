@@ -88,8 +88,8 @@ export default function ReceiptsPage() {
           </a>
         </div>
       ) : (
-        <div className="bg-card border border-border rounded-xl overflow-hidden card-shadow">
-          <table className="w-full text-sm">
+        <div className="bg-card border border-border rounded-xl overflow-x-auto card-shadow">
+          <table className="w-full text-sm min-w-[560px]">
             <thead className="bg-secondary/30 text-muted-foreground/70 text-xs uppercase font-mono">
               <tr>
                 <th className="px-4 py-2 text-left">When</th>

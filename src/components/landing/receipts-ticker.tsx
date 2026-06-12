@@ -19,40 +19,39 @@ const VERB_LABELS: Record<string, string> = {
   escrow_refund: "refund",
 };
 
-// Live strip of recent real settlements. Renders nothing until the first
-// receipt exists — no fake data, no aggregate totals.
+// Live row of recent real settlements, designed to sit as the header row of
+// the hero stats block (same hairline-divided container). Renders nothing
+// until the first receipt exists — no fake data, no aggregate totals.
 export function ReceiptsTicker() {
   const receipts = useQuery(api.receipts.listFeed, { limit: 5 });
 
   if (!receipts || receipts.length === 0) return null;
 
   return (
-    <div className="flex justify-center">
-      <div className="inline-flex items-center gap-x-4 gap-y-2 flex-wrap justify-center max-w-3xl rounded-xl border border-border bg-card/60 px-4 py-2.5">
-        <span className="inline-flex items-center gap-2 text-xs font-mono text-muted-foreground/70 shrink-0">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-60" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
-          </span>
-          settled on-chain
+    <div className="bg-black px-4 sm:px-6 py-3 flex items-center gap-x-4 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <span className="inline-flex items-center gap-2 text-xs font-mono text-muted-foreground/60 tracking-widest uppercase shrink-0">
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-60" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
         </span>
-        {receipts.map((r) => (
-          <Link
-            key={r._id}
-            href={`/marketplace/receipts/${r._id}`}
-            className="font-mono text-xs text-muted-foreground hover:text-primary transition-colors whitespace-nowrap"
-          >
-            <span className="text-primary">${(r.amountCents / 100).toFixed(2)}</span>{" "}
-            {VERB_LABELS[r.settlementType] ?? r.settlementType} · {formatTime(r.emittedAt)}
-          </Link>
-        ))}
+        Live
+      </span>
+      {receipts.map((r) => (
         <Link
-          href="/marketplace/receipts"
-          className="font-mono text-xs text-muted-foreground/60 hover:text-primary transition-colors whitespace-nowrap"
+          key={r._id}
+          href={`/marketplace/receipts/${r._id}`}
+          className="font-mono text-xs text-muted-foreground hover:text-primary transition-colors whitespace-nowrap shrink-0"
         >
-          all →
+          <span className="text-primary">${(r.amountCents / 100).toFixed(2)}</span>{" "}
+          {VERB_LABELS[r.settlementType] ?? r.settlementType} · {formatTime(r.emittedAt)}
         </Link>
-      </div>
+      ))}
+      <Link
+        href="/marketplace/receipts"
+        className="font-mono text-xs text-muted-foreground/60 hover:text-primary transition-colors whitespace-nowrap shrink-0 ml-auto"
+      >
+        all receipts →
+      </Link>
     </div>
   );
 }

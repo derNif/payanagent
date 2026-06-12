@@ -7,10 +7,11 @@ import { Menu, X } from "lucide-react";
 import { useState, useEffect } from "react";
 
 const navItems = [
-  { href: "/marketplace/offers",    label: "Offers",      icon: "$" },
-  { href: "/marketplace/requests",  label: "Requests",    icon: "!" },
-  { href: "/marketplace/receipts",  label: "Receipts",    icon: "@" },
-  { href: "/leaderboard",           label: "Leaderboard", icon: "%" },
+  { href: "/marketplace",             label: "Overview",    icon: "~" },
+  { href: "/marketplace/offers",      label: "Offers",      icon: "$" },
+  { href: "/marketplace/requests",    label: "Requests",    icon: "!" },
+  { href: "/marketplace/receipts",    label: "Receipts",    icon: "@" },
+  { href: "/marketplace/leaderboard", label: "Leaderboard", icon: "%" },
 ];
 
 export function Sidebar() {
@@ -31,48 +32,6 @@ export function Sidebar() {
     }
     return () => { document.body.style.overflow = ""; };
   }, [open]);
-
-  const sidebarContent = (
-    <>
-      <Link href="/" className="mb-8 inline-block">
-        <Logo size="sm" />
-        <p className="text-xs text-muted-foreground mt-1">agent marketplace</p>
-      </Link>
-
-      <nav className="flex flex-col gap-1 flex-1">
-        {navItems.map((item) => {
-          const isActive =
-            pathname === item.href ||
-            (item.href !== "/marketplace" && pathname.startsWith(item.href));
-
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                isActive
-                  ? "bg-primary/10 text-primary font-medium"
-                  : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-              }`}
-            >
-              <span className="text-base font-mono">{item.icon}</span>
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
-
-      <div className="border-t border-border pt-4 mt-4">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-          Base Network
-        </div>
-        <div className="text-xs text-muted-foreground/60 mt-1 font-mono">
-          x402 + USDC
-        </div>
-      </div>
-    </>
-  );
 
   return (
     <>
@@ -119,8 +78,9 @@ export function Sidebar() {
         <nav className="flex flex-col gap-1 flex-1">
           {navItems.map((item) => {
             const isActive =
-              pathname === item.href ||
-              (item.href !== "/marketplace" && pathname.startsWith(item.href));
+              item.href === "/marketplace"
+                ? pathname === "/marketplace"
+                : pathname.startsWith(item.href);
 
             return (
               <Link
@@ -139,13 +99,22 @@ export function Sidebar() {
           })}
         </nav>
 
-        <div className="border-t border-border pt-4 mt-4">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-            Base Network
-          </div>
-          <div className="text-xs text-muted-foreground/60 mt-1 font-mono">
-            x402 + USDC
+        <div className="border-t border-border pt-4 mt-4 space-y-3">
+          <Link
+            href="/docs"
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors -mx-1"
+          >
+            <span className="text-base font-mono">?</span>
+            Docs
+          </Link>
+          <div className="px-3">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+              Base Network
+            </div>
+            <div className="text-xs text-muted-foreground/60 mt-1 font-mono">
+              x402 + USDC
+            </div>
           </div>
         </div>
       </aside>

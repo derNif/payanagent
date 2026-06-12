@@ -78,7 +78,7 @@ export default async function ReceiptPage({ params }: Props) {
   const confirmed = receipt.status === "confirmed";
 
   return (
-    <div className="max-w-3xl">
+    <div className="max-w-3xl mx-auto">
       <Link
         href="/marketplace/receipts"
         className="text-sm text-muted-foreground hover:text-foreground font-mono"

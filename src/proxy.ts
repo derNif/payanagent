@@ -8,7 +8,7 @@ const CORS_HEADERS = {
   "Access-Control-Max-Age": "86400",
 };
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   // Admin route protection — key checked server-side, never exposed to client
   if (request.nextUrl.pathname.startsWith("/admin")) {
     const adminKey = process.env.ADMIN_KEY;

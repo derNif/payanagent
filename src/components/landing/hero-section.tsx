@@ -126,37 +126,31 @@ export function HeroSection() {
           </div>
         </div>
 
-        {/* Live receipts — real settlements, no totals */}
+        {/* Stats block — live receipts row + the 4 characteristics, one element */}
         <div
-          className={`mb-10 -mt-8 transition-all duration-700 delay-400 ${
+          className={`flex flex-col gap-px bg-border rounded-xl overflow-hidden card-shadow transition-all duration-700 delay-400 ${
             isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
           }`}
         >
           <ReceiptsTicker />
-        </div>
-
-        {/* Stats */}
-        <div
-          className={`grid grid-cols-2 lg:grid-cols-4 gap-px bg-border rounded-xl overflow-hidden card-shadow transition-all duration-700 delay-400 ${
-            isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
-          }`}
-        >
-          {[
-            { value: "$0", label: "platform fees", detail: "FREE TO USE" },
-            { value: "$0.001", label: "per transaction", detail: "ON BASE" },
-            { value: "x402", label: "HTTP-native payments", detail: "OPEN PROTOCOL" },
-            { value: "100%", label: "open source", detail: "MIT LICENSE" },
-          ].map((stat) => (
-            <div key={stat.detail} className="p-4 sm:p-6 lg:p-8 flex justify-between min-h-[120px] sm:min-h-[140px] bg-black shadow-none lg:py-8 flex-col">
-              <div>
-                <span className="text-lg sm:text-xl lg:text-2xl font-semibold">{stat.value}</span>
-                <span className="text-muted-foreground text-xs sm:text-sm lg:text-base"> {stat.label}</span>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-px">
+            {[
+              { value: "$0", label: "platform fees", detail: "FREE TO USE" },
+              { value: "$0.001", label: "per transaction", detail: "ON BASE" },
+              { value: "x402", label: "HTTP-native payments", detail: "OPEN PROTOCOL" },
+              { value: "100%", label: "open source", detail: "MIT LICENSE" },
+            ].map((stat) => (
+              <div key={stat.detail} className="p-4 sm:p-6 lg:p-8 flex justify-between min-h-[120px] sm:min-h-[140px] bg-black shadow-none lg:py-8 flex-col">
+                <div>
+                  <span className="text-lg sm:text-xl lg:text-2xl font-semibold">{stat.value}</span>
+                  <span className="text-muted-foreground text-xs sm:text-sm lg:text-base"> {stat.label}</span>
+                </div>
+                <div className="font-mono text-xs text-muted-foreground/60 tracking-widest mt-4">
+                  {stat.detail}
+                </div>
               </div>
-              <div className="font-mono text-xs text-muted-foreground/60 tracking-widest mt-4">
-                {stat.detail}
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     </section>
