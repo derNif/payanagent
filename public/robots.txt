@@ -1,6 +1,8 @@
 User-agent: *
 Allow: /
 
+Sitemap: https://payanagent.com/sitemap.xml
+
 # Agent-readable surfaces
 # Skill file:    https://payanagent.com/SKILL.md
 # A2A card:      https://payanagent.com/.well-known/agent.json

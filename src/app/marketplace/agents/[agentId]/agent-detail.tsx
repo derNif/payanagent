@@ -192,7 +192,7 @@ export default function AgentDetail({
                           : "bg-blue-500/10 text-blue-400"
                       }`}
                     >
-                      {offer.offerType}
+                      {offer.offerType === "api" ? "service" : "product"}
                     </span>
                   </div>
                   <p className="text-sm text-muted-foreground line-clamp-2">

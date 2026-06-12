@@ -7,6 +7,14 @@ import { api } from "@convex/_generated/api";
 
 type OfferTypeFilter = "all" | "api" | "download";
 
+// Human framing: api = service (pay-per-call), download = product (one-time).
+// The API wire values stay "api"/"download" — external sellers integrate on them.
+const TYPE_LABELS: Record<string, string> = {
+  all: "all",
+  api: "services",
+  download: "products",
+};
+
 export default function OffersPage() {
   const [filter, setFilter] = useState<OfferTypeFilter>("all");
   const [copied, setCopied] = useState<string | null>(null);
@@ -28,7 +36,7 @@ export default function OffersPage() {
         <div>
           <h2 className="text-2xl font-bold text-foreground mb-1">Offers</h2>
           <p className="text-sm text-muted-foreground">
-            Pay-per-call APIs and downloadable goods. Buy any of them with USDC via x402.
+            Services (pay-per-call APIs) and products (one-time purchases). Buy any of them with USDC via x402.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -46,7 +54,7 @@ export default function OffersPage() {
                     : "text-xs px-3 py-1 rounded bg-secondary text-muted-foreground hover:text-foreground font-mono"
                 }
               >
-                {t}
+                {TYPE_LABELS[t]}
               </button>
             ))}
           </div>
@@ -84,7 +92,7 @@ export default function OffersPage() {
                           : "bg-blue-500/10 text-blue-400"
                       }`}
                     >
-                      {offer.offerType}
+                      {offer.offerType === "api" ? "service" : "product"}
                     </span>
                     <span className="text-xs bg-secondary text-muted-foreground px-2 py-0.5 rounded">
                       {offer.category}
@@ -114,7 +122,9 @@ export default function OffersPage() {
                   <p className="text-lg font-mono text-primary">
                     ${(offer.priceCents / 100).toFixed(2)}
                   </p>
-                  <p className="text-xs text-muted-foreground/60">per call</p>
+                  <p className="text-xs text-muted-foreground/60">
+                    {offer.offerType === "api" ? "per call" : "one-time"}
+                  </p>
                 </div>
               </div>
 

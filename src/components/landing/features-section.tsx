@@ -5,39 +5,35 @@ import { AsciiTorus } from "./ascii-torus";
 
 const asciiAnimations = {
   registry: (frame: number) => {
-    const methods = ["GET ", "POST", "PUT ", "GET "];
-    const arrows = [
-      "────────>",
-      "========>",
-      "-------->",
-      "────────>",
+    const flows = [
+      ["──────────►", "◄───402────", "───USDC───►"],
+      ["═════════►─", "◄──402─────", "──USDC────►"],
+      ["─────────►─", "◄─402──────", "─USDC─────►"],
+      ["══════════►", "◄────402───", "────USDC──►"],
     ];
-    const m = methods[frame % methods.length];
-    const a = arrows[frame % arrows.length];
-    return `  ${m} /api
+    const [a, b, c] = flows[frame % flows.length];
+    return `  POST /buy
   ${a}
-  <────────
-  { 402>pay }`;
+  ${b}
+  ${c}
+  200 + receipt`;
   },
   marketplace: (frame: number) => {
-    const arrows = ["─", "=", "-", "="];
-    const pulse = [">", ">", "-", ">"];
+    const arrows = ["──►", "═══", "──►", "···"];
     const a = arrows[frame % arrows.length];
-    const p = pulse[frame % pulse.length];
-    return `  ┌───┐ ┌───┐
-  │REQ├${a}${a}${p}│BID│
-  └───┘ └─┬─┘
-       ┌──┴──┐
-       │ESCR$│
-       └─────┘`;
+    return `  ┌───┐    ┌───┐
+  │REQ│ ${a}│BID│
+  └─┬─┘    └─┬─┘
+    └─escrow─┘
+        $`;
   },
   receipts: (frame: number) => {
-    const check = ["#", "=", "#", "="];
-    const c = check[frame % check.length];
-    return `  ┌─RECEIPT─┐
-  │ $0.05   │
-  │ A → B   │
-  │ tx:0x${c}${c} │
+    const link = ["A ──► B", "A ═══ B", "A ──► B", "A ─── B"];
+    const l = link[frame % link.length];
+    return `  ┌─────────┐
+  │ RECEIPT │
+  │  $0.05  │
+  │ ${l} │
   └─signed──┘`;
   },
   payments: (frame: number) => {
@@ -45,35 +41,35 @@ const asciiAnimations = {
     const bars = [":", "=", "#", "="];
     const l = lock[frame % lock.length];
     const b = bars[frame % bars.length];
-    return `  ╔═════╗
-  ║  ${l}  ║
-  ╠═════╣
+    return `  ╔══════╗
+  ║   ${l}  ║
+  ╠══════╣
   ║${b}USDC${b}║
-  ╚═════╝`;
+  ╚══════╝`;
   },
   discovery: (frame: number) => {
     const eye = ["(o)", " o ", "(o)", " o "];
     const e = eye[frame % eye.length];
-    return `    .---.
+    return `    .───.
    /     \\
   |  ${e}  |
    \\     /
-    '---'`;
+    '───'`;
   },
   mcp: (frame: number) => {
     const cursor = ["▌", " ", "▌", " "];
     const c = cursor[frame % cursor.length];
-    return `  $ npx -y
-    @payanagent
-    /mcp ${c}
-  [6 tools ok]`;
+    return `  $ npx -y \\
+    @payanagent/mcp ${c}
+  ✓ 9 tools loaded
+  > buy, offer, ...`;
   },
 };
 
 const features = [
   {
     title: "Offers",
-    description: "List what you sell — pay-per-call APIs or downloadable goods. Agents buy with one x402-paid call. Settlement goes straight to your wallet.",
+    description: "List what you sell — services (pay-per-call APIs) or products (one-time purchases). Agents buy with one x402-paid call. Settlement goes straight to your wallet.",
     animationKey: "registry" as const,
   },
   {

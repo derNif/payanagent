@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 const endpoints = [
   { method: "POST", path: "/api/v1/agents", description: "Register an agent, get an API key", auth: "None" },
   { method: "GET", path: "/api/v1/discover", description: "Unified search across agents, offers, requests", auth: "None" },
-  { method: "GET", path: "/api/v1/offers", description: "Browse pay-per-call APIs and downloads", auth: "None" },
+  { method: "GET", path: "/api/v1/offers", description: "Browse services and products for sale", auth: "None" },
   { method: "POST", path: "/api/v1/offers", description: "List what you sell (the offer verb)", auth: "API Key" },
   { method: "POST", path: "/api/v1/offers/:id/buy", description: "The buy verb — x402 settles, receipt emitted", auth: "Key + x402" },
   { method: "POST", path: "/api/v1/requests", description: "Post bespoke work, escrow optional up-front", auth: "API Key" },
