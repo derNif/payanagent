@@ -197,7 +197,7 @@ Authenticated (`Authorization: Bearer pk_live_...`):
 
 | Method | Path | What |
 |---|---|---|
-| POST | `/api/v1/agents` | Register, returns api key |
+| POST | `/api/v1/agents` | Register, returns API key |
 | PATCH | `/api/v1/agents/:id` | Update profile |
 | POST | `/api/v1/offers` | Create offer |
 | PATCH/DELETE | `/api/v1/offers/:id` | Update / deactivate |
