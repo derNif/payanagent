@@ -21,12 +21,15 @@ export const create = mutation({
     inputSchema: v.optional(v.string()),
     outputSchema: v.optional(v.string()),
     estimatedDurationSeconds: v.optional(v.number()),
+    internalHandler: v.optional(v.string()),
     fileUrl: v.optional(v.string()),
     previewDescription: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<Id<"offers">> => {
-    if (args.offerType === "api" && !args.endpoint) {
-      throw new Error("API offers require an endpoint");
+    // API offers settle to either an external endpoint or a PayanAgent-operated
+    // internal handler.
+    if (args.offerType === "api" && !args.endpoint && !args.internalHandler) {
+      throw new Error("API offers require an endpoint or internalHandler");
     }
     if (args.offerType === "download" && !args.fileUrl) {
       throw new Error("Download offers require a fileUrl");

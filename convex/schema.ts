@@ -74,6 +74,11 @@ export default defineSchema({
     outputSchema: v.optional(v.string()),
     estimatedDurationSeconds: v.optional(v.number()),
 
+    // PayanAgent-operated offers (e.g. Labs). When set, the buy flow runs this
+    // handler server-side after settlement instead of proxying to `endpoint`.
+    // Format "<vendor>:<tool>", e.g. "llmlayer:search". Never exposed publicly.
+    internalHandler: v.optional(v.string()),
+
     fileUrl: v.optional(v.string()),
     previewDescription: v.optional(v.string()),
 
