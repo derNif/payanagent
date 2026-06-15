@@ -10,6 +10,7 @@ import {
   getNetwork,
   getNetworkId,
 } from "@/lib/x402";
+import { runInternalHandler } from "@/lib/internal-offers";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -129,6 +130,33 @@ export async function POST(
       latencyMs: Date.now() - startedAt,
     },
   );
+
+  // PayanAgent-operated (internal) offer: run the handler server-side. The
+  // backend key lives only on the server and is never exposed as a callable
+  // route, so it can't be drained by unpaid callers.
+  if (offer.internalHandler) {
+    try {
+      const body = await request.text();
+      const input = body ? JSON.parse(body) : {};
+      const result = await runInternalHandler(offer.internalHandler, input);
+      return NextResponse.json(result, {
+        headers: {
+          "X-Receipt-Id": String(receiptId),
+          "X-Tx-Hash": settlement.txHash || "",
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "service call failed";
+      return NextResponse.json(
+        {
+          error: message,
+          receiptId,
+          message: "Payment settled but the service call failed.",
+        },
+        { status: 502 },
+      );
+    }
+  }
 
   // Download-type offer: return fileUrl
   if (offer.offerType === "download") {
