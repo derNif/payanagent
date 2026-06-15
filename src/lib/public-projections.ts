@@ -45,12 +45,15 @@ export function toPublicService<T extends EndpointBearing>(
 }
 
 // Offers — same endpoint-redaction logic as services. fileUrl is private until
-// the buyer settles; never exposed in public projections.
-type OfferShape = { endpoint?: string; fileUrl?: string };
+// the buyer settles; never exposed in public projections. internalHandler names
+// the PayanAgent-operated backend (e.g. "labs:search") — stripped entirely
+// so the backing provider stays private.
+type OfferShape = { endpoint?: string; fileUrl?: string; internalHandler?: string };
 
 export function toPublicOffer<T extends OfferShape>(offer: T) {
-  const { fileUrl, endpoint, ...rest } = offer;
+  const { fileUrl, endpoint, internalHandler, ...rest } = offer;
   void fileUrl;
+  void internalHandler;
   return {
     ...rest,
     endpoint: redactEndpoint(endpoint),
