@@ -4,6 +4,7 @@ import { authenticateRequest } from "@/lib/auth";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { toPublicOffer } from "@/lib/public-projections";
 import { updateOfferSchema, validateBody } from "@/lib/validation";
+import { assertPublicHttpUrl } from "@/lib/ssrf";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -71,6 +72,18 @@ export async function PATCH(
 
   const { data, error: validationError } = await validateBody(request, updateOfferSchema);
   if (validationError) return validationError;
+
+  if (data.endpoint) {
+    try {
+      await assertPublicHttpUrl(data.endpoint);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "invalid endpoint";
+      return NextResponse.json(
+        { error: `endpoint not allowed: ${message}` },
+        { status: 400 },
+      );
+    }
+  }
 
   try {
     await convex.mutation(api.offers.update, {

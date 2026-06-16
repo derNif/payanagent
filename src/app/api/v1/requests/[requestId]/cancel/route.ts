@@ -86,10 +86,48 @@ export async function POST(
       { status: 400 },
     );
   }
-  const refundAmount = req.agreedPriceCents ?? req.budgetMaxCents;
+
+  // Acquire the atomic settlement lock BEFORE the on-chain refund so concurrent
+  // cancel/cancel or cancel/approve can't double-spend the platform wallet.
+  try {
+    await convex.mutation(api.requests.claimForSettlement, {
+      requestId: req._id,
+      allowedFrom: ["open", "accepted", "fulfilled"],
+    });
+  } catch {
+    return NextResponse.json(
+      { error: "Request is already being settled" },
+      { status: 409 },
+    );
+  }
+
+  // Idempotency: if a release/refund already moved funds, finalize without
+  // transferring again.
+  const existing = await convex.query(api.receipts.getSettlementForRequest, {
+    requestId: req._id,
+  });
+  if (existing) {
+    await convex.mutation(api.requests.markCancelled, {
+      requestId: req._id,
+      reason: data.reason,
+      refundReceiptId: existing._id,
+    });
+    return NextResponse.json({
+      ok: true,
+      refunded: true,
+      receiptId: existing._id,
+      txHash: existing.txHash,
+    });
+  }
+
+  // Refund the amount actually deposited (not the agreed price) so the surplus
+  // on an open-request escrow isn't stranded.
+  const refundAmount =
+    req.escrowDepositedCents ?? req.agreedPriceCents ?? req.budgetMaxCents;
 
   const refund = await releaseEscrow(buyer.walletAddress, refundAmount);
   if (!refund.success || !refund.txHash) {
+    await convex.mutation(api.requests.revertSettlement, { requestId: req._id });
     return NextResponse.json(
       { error: `Refund failed: ${refund.error || "unknown"}` },
       { status: 502 },

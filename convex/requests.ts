@@ -59,10 +59,52 @@ export const linkEscrowReceipt = mutation({
   args: {
     requestId: v.id("requests"),
     escrowReceiptId: v.id("receipts"),
+    escrowDepositedCents: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     await ctx.db.patch(args.requestId, {
       escrowReceiptId: args.escrowReceiptId,
+      escrowDepositedCents: args.escrowDepositedCents,
+    });
+  },
+});
+
+// Atomically claim a request for settlement (escrow release/refund). Convex
+// mutations are serializable, so of N concurrent callers exactly one sees an
+// allowed status and flips it to `completing`; the rest throw. This is the
+// lock that MUST be acquired BEFORE any on-chain releaseEscrow so concurrent
+// approve/approve or approve/cancel can't double-spend the platform wallet.
+export const claimForSettlement = mutation({
+  args: {
+    requestId: v.id("requests"),
+    allowedFrom: v.array(v.string()),
+  },
+  handler: async (ctx, args): Promise<Doc<"requests">> => {
+    const req = await ctx.db.get(args.requestId);
+    if (!req) throw new Error("Request not found");
+    if (!args.allowedFrom.includes(req.status)) {
+      throw new Error(`cannot settle in status: ${req.status}`);
+    }
+    await ctx.db.patch(args.requestId, {
+      status: "completing",
+      lockedFromStatus: req.status,
+    });
+    return { ...req, status: "completing", lockedFromStatus: req.status };
+  },
+});
+
+// Release the lock back to the pre-claim status (on-chain transfer failed).
+export const revertSettlement = mutation({
+  args: { requestId: v.id("requests") },
+  handler: async (ctx, args) => {
+    const req = await ctx.db.get(args.requestId);
+    if (!req) throw new Error("Request not found");
+    if (req.status !== "completing") return; // nothing to revert
+    const prev =
+      (req.lockedFromStatus as Doc<"requests">["status"] | undefined) ?? "fulfilled";
+    await ctx.db.patch(args.requestId, {
+      status: prev,
+      lockedFromStatus: undefined,
     });
   },
 });
@@ -166,13 +208,16 @@ export const markApproved = mutation({
   handler: async (ctx, args) => {
     const req = await ctx.db.get(args.requestId);
     if (!req) throw new Error("Request not found");
-    if (req.status !== "fulfilled") {
+    // `completing` = escrow path (lock acquired before release); `fulfilled` =
+    // non-escrow path (buyer pays provider directly, no platform lock needed).
+    if (req.status !== "fulfilled" && req.status !== "completing") {
       throw new Error(`cannot approve in status: ${req.status}`);
     }
     await ctx.db.patch(args.requestId, {
       status: "approved",
       approvedAt: Date.now(),
       settlementReceiptId: args.settlementReceiptId,
+      lockedFromStatus: undefined,
     });
   },
 });
@@ -194,6 +239,7 @@ export const markCancelled = mutation({
       cancelledAt: Date.now(),
       cancelReason: args.reason,
       settlementReceiptId: args.refundReceiptId,
+      lockedFromStatus: undefined,
     });
   },
 });
@@ -279,6 +325,7 @@ export const search = query({
         v.literal("open"),
         v.literal("accepted"),
         v.literal("fulfilled"),
+        v.literal("completing"),
         v.literal("approved"),
         v.literal("cancelled"),
         v.literal("disputed"),

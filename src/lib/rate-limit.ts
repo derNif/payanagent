@@ -131,10 +131,19 @@ export async function checkRateLimit(
 }
 
 /**
- * Get the client IP from a request (handles proxies like Vercel).
+ * Get the client IP from a request, using only platform-trusted sources.
+ * Vercel sets `x-real-ip` to the true client IP (clients cannot override it).
+ * We never trust the LEFT-most `x-forwarded-for` hop, which is client-supplied
+ * and lets an attacker land in a fresh rate-limit bucket per request; we take
+ * the RIGHT-most hop (appended by the trusted proxy) as a fallback.
  */
 export function getClientIp(request: Request): string {
-  const forwarded = (request.headers.get("x-forwarded-for") || "").split(",")[0].trim();
-  const real = request.headers.get("x-real-ip") || "";
-  return forwarded || real || "unknown";
+  const real = (request.headers.get("x-real-ip") || "").trim();
+  if (real) return real;
+  const hops = (request.headers.get("x-forwarded-for") || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (hops.length > 0) return hops[hops.length - 1];
+  return "unknown";
 }

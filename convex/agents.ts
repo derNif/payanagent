@@ -1,5 +1,18 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { Doc } from "./_generated/dataModel";
+
+const PLATFORM_INTERNAL_KEY = process.env.PLATFORM_INTERNAL_KEY ?? "";
+
+// Public agent reads must not leak PII (ownerEmail) or operator-private growth
+// attribution (discoverySource) — any exported query is reachable unauthenticated.
+export type PublicAgent = Omit<Doc<"agents">, "ownerEmail" | "discoverySource">;
+function publicAgent(a: Doc<"agents">): PublicAgent {
+  const { ownerEmail, discoverySource, ...rest } = a;
+  void ownerEmail;
+  void discoverySource;
+  return rest;
+}
 
 export const create = mutation({
   args: {
@@ -49,20 +62,22 @@ export const create = mutation({
 
 export const getById = query({
   args: { agentId: v.id("agents") },
-  handler: async (ctx, args) => {
-    return await ctx.db.get(args.agentId);
+  handler: async (ctx, args): Promise<PublicAgent | null> => {
+    const agent = await ctx.db.get(args.agentId);
+    return agent ? publicAgent(agent) : null;
   },
 });
 
 export const getByWallet = query({
   args: { walletAddress: v.string() },
-  handler: async (ctx, args) => {
-    return await ctx.db
+  handler: async (ctx, args): Promise<PublicAgent | null> => {
+    const agent = await ctx.db
       .query("agents")
       .withIndex("by_walletAddress", (q) =>
         q.eq("walletAddress", args.walletAddress)
       )
       .first();
+    return agent ? publicAgent(agent) : null;
   },
 });
 
@@ -76,16 +91,28 @@ export const list = query({
       )
     ),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<PublicAgent[]> => {
     // Defensive cap so this can't become the next services.listByAgent.
     const LIMIT = 500;
-    if (args.status) {
-      return await ctx.db
-        .query("agents")
-        .withIndex("by_status", (q) => q.eq("status", args.status!))
-        .take(LIMIT);
+    const rows = args.status
+      ? await ctx.db
+          .query("agents")
+          .withIndex("by_status", (q) => q.eq("status", args.status!))
+          .take(LIMIT)
+      : await ctx.db.query("agents").take(LIMIT);
+    return rows.map(publicAgent);
+  },
+});
+
+// Full agent rows incl. ownerEmail/discoverySource — platform-secret gated, for
+// the operator admin view only. Never exposed to public callers.
+export const listAdmin = query({
+  args: { platformSecret: v.string() },
+  handler: async (ctx, args): Promise<Doc<"agents">[]> => {
+    if (!PLATFORM_INTERNAL_KEY || args.platformSecret !== PLATFORM_INTERNAL_KEY) {
+      throw new Error("unauthorized: invalid platform secret");
     }
-    return await ctx.db.query("agents").take(LIMIT);
+    return await ctx.db.query("agents").take(500);
   },
 });
 

@@ -105,24 +105,35 @@ export function verifyPaymentIntegrity(
   const accepted = payload.accepted;
   if (!accepted) return { valid: false, error: "Missing accepted requirements in payment" };
 
-  // Verify payTo matches the expected recipient (seller for direct buys,
-  // platform wallet for escrow)
-  if (accepted.payTo && accepted.payTo.toLowerCase() !== expectedPayTo.toLowerCase()) {
+  // Fail closed: every binding field must be PRESENT and EQUAL. A missing field
+  // is an attacker omitting it to skip the check — treat as invalid, not waived.
+
+  // payTo = the expected recipient (seller for direct buys, platform for escrow)
+  if (!accepted.payTo) {
+    return { valid: false, error: "Payment is missing payTo" };
+  }
+  if (accepted.payTo.toLowerCase() !== expectedPayTo.toLowerCase()) {
     return { valid: false, error: "Payment recipient does not match expected recipient" };
   }
 
-  // Verify amount matches expected price
+  // amount = exact expected price in USDC base units
   const expectedBaseUnits = centsToUsdcBaseUnits(expectedAmountCents);
-  if (accepted.amount && String(accepted.amount) !== expectedBaseUnits) {
+  if (accepted.amount === undefined || accepted.amount === null) {
+    return { valid: false, error: "Payment is missing amount" };
+  }
+  if (String(accepted.amount) !== expectedBaseUnits) {
     return {
       valid: false,
       error: `Payment amount mismatch: expected ${expectedBaseUnits}, got ${accepted.amount}`,
     };
   }
 
-  // Verify network matches configured network
+  // network = the configured chain
   const expectedNetworkId = CHAIN_IDS[NETWORK] || CHAIN_IDS["base"];
-  if (accepted.network && accepted.network !== expectedNetworkId) {
+  if (!accepted.network) {
+    return { valid: false, error: "Payment is missing network" };
+  }
+  if (accepted.network !== expectedNetworkId) {
     return { valid: false, error: `Network mismatch: expected ${expectedNetworkId}, got ${accepted.network}` };
   }
 

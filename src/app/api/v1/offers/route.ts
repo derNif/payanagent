@@ -4,6 +4,7 @@ import { authenticateRequest } from "@/lib/auth";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { toPublicOffer } from "@/lib/public-projections";
 import { createOfferSchema, validateBody } from "@/lib/validation";
+import { assertPublicHttpUrl } from "@/lib/ssrf";
 import { api } from "@convex/_generated/api";
 
 // GET /api/v1/offers — Public list/search.
@@ -61,6 +62,20 @@ export async function POST(request: NextRequest) {
 
   const { data, error: validationError } = await validateBody(request, createOfferSchema);
   if (validationError) return validationError;
+
+  // SSRF: a seller's endpoint is fetched server-side on every buy — reject
+  // private/metadata/internal targets at creation time.
+  if (data.endpoint) {
+    try {
+      await assertPublicHttpUrl(data.endpoint);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "invalid endpoint";
+      return NextResponse.json(
+        { error: `endpoint not allowed: ${message}` },
+        { status: 400 },
+      );
+    }
+  }
 
   try {
     const convex = getConvexClient();

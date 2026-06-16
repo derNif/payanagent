@@ -28,22 +28,27 @@ export async function authenticateRequest(
   request: NextRequest
 ): Promise<{ agent: any; error?: never } | { agent?: never; error: NextResponse }> {
   const authHeader = request.headers.get("authorization");
+  const ip = getClientIp(request);
+
+  // Always apply a per-IP ceiling FIRST, before any DB lookup. Otherwise a
+  // client can rotate the bearer token to spread across per-key buckets and
+  // fan out unbounded key lookups (query-amplification DoS).
+  const ipRl = await checkRateLimit(`authip:${ip}`, RATE_LIMITS.authenticated);
+  if (!ipRl.allowed) return { error: tooManyRequestsResponse(ipRl.resetAt) };
 
   if (!authHeader?.startsWith("Bearer ")) {
-    const ip = getClientIp(request);
     const rl = await checkRateLimit(`unauth:${ip}`, RATE_LIMITS.unauthenticated);
     if (!rl.allowed) return { error: tooManyRequestsResponse(rl.resetAt) };
     return { error: unauthorizedResponse() };
   }
 
   const apiKey = authHeader.slice(7);
-  const keyPrefix = apiKey.slice(0, 12);
+  const keyHash = hashApiKey(apiKey);
 
-  // Rate limit by key prefix before DB lookup
-  const rl = await checkRateLimit(`key:${keyPrefix}`, RATE_LIMITS.authenticated);
+  // Rate limit by the FULL key hash (not the attacker-controllable prefix).
+  const rl = await checkRateLimit(`key:${keyHash}`, RATE_LIMITS.authenticated);
   if (!rl.allowed) return { error: tooManyRequestsResponse(rl.resetAt) };
 
-  const keyHash = hashApiKey(apiKey);
   const convex = getConvexClient();
 
   const keyRecord = await convex.query(api.apiKeys.getByHash, { keyHash });

@@ -167,12 +167,50 @@ export async function POST(
     });
   }
 
-  // Release escrow on-chain
-  const release = await releaseEscrow(
-    provider.walletAddress,
-    req.agreedPriceCents,
-  );
+  if (!provider.walletAddress) {
+    return NextResponse.json(
+      { error: "Provider has no wallet address configured" },
+      { status: 503 },
+    );
+  }
+
+  // Acquire the atomic settlement lock BEFORE any on-chain transfer. Convex
+  // serializes this, so concurrent approve/approve or approve/cancel calls
+  // can't both reach releaseEscrow and double-spend the shared platform wallet.
+  try {
+    await convex.mutation(api.requests.claimForSettlement, {
+      requestId: req._id,
+      allowedFrom: ["fulfilled"],
+    });
+  } catch {
+    return NextResponse.json(
+      { error: "Request is already being settled" },
+      { status: 409 },
+    );
+  }
+
+  // Idempotency: if a release/refund already moved funds for this request,
+  // finalize without transferring again.
+  const existing = await convex.query(api.receipts.getSettlementForRequest, {
+    requestId: req._id,
+  });
+  if (existing) {
+    await convex.mutation(api.requests.markApproved, {
+      requestId: req._id,
+      settlementReceiptId: existing._id,
+    });
+    return NextResponse.json({
+      ok: true,
+      receiptId: existing._id,
+      txHash: existing.txHash,
+    });
+  }
+
+  // Release the agreed price to the provider on-chain.
+  const release = await releaseEscrow(provider.walletAddress, req.agreedPriceCents);
   if (!release.success || !release.txHash) {
+    // Transfer failed — revert the lock so the buyer can retry.
+    await convex.mutation(api.requests.revertSettlement, { requestId: req._id });
     return NextResponse.json(
       { error: `Escrow release failed: ${release.error || "unknown"}` },
       { status: 502 },
@@ -199,7 +237,38 @@ export async function POST(
     },
   );
 
-  // Mark the request approved
+  // Refund any surplus (deposited budget − agreed price) back to the buyer, so
+  // an open request whose winning bid was below budget doesn't strand funds.
+  const deposited = req.escrowDepositedCents ?? req.agreedPriceCents;
+  const surplus = deposited - req.agreedPriceCents;
+  let refundReceiptId: Id<"receipts"> | undefined;
+  let refundTxHash: string | undefined;
+  if (surplus > 0) {
+    const buyer = await convex.query(api.agents.getById, { agentId: req.buyerId });
+    if (buyer?.walletAddress) {
+      const refund = await releaseEscrow(buyer.walletAddress, surplus);
+      if (refund.success && refund.txHash) {
+        refundTxHash = refund.txHash;
+        refundReceiptId = await convex.mutation(api.receipts.recordSettlement, {
+          platformSecret,
+          buyerId: req.buyerId,
+          sellerId: req.buyerId,
+          requestId: req._id,
+          amountCents: surplus,
+          currency: "USDC",
+          chain: getNetwork(),
+          network: getNetworkId(),
+          txHash: refund.txHash,
+          facilitatorUrl: getFacilitatorUrl(),
+          settlementType: "escrow_refund",
+          status: "confirmed",
+          latencyMs: Date.now() - startedAt,
+        });
+      }
+    }
+  }
+
+  // Finalize: completing -> approved.
   await convex.mutation(api.requests.markApproved, {
     requestId: req._id,
     settlementReceiptId: receiptId,
@@ -209,5 +278,8 @@ export async function POST(
     ok: true,
     receiptId,
     txHash: release.txHash,
+    surplusRefundedCents: refundTxHash ? surplus : 0,
+    refundReceiptId,
+    refundTxHash,
   });
 }

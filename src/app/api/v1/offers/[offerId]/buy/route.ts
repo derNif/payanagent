@@ -11,6 +11,7 @@ import {
   getNetworkId,
 } from "@/lib/x402";
 import { runInternalHandler } from "@/lib/internal-offers";
+import { assertPublicHttpUrl } from "@/lib/ssrf";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -40,8 +41,11 @@ export async function POST(
 
   let offer;
   try {
-    offer = await convex.query(api.offers.getById, {
+    // Internal getter: the buy path needs endpoint/fileUrl/internalHandler,
+    // which the public getById projects out.
+    offer = await convex.query(api.offers.getByIdInternal, {
       offerId: offerId as Id<"offers">,
+      platformSecret,
     });
   } catch {
     return NextResponse.json({ error: "Invalid offer ID" }, { status: 400 });
@@ -175,14 +179,28 @@ export async function POST(
     );
   }
 
+  // SSRF guard: re-validate the endpoint right before fetching so a host that
+  // now resolves to a private/metadata address is rejected (defends against
+  // DNS rebinding even though we also validate at offer create/update time).
+  try {
+    await assertPublicHttpUrl(offer.endpoint);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "blocked endpoint";
+    return NextResponse.json(
+      { error: `Offer endpoint not allowed: ${message}`, receiptId },
+      { status: 502 },
+    );
+  }
+
   try {
     const body = await request.text();
     // Never forward internal secrets to seller endpoints — they are
-    // arbitrary external servers.
+    // arbitrary external servers. Don't follow redirects into internal targets.
     const proxyResponse = await fetch(offer.endpoint, {
       method: offer.httpMethod || "POST",
       headers: { "Content-Type": "application/json" },
       body: body || undefined,
+      redirect: "manual",
     });
 
     const responseData = await proxyResponse.text();
