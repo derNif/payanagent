@@ -2,6 +2,23 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
 
+const PLATFORM_INTERNAL_KEY = process.env.PLATFORM_INTERNAL_KEY ?? "";
+
+// Any exported query is reachable unauthenticated via the public Convex URL, so
+// public reads must never return the seller's raw `endpoint` (may embed creds),
+// the paid `fileUrl` deliverable, or the operator-private `internalHandler`.
+export type PublicOffer = Omit<
+  Doc<"offers">,
+  "endpoint" | "fileUrl" | "internalHandler"
+>;
+function publicOffer(o: Doc<"offers">): PublicOffer {
+  const { endpoint, fileUrl, internalHandler, ...rest } = o;
+  void endpoint;
+  void fileUrl;
+  void internalHandler;
+  return rest;
+}
+
 // Offers — what agents sell on PayanAgent.
 // Two shapes:
 //   api      = pay-per-call HTTP endpoint, x402-gated through PayanAgent
@@ -77,7 +94,20 @@ export const deactivate = mutation({
 
 export const getById = query({
   args: { offerId: v.id("offers") },
+  handler: async (ctx, args): Promise<PublicOffer | null> => {
+    const offer = await ctx.db.get(args.offerId);
+    return offer ? publicOffer(offer) : null;
+  },
+});
+
+// Full offer doc incl. endpoint/fileUrl/internalHandler — platform-secret gated,
+// for the settlement (buy) path only. Never exposed to public callers.
+export const getByIdInternal = query({
+  args: { offerId: v.id("offers"), platformSecret: v.string() },
   handler: async (ctx, args): Promise<Doc<"offers"> | null> => {
+    if (!PLATFORM_INTERNAL_KEY || args.platformSecret !== PLATFORM_INTERNAL_KEY) {
+      throw new Error("unauthorized: invalid platform secret");
+    }
     return await ctx.db.get(args.offerId);
   },
 });
@@ -87,22 +117,24 @@ export const listActive = query({
     offerType: v.optional(v.union(v.literal("api"), v.literal("download"))),
     limit: v.optional(v.number()),
   },
-  handler: async (ctx, args): Promise<Doc<"offers">[]> => {
+  handler: async (ctx, args): Promise<PublicOffer[]> => {
     const limit = Math.min(args.limit ?? 100, 500);
     if (args.offerType) {
-      return await ctx.db
+      const rows = await ctx.db
         .query("offers")
         .withIndex("by_offerType", (q) =>
           q.eq("offerType", args.offerType!).eq("isActive", true),
         )
         .order("desc")
         .take(limit);
+      return rows.map(publicOffer);
     }
-    return await ctx.db
+    const rows = await ctx.db
       .query("offers")
       .filter((q) => q.eq(q.field("isActive"), true))
       .order("desc")
       .take(limit);
+    return rows.map(publicOffer);
   },
 });
 
@@ -179,19 +211,21 @@ export const listBySeller = query({
     sellerId: v.id("agents"),
     includeInactive: v.optional(v.boolean()),
   },
-  handler: async (ctx, args): Promise<Doc<"offers">[]> => {
+  handler: async (ctx, args): Promise<PublicOffer[]> => {
     if (args.includeInactive) {
-      return await ctx.db
+      const rows = await ctx.db
         .query("offers")
         .filter((q) => q.eq(q.field("sellerId"), args.sellerId))
         .collect();
+      return rows.map(publicOffer);
     }
-    return await ctx.db
+    const rows = await ctx.db
       .query("offers")
       .withIndex("by_sellerId", (q) =>
         q.eq("sellerId", args.sellerId).eq("isActive", true),
       )
       .collect();
+    return rows.map(publicOffer);
   },
 });
 
@@ -200,14 +234,15 @@ export const listByCategory = query({
     category: v.string(),
     limit: v.optional(v.number()),
   },
-  handler: async (ctx, args): Promise<Doc<"offers">[]> => {
+  handler: async (ctx, args): Promise<PublicOffer[]> => {
     const limit = Math.min(args.limit ?? 50, 200);
-    return await ctx.db
+    const rows = await ctx.db
       .query("offers")
       .withIndex("by_category", (q) =>
         q.eq("category", args.category).eq("isActive", true),
       )
       .take(limit);
+    return rows.map(publicOffer);
   },
 });
 
@@ -218,9 +253,9 @@ export const search = query({
     offerType: v.optional(v.union(v.literal("api"), v.literal("download"))),
     limit: v.optional(v.number()),
   },
-  handler: async (ctx, args): Promise<Doc<"offers">[]> => {
+  handler: async (ctx, args): Promise<PublicOffer[]> => {
     const limit = Math.min(args.limit ?? 50, 200);
-    return await ctx.db
+    const rows = await ctx.db
       .query("offers")
       .withSearchIndex("search_offers", (q) => {
         let s = q.search("description", args.query).eq("isActive", true);
@@ -229,5 +264,6 @@ export const search = query({
         return s;
       })
       .take(limit);
+    return rows.map(publicOffer);
   },
 });

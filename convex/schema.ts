@@ -101,6 +101,9 @@ export default defineSchema({
 
     budgetMaxCents: v.number(),
     agreedPriceCents: v.optional(v.number()),
+    // The amount actually escrowed on-chain at deposit time (so refunds/surplus
+    // are computed against what was really collected, not re-derived).
+    escrowDepositedCents: v.optional(v.number()),
 
     inputPayload: v.optional(v.string()),
     outputPayload: v.optional(v.string()),
@@ -109,10 +112,17 @@ export default defineSchema({
     escrowReceiptId: v.optional(v.id("receipts")),
     settlementReceiptId: v.optional(v.id("receipts")),
 
+    // Status the request was in before a settlement claim (used to revert the
+    // `completing` lock if the on-chain transfer fails).
+    lockedFromStatus: v.optional(v.string()),
+
     status: v.union(
       v.literal("open"),
       v.literal("accepted"),
       v.literal("fulfilled"),
+      // `completing` is an atomic lock acquired BEFORE an on-chain escrow
+      // transfer so concurrent approve/cancel can't double-spend the wallet.
+      v.literal("completing"),
       v.literal("approved"),
       v.literal("cancelled"),
       v.literal("disputed"),

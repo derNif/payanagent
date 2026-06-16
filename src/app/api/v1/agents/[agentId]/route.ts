@@ -33,6 +33,7 @@ export async function GET(
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
 
+    // PII already stripped in the Convex query; strip again at the boundary.
     return NextResponse.json(toPublicAgent(targetAgent));
   } catch {
     return NextResponse.json({ error: "Invalid agent ID" }, { status: 400 });

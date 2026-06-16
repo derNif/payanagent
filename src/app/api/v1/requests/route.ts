@@ -182,6 +182,7 @@ export async function POST(request: NextRequest) {
     await convex.mutation(api.requests.linkEscrowReceipt, {
       requestId,
       escrowReceiptId: receiptId,
+      escrowDepositedCents: escrowAmountCents,
     });
   }
 

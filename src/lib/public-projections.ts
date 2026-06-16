@@ -1,11 +1,13 @@
-export function toPublicAgent<T extends { ownerEmail?: string; discoverySource?: string }>(
+// Defense-in-depth REST projection. The Convex public queries already strip
+// these, but stripping again at the HTTP boundary is cheap and covers any raw
+// doc that reaches a route. Accepts full or already-projected inputs.
+export function toPublicAgent<T extends object>(
   agent: T
 ): Omit<T, "ownerEmail" | "discoverySource"> {
-  // ownerEmail is PII; discoverySource is operator-private growth attribution.
-  const { ownerEmail, discoverySource, ...rest } = agent;
+  const { ownerEmail, discoverySource, ...rest } = agent as Record<string, unknown>;
   void ownerEmail;
   void discoverySource;
-  return rest;
+  return rest as Omit<T, "ownerEmail" | "discoverySource">;
 }
 
 type EndpointBearing = { endpoint?: string };
@@ -48,15 +50,16 @@ export function toPublicService<T extends EndpointBearing>(
 // the buyer settles; never exposed in public projections. internalHandler names
 // the PayanAgent-operated backend (e.g. "labs:search") — stripped entirely
 // so the backing provider stays private.
-type OfferShape = { endpoint?: string; fileUrl?: string; internalHandler?: string };
-
-export function toPublicOffer<T extends OfferShape>(offer: T) {
-  const { fileUrl, endpoint, internalHandler, ...rest } = offer;
+export function toPublicOffer<T extends object>(offer: T) {
+  const { fileUrl, endpoint, internalHandler, ...rest } = offer as Record<
+    string,
+    unknown
+  >;
   void fileUrl;
   void internalHandler;
   return {
     ...rest,
-    endpoint: redactEndpoint(endpoint),
+    endpoint: redactEndpoint(endpoint as string | undefined),
   };
 }
 

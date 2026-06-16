@@ -8,10 +8,19 @@ import { Doc, Id } from "./_generated/dataModel";
 // HMAC signing via WebCrypto (works in V8 runtime).
 
 const PLATFORM_INTERNAL_KEY = process.env.PLATFORM_INTERNAL_KEY ?? "";
-const RECEIPT_SECRET =
-  process.env.PLATFORM_RECEIPT_SECRET ||
-  process.env.PLATFORM_WALLET_PRIVATE_KEY ||
-  "dev-fallback-secret";
+
+// The receipt signing key MUST be set explicitly and be distinct from the
+// wallet key. Fail closed rather than silently signing with a wallet key or a
+// guessable default — receipts are the trust layer and must be unforgeable.
+function receiptSecret(): string {
+  const secret = process.env.PLATFORM_RECEIPT_SECRET;
+  if (!secret) {
+    throw new Error(
+      "PLATFORM_RECEIPT_SECRET is not configured — refusing to sign receipts",
+    );
+  }
+  return secret;
+}
 
 function canonicalize(body: {
   buyerId: string;
@@ -47,7 +56,7 @@ async function sign(canonical: string): Promise<string> {
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey(
     "raw",
-    enc.encode(RECEIPT_SECRET),
+    enc.encode(receiptSecret()),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"],
@@ -135,6 +144,26 @@ export const getById = query({
   args: { receiptId: v.id("receipts") },
   handler: async (ctx, args): Promise<Doc<"receipts"> | null> => {
     return await ctx.db.get(args.receiptId);
+  },
+});
+
+// Idempotency guard for escrow settlement: returns an existing release/refund
+// receipt for a request, if any. Used to avoid a second on-chain payout if a
+// prior attempt already moved the funds.
+export const getSettlementForRequest = query({
+  args: { requestId: v.id("requests") },
+  handler: async (ctx, args): Promise<Doc<"receipts"> | null> => {
+    const receipts = await ctx.db
+      .query("receipts")
+      .withIndex("by_requestId", (q) => q.eq("requestId", args.requestId))
+      .collect();
+    return (
+      receipts.find(
+        (r) =>
+          r.settlementType === "escrow_release" ||
+          r.settlementType === "escrow_refund",
+      ) ?? null
+    );
   },
 });
 
