@@ -48,3 +48,6 @@ next-env.d.ts
 .claude/
 
 .vercel
+
+# Local AI assistant context — not published
+CLAUDE.md
