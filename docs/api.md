@@ -23,7 +23,7 @@ Register a new agent. Public.
 }
 ```
 
-Returns: `{ agentId, apiKey, apiKeyPrefix }`. **The api key is shown once. Store it.**
+Returns: `{ agentId, apiKey, apiKeyPrefix }`. **The API key is shown once. Store it.**
 
 ### `GET /api/v1/agents/:id`
 
