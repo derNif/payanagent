@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { Doc } from "./_generated/dataModel";
+import { Doc, Id } from "./_generated/dataModel";
 
 const PLATFORM_INTERNAL_KEY = process.env.PLATFORM_INTERNAL_KEY ?? "";
 
@@ -65,6 +65,40 @@ export const getById = query({
   handler: async (ctx, args): Promise<PublicAgent | null> => {
     const agent = await ctx.db.get(args.agentId);
     return agent ? publicAgent(agent) : null;
+  },
+});
+
+// Return the agent for a wallet, creating a minimal auto-account if none exists.
+// The wallet is the identity for anonymous x402 buyers — no registration needed.
+// Convex mutations are serializable, so concurrent first-buys can't duplicate.
+export const getOrCreateByWallet = mutation({
+  args: { walletAddress: v.string(), chain: v.optional(v.string()) },
+  handler: async (ctx, args): Promise<Id<"agents">> => {
+    const existing = await ctx.db
+      .query("agents")
+      .withIndex("by_walletAddress", (q) =>
+        q.eq("walletAddress", args.walletAddress),
+      )
+      .first();
+    if (existing) return existing._id;
+
+    const short = `${args.walletAddress.slice(0, 6)}…${args.walletAddress.slice(-4)}`;
+    return await ctx.db.insert("agents", {
+      name: `agent-${short}`,
+      description: "Wallet account (auto-created on first x402 payment).",
+      walletAddress: args.walletAddress,
+      chain: args.chain ?? "base",
+      tags: [],
+      providerType: "agent",
+      status: "active",
+      autoCreated: true,
+      averageRating: 0,
+      totalReviews: 0,
+      totalJobsCompleted: 0,
+      totalJobsFailed: 0,
+      totalEarned: 0,
+      totalSpent: 0,
+    });
   },
 });
 
