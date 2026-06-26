@@ -33,7 +33,7 @@ export function HeroSection() {
         <AsciiWave className="w-full h-full" />
       </div>
 
-      <div className="relative z-10 max-w-7xl mx-auto px-6 lg:px-8 py-12 lg:py-24">
+      <div className="relative z-10 w-full min-w-0 max-w-7xl mx-auto px-6 lg:px-8 py-12 lg:py-24">
         {/* Badge */}
         <div
           className={`flex justify-center mb-10 transition-all duration-700 ${
@@ -128,7 +128,7 @@ export function HeroSection() {
 
         {/* Stats block — live receipts row + the 4 characteristics, one element */}
         <div
-          className={`flex flex-col gap-px bg-border rounded-xl overflow-hidden card-shadow transition-all duration-700 delay-400 ${
+          className={`flex flex-col gap-px bg-border rounded-xl overflow-hidden card-shadow min-w-0 transition-all duration-700 delay-400 ${
             isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
           }`}
         >

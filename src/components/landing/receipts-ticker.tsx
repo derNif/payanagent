@@ -28,7 +28,7 @@ export function ReceiptsTicker() {
   if (!receipts || receipts.length === 0) return null;
 
   return (
-    <div className="bg-black px-4 sm:px-6 py-3 flex items-center gap-x-4 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div className="bg-black px-4 sm:px-6 py-3 flex items-center gap-x-4 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <span className="inline-flex items-center gap-2 text-xs font-mono text-muted-foreground/60 tracking-widest uppercase shrink-0">
         <span className="relative flex h-2 w-2">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-60" />
