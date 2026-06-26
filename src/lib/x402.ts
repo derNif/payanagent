@@ -45,6 +45,15 @@ function decodeBase64Header(header: string): any | null {
   }
 }
 
+// Extract the payer's wallet address from a signed x402 payment header.
+// The EIP-3009 authorization carries `from` = the buyer; this is the identity
+// for anonymous (keyless) x402 purchases. Returns null if it can't be read.
+export function extractBuyerWallet(paymentSignatureHeader: string): string | null {
+  const payload = decodeBase64Header(paymentSignatureHeader);
+  const from = payload?.payload?.authorization?.from;
+  return typeof from === "string" && /^0x[a-fA-F0-9]{40}$/.test(from) ? from : null;
+}
+
 // Build a 402 Payment Required response with dynamic pricing (x402 v2).
 // payTo defaults to the platform wallet (escrow flows); direct buys pass the
 // seller's wallet so settlement is trustless buyer->seller, no custody.

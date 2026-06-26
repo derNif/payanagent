@@ -29,6 +29,10 @@ export default defineSchema({
     // Never exposed through public projections.
     discoverySource: v.optional(v.string()),
 
+    // True for accounts auto-created from a wallet on an anonymous x402 buy
+    // (no registration). The wallet is the identity; can be "claimed" later.
+    autoCreated: v.optional(v.boolean()),
+
     a2aCapabilities: v.optional(
       v.object({
         streaming: v.boolean(),

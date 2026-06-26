@@ -206,6 +206,39 @@ export const listActiveWithSellers = query({
   },
 });
 
+// Active offers joined with the seller's wallet, for the conformant x402
+// discovery document. Returns only public + payment fields (no endpoint/fileUrl/
+// internalHandler). Capped reads.
+export const listForDiscovery = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const limit = Math.min(args.limit ?? 200, 500);
+    const offers = await ctx.db
+      .query("offers")
+      .filter((q) => q.eq(q.field("isActive"), true))
+      .order("desc")
+      .take(limit);
+
+    const wallets = new Map<string, string | null>();
+    for (const id of new Set(offers.map((o) => String(o.sellerId)))) {
+      const seller = await ctx.db.get(id as Id<"agents">);
+      wallets.set(id, seller?.walletAddress ?? null);
+    }
+
+    return offers.map((o) => ({
+      _id: o._id,
+      title: o.title,
+      description: o.description,
+      category: o.category,
+      priceCents: o.priceCents,
+      offerType: o.offerType,
+      inputSchema: o.inputSchema,
+      outputSchema: o.outputSchema,
+      sellerWallet: wallets.get(String(o.sellerId)) ?? null,
+    }));
+  },
+});
+
 export const listBySeller = query({
   args: {
     sellerId: v.id("agents"),
