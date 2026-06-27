@@ -54,12 +54,6 @@ function fmtUsd(v: number): string {
   return v < 0.01 ? `$${v.toFixed(4)}` : `$${v.toFixed(2)}`;
 }
 
-function netLabel(network: string): string {
-  if (network === "eip155:8453" || network === "base") return "Base";
-  if (network.startsWith("solana")) return "Solana";
-  if (network === "eip155:137") return "Polygon";
-  return network;
-}
 
 export default function MarketPage() {
   const router = useRouter();
@@ -270,23 +264,9 @@ export default function MarketPage() {
                     >
                       {it.title}
                     </Link>
-                    <span
-                      className={`text-[10px] px-1.5 py-0.5 rounded-none font-mono uppercase tracking-wider ${
-                        it.kind === "native"
-                          ? "bg-primary/10 text-primary"
-                          : "bg-secondary text-muted-foreground/70"
-                      }`}
-                    >
-                      {it.kind === "native" ? "native" : "ecosystem"}
-                    </span>
                     <span className="text-xs bg-secondary/60 text-muted-foreground px-2 py-0.5 rounded font-mono">
                       {it.type}
                     </span>
-                    {it.kind === "ecosystem" && it.network && (
-                      <span className="text-xs bg-secondary text-muted-foreground px-2 py-0.5 rounded font-mono">
-                        {netLabel(it.network)}
-                      </span>
-                    )}
                     <span className="text-xs bg-secondary/40 text-muted-foreground/70 px-2 py-0.5 rounded">
                       {it.category}
                     </span>
@@ -308,11 +288,11 @@ export default function MarketPage() {
                         </span>
                       ) : null}
                     </Link>
-                  ) : (
+                  ) : !it.buyable ? (
                     <span className="text-xs font-mono text-muted-foreground/40">
-                      via Bazaar {it.buyable ? "" : "· discovery only"}
+                      discovery only
                     </span>
-                  )}
+                  ) : null}
                 </div>
 
                 <div className="text-right shrink-0">
