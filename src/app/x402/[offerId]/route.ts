@@ -12,6 +12,7 @@ import {
 } from "@/lib/x402";
 import { runInternalHandler } from "@/lib/internal-offers";
 import { assertPublicHttpUrl } from "@/lib/ssrf";
+import { validateInput } from "@/lib/validate-input";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
@@ -108,6 +109,28 @@ async function handle(
     );
   }
 
+  // Read + validate the buyer's input BEFORE settling — bad input must never
+  // result in a pay-then-fail. Body is read once here and reused for delivery.
+  const rawBody = await request.text().catch(() => "");
+  let input: Record<string, unknown> = {};
+  if (rawBody) {
+    try {
+      input = JSON.parse(rawBody);
+    } catch {
+      return NextResponse.json(
+        { error: "Request body must be valid JSON" },
+        { status: 400 },
+      );
+    }
+  }
+  const inputCheck = validateInput(offer.inputSchema, input);
+  if (!inputCheck.valid) {
+    return NextResponse.json(
+      { error: `Invalid input: ${inputCheck.error}` },
+      { status: 400 },
+    );
+  }
+
   const integrityCheck = verifyPaymentIntegrity(
     paymentSignature,
     offer.priceCents,
@@ -162,12 +185,20 @@ async function handle(
     },
   );
 
+  // Record whether the service actually delivered (honest receipts).
+  const mark = (delivered: boolean, deliveryStatus?: string) =>
+    convex.mutation(api.receipts.markDelivered, {
+      platformSecret,
+      receiptId,
+      delivered,
+      deliveryStatus,
+    });
+
   // PayanAgent-operated (internal) offer — run server-side, key never exposed.
   if (offer.internalHandler) {
     try {
-      const body = await request.text();
-      const input = body ? JSON.parse(body) : {};
       const result = await runInternalHandler(offer.internalHandler, input);
+      await mark(true);
       return NextResponse.json(result, {
         headers: {
           "X-Receipt-Id": String(receiptId),
@@ -176,6 +207,7 @@ async function handle(
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : "service call failed";
+      await mark(false, message.slice(0, 200));
       return NextResponse.json(
         { error: message, receiptId, message: "Payment settled but the service call failed." },
         { status: 502 },
@@ -185,6 +217,7 @@ async function handle(
 
   // Download-type offer: return fileUrl.
   if (offer.offerType === "download") {
+    await mark(true);
     return NextResponse.json({
       receiptId,
       fileUrl: offer.fileUrl,
@@ -194,6 +227,7 @@ async function handle(
 
   // Api-type offer: proxy to seller's endpoint.
   if (!offer.endpoint) {
+    await mark(false, "no endpoint configured");
     return NextResponse.json(
       { error: "Offer has no endpoint configured", receiptId },
       { status: 500 },
@@ -205,6 +239,7 @@ async function handle(
     await assertPublicHttpUrl(offer.endpoint);
   } catch (err) {
     const message = err instanceof Error ? err.message : "blocked endpoint";
+    await mark(false, "blocked endpoint");
     return NextResponse.json(
       { error: `Offer endpoint not allowed: ${message}`, receiptId },
       { status: 502 },
@@ -212,14 +247,14 @@ async function handle(
   }
 
   try {
-    const body = await request.text();
     const proxyResponse = await fetch(offer.endpoint, {
       method: offer.httpMethod || "POST",
       headers: { "Content-Type": "application/json" },
-      body: body || undefined,
+      body: rawBody || undefined,
       redirect: "manual",
     });
     const responseData = await proxyResponse.text();
+    await mark(proxyResponse.ok, `HTTP ${proxyResponse.status}`);
     return new NextResponse(responseData, {
       status: proxyResponse.status,
       headers: {
@@ -230,6 +265,7 @@ async function handle(
       },
     });
   } catch {
+    await mark(false, "endpoint unreachable");
     return NextResponse.json(
       {
         error: "Failed to reach offer endpoint",
