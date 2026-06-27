@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
+import { computeReputation } from "./receipts";
 
 const PLATFORM_INTERNAL_KEY = process.env.PLATFORM_INTERNAL_KEY ?? "";
 
@@ -170,7 +171,12 @@ export const listActiveWithSellers = query({
     const sellerIds = [...new Set(offers.map((o) => String(o.sellerId)))];
     const sellers = new Map<
       string,
-      { name: string; receiptsSold: number; totalEarnedCents: number }
+      {
+        name: string;
+        receiptsSold: number;
+        totalEarnedCents: number;
+        reputation: ReturnType<typeof computeReputation>;
+      }
     >();
     for (const id of sellerIds) {
       const sellerId = id as Id<"agents">;
@@ -179,11 +185,12 @@ export const listActiveWithSellers = query({
         .query("receipts")
         .withIndex("by_sellerId", (q) => q.eq("sellerId", sellerId))
         .take(500);
-      const confirmed = sold.filter((r) => r.status === "confirmed");
+      const reputation = computeReputation(sold);
       sellers.set(id, {
         name: agent?.name ?? "Unknown agent",
-        receiptsSold: confirmed.length,
-        totalEarnedCents: confirmed.reduce((s, r) => s + r.amountCents, 0),
+        receiptsSold: reputation.sales,
+        totalEarnedCents: reputation.volumeCents,
+        reputation,
       });
     }
 
@@ -219,23 +226,47 @@ export const listForDiscovery = query({
       .order("desc")
       .take(limit);
 
-    const wallets = new Map<string, string | null>();
+    // Resolve each unique seller once: wallet + name + receipt-derived
+    // reputation, so a discovering agent sees the trust signal inline (no
+    // second round-trip). Capped reads keep worst-case I/O bounded.
+    const sellers = new Map<
+      string,
+      {
+        wallet: string | null;
+        name: string;
+        reputation: ReturnType<typeof computeReputation>;
+      }
+    >();
     for (const id of new Set(offers.map((o) => String(o.sellerId)))) {
-      const seller = await ctx.db.get(id as Id<"agents">);
-      wallets.set(id, seller?.walletAddress ?? null);
+      const sellerId = id as Id<"agents">;
+      const seller = await ctx.db.get(sellerId);
+      const sold = await ctx.db
+        .query("receipts")
+        .withIndex("by_sellerId", (q) => q.eq("sellerId", sellerId))
+        .take(500);
+      sellers.set(id, {
+        wallet: seller?.walletAddress ?? null,
+        name: seller?.name ?? "Unknown agent",
+        reputation: computeReputation(sold),
+      });
     }
 
-    return offers.map((o) => ({
-      _id: o._id,
-      title: o.title,
-      description: o.description,
-      category: o.category,
-      priceCents: o.priceCents,
-      offerType: o.offerType,
-      inputSchema: o.inputSchema,
-      outputSchema: o.outputSchema,
-      sellerWallet: wallets.get(String(o.sellerId)) ?? null,
-    }));
+    return offers.map((o) => {
+      const s = sellers.get(String(o.sellerId));
+      return {
+        _id: o._id,
+        title: o.title,
+        description: o.description,
+        category: o.category,
+        priceCents: o.priceCents,
+        offerType: o.offerType,
+        inputSchema: o.inputSchema,
+        outputSchema: o.outputSchema,
+        sellerWallet: s?.wallet ?? null,
+        sellerName: s?.name ?? "Unknown agent",
+        reputation: s?.reputation ?? null,
+      };
+    });
   },
 });
 

@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@convex/_generated/api";
+import { VerifiedBadge } from "@/components/verified-badge";
 
 type OfferTypeFilter = "all" | "api" | "download";
 type SortKey = "newest" | "price_asc" | "price_desc" | "reputation";
@@ -45,8 +46,9 @@ export default function OffersPage() {
       case "reputation":
         return list.sort(
           (a, b) =>
-            b.seller.receiptsSold - a.seller.receiptsSold ||
-            b.seller.totalEarnedCents - a.seller.totalEarnedCents,
+            Number(b.seller.reputation.trusted) - Number(a.seller.reputation.trusted) ||
+            b.seller.reputation.score - a.seller.reputation.score ||
+            b.seller.reputation.volumeCents - a.seller.reputation.volumeCents,
         );
       default:
         return list.sort((a, b) => b._creationTime - a._creationTime);
@@ -195,10 +197,17 @@ export default function OffersPage() {
                 <Link
                   href={`/marketplace/agents/${offer.sellerId}`}
                   onClick={(e) => e.stopPropagation()}
-                  className="text-muted-foreground/60 hover:text-primary transition-colors"
+                  className="inline-flex items-center gap-1.5 text-muted-foreground/60 hover:text-primary transition-colors"
                 >
-                  by {offer.seller.name} · {offer.seller.receiptsSold} receipts · $
-                  {(offer.seller.totalEarnedCents / 100).toFixed(2)} earned →
+                  by {offer.seller.name}
+                  {offer.seller.reputation.trusted && <VerifiedBadge size={13} />}
+                  {offer.seller.reputation.sales > 0 && (
+                    <span className="text-muted-foreground/50">
+                      · score {offer.seller.reputation.score} ·{" "}
+                      {offer.seller.receiptsSold} receipts
+                    </span>
+                  )}
+                  <span aria-hidden>→</span>
                 </Link>
               </div>
             </div>
