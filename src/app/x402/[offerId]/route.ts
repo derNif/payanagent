@@ -12,6 +12,7 @@ import {
 } from "@/lib/x402";
 import { runInternalHandler } from "@/lib/internal-offers";
 import { assertPublicHttpUrl } from "@/lib/ssrf";
+import { attachFeeAdvert, collectFee } from "@/lib/x402-fee";
 import { validateInput } from "@/lib/validate-input";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { api } from "@convex/_generated/api";
@@ -79,12 +80,16 @@ async function handle(
     if (!rl.allowed) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
-    return buildPaymentRequiredResponse(
+    const challenge = buildPaymentRequiredResponse(
       offer.priceCents,
       canonicalUrl,
       `Payment for offer: ${offer.title}`,
       seller.walletAddress,
     );
+    // Advertise the optional PayanAgent fee leg (no-op when the fee is off) so
+    // native offers use the exact same fee mechanism as ecosystem buys.
+    attachFeeAdvert(challenge.headers, offer.priceCents * 10000);
+    return challenge;
   }
 
   // Buyer identity comes from the payment itself (no API key).
@@ -184,6 +189,11 @@ async function handle(
       latencyMs: Date.now() - startedAt,
     },
   );
+
+  // Collect the optional, buyer-signed PayanAgent fee leg → platform wallet
+  // (non-custodial; no-op when the fee is off or absent). Same mechanism as
+  // the ecosystem route.
+  await collectFee(request);
 
   // Record whether the service actually delivered (honest receipts).
   const mark = (delivered: boolean, deliveryStatus?: string) =>

@@ -27,7 +27,9 @@ function canonicalize(body: {
   sellerId: string;
   offerId: string | null;
   requestId: string | null;
+  externalResourceId?: string | null;
   amountCents: number;
+  amountMicroUsd?: number;
   currency: string;
   chain: string;
   network: string;
@@ -36,7 +38,8 @@ function canonicalize(body: {
   status: string;
   emittedAt: number;
 }): string {
-  return JSON.stringify({
+  // Original signed shape (kept stable so pre-existing receipts stay verifiable).
+  const canonical: Record<string, unknown> = {
     buyerId: body.buyerId,
     sellerId: body.sellerId,
     offerId: body.offerId,
@@ -49,7 +52,16 @@ function canonicalize(body: {
     settlementType: body.settlementType,
     status: body.status,
     emittedAt: body.emittedAt,
-  });
+  };
+  // Newer fields are appended ONLY when present, so a receipt that predates them
+  // canonicalizes exactly as it did when signed.
+  if (body.externalResourceId != null) {
+    canonical.externalResourceId = body.externalResourceId;
+  }
+  if (body.amountMicroUsd != null) {
+    canonical.amountMicroUsd = body.amountMicroUsd;
+  }
+  return JSON.stringify(canonical);
 }
 
 async function sign(canonical: string): Promise<string> {
@@ -79,7 +91,12 @@ export const recordSettlement = mutation({
     sellerId: v.id("agents"),
     offerId: v.optional(v.id("offers")),
     requestId: v.optional(v.id("requests")),
+    externalResourceId: v.optional(v.id("externalResources")),
     amountCents: v.number(),
+    // Exact amount in USDC base units (6 decimals = millionths of a dollar), so
+    // sub-cent buys (e.g. $0.001) carry real value even when amountCents rounds
+    // to 0. Optional: legacy/internal receipts fall back to amountCents*10000.
+    amountMicroUsd: v.optional(v.number()),
     currency: v.string(),
     chain: v.string(),
     network: v.string(),
@@ -90,6 +107,7 @@ export const recordSettlement = mutation({
       v.literal("escrow_deposit"),
       v.literal("escrow_release"),
       v.literal("escrow_refund"),
+      v.literal("external"),
     ),
     status: v.union(v.literal("confirmed"), v.literal("failed")),
     latencyMs: v.optional(v.number()),
@@ -105,7 +123,10 @@ export const recordSettlement = mutation({
       sellerId: args.sellerId as unknown as string,
       offerId: (args.offerId as unknown as string | undefined) ?? null,
       requestId: (args.requestId as unknown as string | undefined) ?? null,
+      externalResourceId:
+        (args.externalResourceId as unknown as string | undefined) ?? null,
       amountCents: args.amountCents,
+      amountMicroUsd: args.amountMicroUsd,
       currency: args.currency,
       chain: args.chain,
       network: args.network,
@@ -229,6 +250,14 @@ export const markDelivered = mutation({
   },
 });
 
+// Exact receipt value in USDC base units (6 decimals == millionths of a dollar).
+// Sub-cent buys carry their real value here; legacy/internal receipts fall back
+// to amountCents. Summing in micro and converting once preserves accumulated
+// sub-cent volume (1000 × $0.001 = $1.00) that amountCents alone would drop.
+export function receiptMicroUsd(r: Doc<"receipts">): number {
+  return r.amountMicroUsd ?? r.amountCents * 10000;
+}
+
 // Objective, wash-resistant reputation derived from a seller's receipts. Pure
 // helper so offer/discovery queries can reuse it without N extra queries.
 // Success rate is weighted by buyer DIVERSITY (one wallet can't manufacture
@@ -241,6 +270,7 @@ export function computeReputation(sellerReceipts: Doc<"receipts">[]) {
       sales: 0,
       distinctBuyers: 0,
       volumeCents: 0,
+      volumeMicroUsd: 0,
       successRate: 1,
       score: 0,
       trusted: false,
@@ -249,7 +279,7 @@ export function computeReputation(sellerReceipts: Doc<"receipts">[]) {
     };
   }
   const distinctBuyers = new Set(confirmed.map((r) => String(r.buyerId))).size;
-  const volumeCents = confirmed.reduce((s, r) => s + r.amountCents, 0);
+  const volumeMicroUsd = confirmed.reduce((s, r) => s + receiptMicroUsd(r), 0);
   // Legacy receipts (delivered undefined, pre-feature) count as delivered.
   const deliveredOk = confirmed.filter((r) => r.delivered !== false).length;
   const successRate = deliveredOk / sales;
@@ -257,7 +287,8 @@ export function computeReputation(sellerReceipts: Doc<"receipts">[]) {
   return {
     sales,
     distinctBuyers,
-    volumeCents,
+    volumeCents: Math.round(volumeMicroUsd / 10000),
+    volumeMicroUsd,
     successRate: Math.round(successRate * 100) / 100,
     score: Math.round(successRate * 100 * (0.5 + 0.5 * confidence)),
     trusted: distinctBuyers >= 3 && successRate >= 0.9 && sales >= 5,
@@ -295,12 +326,12 @@ export const getLeaderboard = query({
     const last7d = confirmed.filter((r) => r.emittedAt >= weekAgo);
 
     // Aggregate per seller.
-    type Acc = { sellerId: Id<"agents">; volumeCents: number; sales: number; buyers: Set<string>; delivered: number };
+    type Acc = { sellerId: Id<"agents">; volumeMicroUsd: number; sales: number; buyers: Set<string>; delivered: number };
     const bySeller = new Map<string, Acc>();
     for (const r of confirmed) {
       const k = String(r.sellerId);
-      const cur = bySeller.get(k) ?? { sellerId: r.sellerId, volumeCents: 0, sales: 0, buyers: new Set(), delivered: 0 };
-      cur.volumeCents += r.amountCents;
+      const cur = bySeller.get(k) ?? { sellerId: r.sellerId, volumeMicroUsd: 0, sales: 0, buyers: new Set(), delivered: 0 };
+      cur.volumeMicroUsd += receiptMicroUsd(r);
       cur.sales += 1;
       cur.buyers.add(String(r.buyerId));
       if (r.delivered !== false) cur.delivered += 1;
@@ -313,7 +344,7 @@ export const getLeaderboard = query({
         const confidence = Math.min(1, distinctBuyers / 5);
         return {
           sellerId: s.sellerId,
-          volumeCents: s.volumeCents,
+          volumeCents: Math.round(s.volumeMicroUsd / 10000),
           sales: s.sales,
           distinctBuyers,
           successRate: Math.round(successRate * 100) / 100,
@@ -348,6 +379,7 @@ export const getLeaderboard = query({
         _id: r._id,
         amountCents: r.amountCents,
         settlementType: r.settlementType,
+        externalResourceId: r.externalResourceId ?? null,
         delivered: r.delivered,
         emittedAt: r.emittedAt,
         buyerName: buyer?.name ?? "agent",
@@ -357,11 +389,15 @@ export const getLeaderboard = query({
 
     return {
       stats: {
-        totalVolumeCents: confirmed.reduce((s, r) => s + r.amountCents, 0),
+        totalVolumeCents: Math.round(
+          confirmed.reduce((s, r) => s + receiptMicroUsd(r), 0) / 10000,
+        ),
         totalReceipts: confirmed.length,
         distinctSellers: bySeller.size,
         distinctBuyers: new Set(confirmed.map((r) => String(r.buyerId))).size,
-        volume7dCents: last7d.reduce((s, r) => s + r.amountCents, 0),
+        volume7dCents: Math.round(
+          last7d.reduce((s, r) => s + receiptMicroUsd(r), 0) / 10000,
+        ),
         receipts7d: last7d.length,
       },
       topSellers,
@@ -392,8 +428,12 @@ export const getAgentStats = query({
     const sellerConfirmed = asSeller.filter((r) => r.status === "confirmed");
     const buyerConfirmed = asBuyer.filter((r) => r.status === "confirmed");
     return {
-      totalEarnedCents: sellerConfirmed.reduce((s, r) => s + r.amountCents, 0),
-      totalSpentCents: buyerConfirmed.reduce((s, r) => s + r.amountCents, 0),
+      totalEarnedCents: Math.round(
+        sellerConfirmed.reduce((s, r) => s + receiptMicroUsd(r), 0) / 10000,
+      ),
+      totalSpentCents: Math.round(
+        buyerConfirmed.reduce((s, r) => s + receiptMicroUsd(r), 0) / 10000,
+      ),
       receiptsSold: sellerConfirmed.length,
       receiptsBought: buyerConfirmed.length,
     };
@@ -421,9 +461,13 @@ export const getGlobalStats = query({
     const last7d = confirmed.filter((r) => r.emittedAt >= oneWeekAgo);
     return {
       totalReceipts: confirmed.length,
-      totalVolumeCents: confirmed.reduce((s, r) => s + r.amountCents, 0),
+      totalVolumeCents: Math.round(
+        confirmed.reduce((s, r) => s + receiptMicroUsd(r), 0) / 10000,
+      ),
       receiptsLast7d: last7d.length,
-      volumeLast7dCents: last7d.reduce((s, r) => s + r.amountCents, 0),
+      volumeLast7dCents: Math.round(
+        last7d.reduce((s, r) => s + receiptMicroUsd(r), 0) / 10000,
+      ),
     };
   },
 });
@@ -449,6 +493,7 @@ export const topSellers = query({
       string,
       { sellerId: Id<"agents">; totalEarnedCents: number; receiptCount: number }
     >();
+    const microBySeller = new Map<string, number>();
     for (const r of confirmed) {
       const key = String(r.sellerId);
       const cur = bySeller.get(key) ?? {
@@ -456,7 +501,8 @@ export const topSellers = query({
         totalEarnedCents: 0,
         receiptCount: 0,
       };
-      cur.totalEarnedCents += r.amountCents;
+      microBySeller.set(key, (microBySeller.get(key) ?? 0) + receiptMicroUsd(r));
+      cur.totalEarnedCents = Math.round((microBySeller.get(key) ?? 0) / 10000);
       cur.receiptCount += 1;
       bySeller.set(key, cur);
     }
