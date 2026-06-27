@@ -8,13 +8,16 @@ import { api } from "@convex/_generated/api";
 import { VerifiedBadge } from "@/components/verified-badge";
 
 type SourceFilter = "all" | "native" | "ecosystem";
+type TypeFilter = "all" | "services" | "products";
+type SortKey = "newest" | "price_asc" | "price_desc" | "reputation";
 
 // Unified marketplace item — our native offers and mirrored ecosystem resources
-// are presented as one catalog (the "whole market through PayanAgent"). The buy
-// mechanics differ under the hood (see /x402/:offerId vs /x402/ext/:id); here
-// they're one browsable surface, tagged by source.
+// are presented as one catalog (the "whole market through PayanAgent"). Buy
+// mechanics differ under the hood (/x402/:offerId vs /x402/ext/:id); here they're
+// one browsable surface, tagged by source.
 type Item = {
   kind: "native" | "ecosystem";
+  type: "service" | "product";
   id: string;
   href: string;
   title: string;
@@ -22,15 +25,28 @@ type Item = {
   category: string;
   priceUsd: number;
   buyable: boolean;
+  ts: number;
   // native only
   sellerName?: string;
   sellerId?: string;
   trusted?: boolean;
   score?: number;
   receipts?: number;
-  offerType?: "api" | "download";
   // ecosystem only
   network?: string;
+  qualityScore?: number;
+};
+
+const TYPE_LABELS: Record<TypeFilter, string> = {
+  all: "all",
+  services: "services",
+  products: "products",
+};
+const SORT_LABELS: Record<SortKey, string> = {
+  newest: "newest",
+  price_asc: "price ↑",
+  price_desc: "price ↓",
+  reputation: "reputation",
 };
 
 function fmtUsd(v: number): string {
@@ -48,6 +64,8 @@ function netLabel(network: string): string {
 export default function MarketPage() {
   const router = useRouter();
   const [source, setSource] = useState<SourceFilter>("all");
+  const [type, setType] = useState<TypeFilter>("all");
+  const [sort, setSort] = useState<SortKey>("newest");
   const [q, setQ] = useState("");
   const query = q.trim();
 
@@ -64,7 +82,6 @@ export default function MarketPage() {
     source !== "native" && query ? { query, limit: 60 } : "skip",
   );
   const ext = query ? extSearch : extBrowse;
-
   const stats = useQuery(api.aggregator.getExternalStats, {});
 
   const items: Item[] | undefined = useMemo(() => {
@@ -72,9 +89,9 @@ export default function MarketPage() {
     if (source !== "native" && ext === undefined) return undefined;
 
     const out: Item[] = [];
+    const ql = query.toLowerCase();
 
     if (source !== "ecosystem" && offers) {
-      const ql = query.toLowerCase();
       for (const o of offers) {
         if (
           ql &&
@@ -85,6 +102,7 @@ export default function MarketPage() {
           continue;
         out.push({
           kind: "native",
+          type: o.offerType === "download" ? "product" : "service",
           id: o._id,
           href: `/marketplace/offers/${o._id}`,
           title: o.title,
@@ -92,12 +110,12 @@ export default function MarketPage() {
           category: o.category,
           priceUsd: o.priceCents / 100,
           buyable: true,
+          ts: o._creationTime,
           sellerName: o.seller.name,
           sellerId: String(o.sellerId),
           trusted: o.seller.reputation.trusted,
           score: o.seller.reputation.score,
           receipts: o.seller.receiptsSold,
-          offerType: o.offerType,
         });
       }
     }
@@ -107,6 +125,7 @@ export default function MarketPage() {
         const base = r.network === "eip155:8453" || r.network === "base";
         out.push({
           kind: "ecosystem",
+          type: "service", // every Bazaar resource is a pay-per-call service
           id: r._id,
           href: `/marketplace/ext/${r._id}`,
           title: r.serviceName || r.resource,
@@ -114,13 +133,36 @@ export default function MarketPage() {
           category: r.category,
           priceUsd: r.priceUsd ?? Number(r.amountRaw) / 1e6,
           buyable: base,
+          ts: r.lastSeenAt,
           network: r.network,
+          qualityScore: r.qualityScore,
         });
       }
     }
 
-    return out;
-  }, [offers, ext, source, query]);
+    const typed =
+      type === "all"
+        ? out
+        : out.filter((it) =>
+            type === "services" ? it.type === "service" : it.type === "product",
+          );
+
+    const repRank = (it: Item) =>
+      it.kind === "native" ? 1e9 + (it.score ?? 0) : it.qualityScore ?? 0;
+    typed.sort((a, b) => {
+      switch (sort) {
+        case "price_asc":
+          return a.priceUsd - b.priceUsd;
+        case "price_desc":
+          return b.priceUsd - a.priceUsd;
+        case "reputation":
+          return repRank(b) - repRank(a);
+        default:
+          return b.ts - a.ts;
+      }
+    });
+    return typed;
+  }, [offers, ext, source, type, sort, query]);
 
   const nativeCount = offers?.length ?? 0;
 
@@ -135,28 +177,39 @@ export default function MarketPage() {
         </p>
       </div>
 
-      {/* Source tabs + search */}
-      <div className="flex items-center justify-between gap-3 flex-wrap mb-5">
-        <div className="flex gap-1">
-          {(
-            [
-              ["all", "all"],
-              ["native", "native"],
-              ["ecosystem", "ecosystem"],
-            ] as [SourceFilter, string][]
-          ).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setSource(key)}
-              className={
-                source === key
-                  ? "text-xs px-3 py-1 rounded bg-primary text-primary-foreground font-mono"
-                  : "text-xs px-3 py-1 rounded bg-secondary text-muted-foreground hover:text-foreground font-mono"
-              }
-            >
-              {label}
-            </button>
-          ))}
+      {/* Filters */}
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex gap-1">
+            {(["all", "native", "ecosystem"] as SourceFilter[]).map((key) => (
+              <button
+                key={key}
+                onClick={() => setSource(key)}
+                className={
+                  source === key
+                    ? "text-xs px-3 py-1 rounded bg-primary text-primary-foreground font-mono"
+                    : "text-xs px-3 py-1 rounded bg-secondary text-muted-foreground hover:text-foreground font-mono"
+                }
+              >
+                {key}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-1">
+            {(Object.keys(TYPE_LABELS) as TypeFilter[]).map((key) => (
+              <button
+                key={key}
+                onClick={() => setType(key)}
+                className={
+                  type === key
+                    ? "text-xs px-2 py-1 rounded bg-secondary text-foreground font-mono"
+                    : "text-xs px-2 py-1 rounded text-muted-foreground/60 hover:text-foreground font-mono"
+                }
+              >
+                {TYPE_LABELS[key]}
+              </button>
+            ))}
+          </div>
         </div>
         <span className="text-xs text-muted-foreground/60 font-mono">
           {nativeCount} native ·{" "}
@@ -165,12 +218,30 @@ export default function MarketPage() {
         </span>
       </div>
 
-      <input
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Search the market — e.g. 'pdf', 'search', 'price'…"
-        className="w-full mb-6 bg-card border border-border rounded-xl px-4 py-3 text-sm font-mono text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/40"
-      />
+      <div className="flex items-center gap-3 flex-wrap mb-5">
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search the market — e.g. 'pdf', 'search', 'price'…"
+          className="flex-1 min-w-[200px] bg-card border border-border rounded-xl px-4 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/40"
+        />
+        <div className="flex gap-1 items-center">
+          <span className="text-xs text-muted-foreground/60 font-mono">sort:</span>
+          {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
+            <button
+              key={k}
+              onClick={() => setSort(k)}
+              className={
+                sort === k
+                  ? "text-xs px-2 py-1 rounded bg-secondary text-foreground font-mono"
+                  : "text-xs px-2 py-1 rounded text-muted-foreground/60 hover:text-foreground font-mono"
+              }
+            >
+              {SORT_LABELS[k]}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {!items ? (
         <div className="text-muted-foreground font-mono text-sm">Loading…</div>
@@ -199,7 +270,6 @@ export default function MarketPage() {
                     >
                       {it.title}
                     </Link>
-                    {/* source badge */}
                     <span
                       className={`text-[10px] px-1.5 py-0.5 rounded-none font-mono uppercase tracking-wider ${
                         it.kind === "native"
@@ -209,12 +279,15 @@ export default function MarketPage() {
                     >
                       {it.kind === "native" ? "native" : "ecosystem"}
                     </span>
+                    <span className="text-xs bg-secondary/60 text-muted-foreground px-2 py-0.5 rounded font-mono">
+                      {it.type}
+                    </span>
                     {it.kind === "ecosystem" && it.network && (
                       <span className="text-xs bg-secondary text-muted-foreground px-2 py-0.5 rounded font-mono">
                         {netLabel(it.network)}
                       </span>
                     )}
-                    <span className="text-xs bg-secondary/60 text-muted-foreground px-2 py-0.5 rounded">
+                    <span className="text-xs bg-secondary/40 text-muted-foreground/70 px-2 py-0.5 rounded">
                       {it.category}
                     </span>
                   </div>
@@ -245,10 +318,8 @@ export default function MarketPage() {
                 <div className="text-right shrink-0">
                   <p className="text-lg font-mono text-primary">{fmtUsd(it.priceUsd)}</p>
                   <p className="text-xs text-muted-foreground/60">
-                    {it.kind === "native"
-                      ? it.offerType === "download"
-                        ? "one-time"
-                        : "per call"
+                    {it.type === "product"
+                      ? "one-time"
                       : it.buyable
                         ? "per call"
                         : "—"}
