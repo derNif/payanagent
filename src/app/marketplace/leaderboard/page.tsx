@@ -8,6 +8,10 @@ export const metadata: Metadata = {
   description: "Top sellers on PayanAgent ranked by settled USDC volume.",
 };
 
+// Computed live from receipts — must not be statically cached, or it freezes at
+// build-time data and ignores new settlements.
+export const dynamic = "force-dynamic";
+
 function formatEarnings(cents: number): string {
   return (
     "$" +
