@@ -14,19 +14,22 @@ export async function GET() {
   let resources: Array<Record<string, unknown>> = [];
   try {
     const convex = getConvexClient();
-    const offers = await convex.query(api.offers.listForDiscovery, { limit: 200 });
+    // Unified catalog: native offers + top ecosystem resources, one shape.
+    const offers = await convex.query(api.catalog.forDiscovery, { ecoLimit: 100 });
     resources = offers
-      .filter((o) => !!o.sellerWallet)
+      .filter((o) => !!o.sellerWallet && o.buyable)
       .map((o) => ({
-        resource: `${APP_URL}/x402/${o._id}`,
+        resource: `${APP_URL}/x402/${o.id}`,
         type: "http",
         x402Version: 2,
         accepts: [
           {
             scheme: "exact",
-            network: NETWORK_ID,
-            amount: String(o.priceCents * 10000),
-            asset: USDC_BASE_MAINNET,
+            // Ecosystem entries carry the seller's real atomic terms; native
+            // entries derive from priceCents on Base USDC.
+            network: o.network ?? NETWORK_ID,
+            amount: o.amountRaw ?? String(o.priceCents * 10000),
+            asset: o.asset ?? USDC_BASE_MAINNET,
             payTo: o.sellerWallet,
           },
         ],

@@ -52,17 +52,47 @@ export async function GET(request: NextRequest) {
 
   try {
     const convex = getConvexClient();
-    const results = await convex.query(api.search.discoverV2, {
-      query,
-      category,
-      maxPriceCents,
-      offerType,
-      limit,
-    });
+    // Native (with filters) + the whole ecosystem (query match) in one list, so
+    // SDK/MCP `discover` returns the entire market. Every entry carries a buyUrl
+    // (/x402/:id) — buy any of them the same way, no native/ecosystem split.
+    const [results, catalog] = await Promise.all([
+      convex.query(api.search.discoverV2, {
+        query,
+        category,
+        maxPriceCents,
+        offerType,
+        limit,
+      }),
+      convex.query(api.catalog.search, { query, limit }),
+    ]);
+
+    const nativeOffers = results.offers.map((o) => ({
+      ...toPublicOffer(o),
+      source: "native" as const,
+      buyUrl: `/x402/${o._id}`,
+    }));
+    const ecosystemOffers = catalog
+      .filter((e) => e.source === "ecosystem")
+      .map((e) => ({
+        _id: e.id,
+        title: e.title,
+        description: e.description,
+        category: e.category,
+        tags: e.tags,
+        priceCents: e.priceCents,
+        priceUsd: e.priceUsd,
+        offerType: e.offerType,
+        inputSchema: e.inputSchema,
+        outputSchema: e.outputSchema,
+        sellerWallet: e.sellerWallet,
+        buyable: e.buyable,
+        source: "ecosystem" as const,
+        buyUrl: `/x402/${e.id}`,
+      }));
 
     return NextResponse.json({
       agents: results.agents.map(toPublicAgent),
-      offers: results.offers.map(toPublicOffer),
+      offers: [...nativeOffers, ...ecosystemOffers],
       openRequests: results.openRequests,
     });
   } catch (error) {
