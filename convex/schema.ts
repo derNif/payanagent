@@ -153,8 +153,16 @@ export default defineSchema({
 
     offerId: v.optional(v.id("offers")),
     requestId: v.optional(v.id("requests")),
+    // Set when this receipt is a buy routed through PayanAgent to an EXTERNAL
+    // x402 resource (aggregator proxy-buy). Non-custodial: buyer paid the
+    // external seller directly; we recorded the receipt.
+    externalResourceId: v.optional(v.id("externalResources")),
 
     amountCents: v.number(),
+    // Exact value in USDC base units (6 decimals = millionths of a dollar), so
+    // sub-cent buys carry real value even when amountCents rounds to 0. Optional:
+    // legacy/internal receipts fall back to amountCents*10000.
+    amountMicroUsd: v.optional(v.number()),
     currency: v.string(),
 
     chain: v.string(),
@@ -167,6 +175,8 @@ export default defineSchema({
       v.literal("escrow_deposit"),
       v.literal("escrow_release"),
       v.literal("escrow_refund"),
+      // Buy routed through PayanAgent to an external x402 resource.
+      v.literal("external"),
     ),
 
     status: v.union(v.literal("confirmed"), v.literal("failed")),
@@ -187,6 +197,7 @@ export default defineSchema({
     .index("by_sellerId", ["sellerId", "emittedAt"])
     .index("by_offerId", ["offerId"])
     .index("by_requestId", ["requestId"])
+    .index("by_externalResourceId", ["externalResourceId", "emittedAt"])
     .index("by_emittedAt", ["emittedAt"])
     .index("by_settlementType", ["settlementType", "emittedAt"]),
 

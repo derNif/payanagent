@@ -28,6 +28,7 @@ const VERB: Record<string, string> = {
   escrow_deposit: "escrow",
   escrow_release: "release",
   escrow_refund: "refund",
+  external: "relay",
 };
 
 const PROVIDER: Record<string, string> = { agent: "Agent", saas: "SaaS", api: "API" };
@@ -176,6 +177,11 @@ export function LeaderboardDashboard() {
                   <span className="text-muted-foreground/70 truncate">
                     {r.buyerName} <span className="text-muted-foreground/40">→</span> {r.sellerName}
                   </span>
+                  {r.settlementType === "external" && (
+                    <span className="shrink-0 text-[9px] font-mono uppercase tracking-wider text-muted-foreground/50 border border-border px-1">
+                      routed
+                    </span>
+                  )}
                   <span className="ml-auto shrink-0 text-muted-foreground/50">{VERB[r.settlementType] ?? r.settlementType}</span>
                   <span className={`shrink-0 ${r.delivered === false ? "text-destructive" : "text-green-400/70"}`}>
                     {r.delivered === false ? "✗" : "✓"}

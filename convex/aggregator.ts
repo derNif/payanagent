@@ -148,6 +148,14 @@ function publicResource(r: Doc<"externalResources">) {
   };
 }
 
+export const getExternalById = query({
+  args: { id: v.id("externalResources") },
+  handler: async (ctx, args) => {
+    const r = await ctx.db.get(args.id);
+    return r ? publicResource(r) : null;
+  },
+});
+
 export const listExternal = query({
   args: {
     network: v.optional(v.string()),
