@@ -25,16 +25,19 @@ export async function GET(
   const convex = getConvexClient();
 
   try {
-    const targetAgent = await convex.query(api.agents.getById, {
-      agentId: agentId as Id<"agents">,
-    });
+    const [targetAgent, reputation] = await Promise.all([
+      convex.query(api.agents.getById, { agentId: agentId as Id<"agents"> }),
+      convex.query(api.receipts.getReputation, { agentId: agentId as Id<"agents"> }).catch(() => null),
+    ]);
 
     if (!targetAgent) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
 
     // PII already stripped in the Convex query; strip again at the boundary.
-    return NextResponse.json(toPublicAgent(targetAgent));
+    // `reputation` is the usable, receipt-derived trust summary so agents don't
+    // have to parse raw receipts.
+    return NextResponse.json({ ...toPublicAgent(targetAgent), reputation });
   } catch {
     return NextResponse.json({ error: "Invalid agent ID" }, { status: 400 });
   }

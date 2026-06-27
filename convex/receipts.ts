@@ -208,6 +208,85 @@ export const listByAgent = query({
   },
 });
 
+// Record whether a settled receipt's service actually delivered. Platform-secret
+// gated (same trust boundary as recordSettlement). Called by the buy/x402/approve
+// routes after the delivery attempt.
+export const markDelivered = mutation({
+  args: {
+    platformSecret: v.string(),
+    receiptId: v.id("receipts"),
+    delivered: v.boolean(),
+    deliveryStatus: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    if (!PLATFORM_INTERNAL_KEY || args.platformSecret !== PLATFORM_INTERNAL_KEY) {
+      throw new Error("unauthorized: invalid platform secret");
+    }
+    await ctx.db.patch(args.receiptId, {
+      delivered: args.delivered,
+      deliveryStatus: args.deliveryStatus,
+    });
+  },
+});
+
+// Derived, instantly-usable reputation for a seller — computed from receipts so
+// agents don't have to parse them. Objective + wash-resistant: success rate is
+// weighted by buyer DIVERSITY (one wallet can't manufacture trust), and every
+// fake buy costs real USDC. Transparent: all components are returned alongside
+// the score, and the raw receipts remain the verifiable drill-down.
+export const getReputation = query({
+  args: { agentId: v.id("agents") },
+  handler: async (ctx, args) => {
+    const sold = await ctx.db
+      .query("receipts")
+      .withIndex("by_sellerId", (q) => q.eq("sellerId", args.agentId))
+      .take(1000);
+    const confirmed = sold.filter((r) => r.status === "confirmed");
+    const sales = confirmed.length;
+
+    if (sales === 0) {
+      return {
+        sales: 0,
+        distinctBuyers: 0,
+        volumeCents: 0,
+        successRate: 1,
+        score: 0,
+        trusted: false,
+        lastActiveAt: null as number | null,
+        firstSaleAt: null as number | null,
+      };
+    }
+
+    const distinctBuyers = new Set(confirmed.map((r) => String(r.buyerId))).size;
+    const volumeCents = confirmed.reduce((s, r) => s + r.amountCents, 0);
+    // Legacy receipts (delivered undefined, pre-feature) count as delivered.
+    const deliveredOk = confirmed.filter((r) => r.delivered !== false).length;
+    const successRate = deliveredOk / sales;
+    const lastActiveAt = confirmed.reduce((m, r) => Math.max(m, r.emittedAt), 0);
+    const firstSaleAt = confirmed.reduce(
+      (m, r) => Math.min(m, r.emittedAt),
+      Number.POSITIVE_INFINITY,
+    );
+
+    // Confidence scales with buyer diversity (full at 5+ distinct buyers), so a
+    // single-wallet wash can't reach a high score.
+    const confidence = Math.min(1, distinctBuyers / 5);
+    const score = Math.round(successRate * 100 * (0.5 + 0.5 * confidence));
+    const trusted = distinctBuyers >= 3 && successRate >= 0.9 && sales >= 5;
+
+    return {
+      sales,
+      distinctBuyers,
+      volumeCents,
+      successRate: Math.round(successRate * 100) / 100,
+      score,
+      trusted,
+      lastActiveAt,
+      firstSaleAt: firstSaleAt === Number.POSITIVE_INFINITY ? null : firstSaleAt,
+    };
+  },
+});
+
 export const getAgentStats = query({
   args: { agentId: v.id("agents") },
   handler: async (

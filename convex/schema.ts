@@ -171,6 +171,12 @@ export default defineSchema({
 
     status: v.union(v.literal("confirmed"), v.literal("failed")),
 
+    // Whether the service actually DELIVERED after payment settled — distinct
+    // from `status` (which only attests the on-chain payment). Drives the
+    // honest success-rate in reputation. Undefined = not yet recorded.
+    delivered: v.optional(v.boolean()),
+    deliveryStatus: v.optional(v.string()),
+
     latencyMs: v.optional(v.number()),
 
     signature: v.string(),

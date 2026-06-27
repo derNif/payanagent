@@ -12,6 +12,7 @@ import {
 } from "@/lib/x402";
 import { runInternalHandler } from "@/lib/internal-offers";
 import { assertPublicHttpUrl } from "@/lib/ssrf";
+import { validateInput } from "@/lib/validate-input";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -86,6 +87,28 @@ export async function POST(
     );
   }
 
+  // Validate the buyer's input BEFORE settling — never pay-then-fail on bad
+  // input. Body read once here and reused for delivery.
+  const rawBody = await request.text().catch(() => "");
+  let input: Record<string, unknown> = {};
+  if (rawBody) {
+    try {
+      input = JSON.parse(rawBody);
+    } catch {
+      return NextResponse.json(
+        { error: "Request body must be valid JSON" },
+        { status: 400 },
+      );
+    }
+  }
+  const inputCheck = validateInput(offer.inputSchema, input);
+  if (!inputCheck.valid) {
+    return NextResponse.json(
+      { error: `Invalid input: ${inputCheck.error}` },
+      { status: 400 },
+    );
+  }
+
   const integrityCheck = verifyPaymentIntegrity(
     paymentSignature,
     offer.priceCents,
@@ -135,14 +158,22 @@ export async function POST(
     },
   );
 
+  // Record whether the service actually delivered (honest receipts).
+  const mark = (delivered: boolean, deliveryStatus?: string) =>
+    convex.mutation(api.receipts.markDelivered, {
+      platformSecret,
+      receiptId,
+      delivered,
+      deliveryStatus,
+    });
+
   // PayanAgent-operated (internal) offer: run the handler server-side. The
   // backend key lives only on the server and is never exposed as a callable
   // route, so it can't be drained by unpaid callers.
   if (offer.internalHandler) {
     try {
-      const body = await request.text();
-      const input = body ? JSON.parse(body) : {};
       const result = await runInternalHandler(offer.internalHandler, input);
+      await mark(true);
       return NextResponse.json(result, {
         headers: {
           "X-Receipt-Id": String(receiptId),
@@ -151,6 +182,7 @@ export async function POST(
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : "service call failed";
+      await mark(false, message.slice(0, 200));
       return NextResponse.json(
         {
           error: message,
@@ -164,6 +196,7 @@ export async function POST(
 
   // Download-type offer: return fileUrl
   if (offer.offerType === "download") {
+    await mark(true);
     return NextResponse.json({
       receiptId,
       fileUrl: offer.fileUrl,
@@ -173,6 +206,7 @@ export async function POST(
 
   // Api-type offer: proxy to seller's endpoint
   if (!offer.endpoint) {
+    await mark(false, "no endpoint configured");
     return NextResponse.json(
       { error: "Offer has no endpoint configured", receiptId },
       { status: 500 },
@@ -186,6 +220,7 @@ export async function POST(
     await assertPublicHttpUrl(offer.endpoint);
   } catch (err) {
     const message = err instanceof Error ? err.message : "blocked endpoint";
+    await mark(false, "blocked endpoint");
     return NextResponse.json(
       { error: `Offer endpoint not allowed: ${message}`, receiptId },
       { status: 502 },
@@ -193,17 +228,17 @@ export async function POST(
   }
 
   try {
-    const body = await request.text();
     // Never forward internal secrets to seller endpoints — they are
     // arbitrary external servers. Don't follow redirects into internal targets.
     const proxyResponse = await fetch(offer.endpoint, {
       method: offer.httpMethod || "POST",
       headers: { "Content-Type": "application/json" },
-      body: body || undefined,
+      body: rawBody || undefined,
       redirect: "manual",
     });
 
     const responseData = await proxyResponse.text();
+    await mark(proxyResponse.ok, `HTTP ${proxyResponse.status}`);
     return new NextResponse(responseData, {
       status: proxyResponse.status,
       headers: {
@@ -214,6 +249,7 @@ export async function POST(
       },
     });
   } catch {
+    await mark(false, "endpoint unreachable");
     return NextResponse.json(
       {
         error: "Failed to reach offer endpoint",
