@@ -45,8 +45,8 @@ export default async function ExternalResourcePage({ params }: Props) {
         ? `$${price.toFixed(4)}`
         : `$${price.toFixed(2)}`;
 
-  const buySnippet = `# Buy THROUGH PayanAgent (we relay, you pay the seller directly):
-curl -X POST https://payanagent.com/x402/ext/${id} \\
+  const buySnippet = `# Buy THROUGH PayanAgent (same /x402/:id as any offer):
+curl -X POST https://payanagent.com/x402/${id} \\
   -H 'Content-Type: application/json' -d '{}'
 # First call returns HTTP 402 with the seller's x402 challenge — sign and retry,
 # or let @x402/fetch handle it. A signed receipt is emitted on delivery.`;

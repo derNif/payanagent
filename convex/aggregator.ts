@@ -156,6 +156,19 @@ export const getExternalById = query({
   },
 });
 
+// String-safe lookup for the unified /x402/:id buy route: returns the external
+// resource if the id belongs to externalResources, else null (a native offer id
+// normalizes to null here rather than throwing), so one route can dispatch.
+export const getExternalByAnyId = query({
+  args: { id: v.string() },
+  handler: async (ctx, args) => {
+    const norm = ctx.db.normalizeId("externalResources", args.id);
+    if (!norm) return null;
+    const r = await ctx.db.get(norm);
+    return r ? publicResource(r) : null;
+  },
+});
+
 export const listExternal = query({
   args: {
     network: v.optional(v.string()),

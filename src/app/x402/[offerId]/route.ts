@@ -13,6 +13,7 @@ import {
 import { runInternalHandler } from "@/lib/internal-offers";
 import { assertPublicHttpUrl } from "@/lib/ssrf";
 import { attachFeeAdvert, collectFee } from "@/lib/x402-fee";
+import { relayExternalBuy } from "@/lib/relay-buy";
 import { validateInput } from "@/lib/validate-input";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { api } from "@convex/_generated/api";
@@ -20,11 +21,11 @@ import { Id } from "@convex/_generated/dataModel";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://payanagent.com";
 
-// GET|POST /x402/:offerId — the offer as a first-class, anonymously-payable x402
-// resource (no API key). Unpaid request -> HTTP 402 with payment terms (so x402
-// crawlers/agents can discover it); paid request -> settle, identify the buyer
-// by wallet (auto-account), deliver, and emit a receipt. Mirrors the hardened
-// /api/v1/offers/:id/buy path; the only difference is wallet identity vs key.
+// GET|POST /x402/:id — the ONE universal buy route. The id resolves to either a
+// PayanAgent-native offer (we settle) or an external ecosystem resource (we
+// relay non-custodially). The buyer never sees the difference: unpaid -> 402,
+// paid -> content + a signed receipt. Backend mechanic is dispatched here; the
+// agent just hits one URL.
 async function handle(
   request: NextRequest,
   offerId: string,
@@ -42,6 +43,16 @@ async function handle(
 
   const ip = getClientIp(request);
   const convex = getConvexClient();
+
+  // Unified dispatch: if this id is an external ecosystem resource, relay-buy it
+  // (non-custodial). Otherwise fall through to the native offer flow. One route,
+  // two mechanics, invisible to the buyer.
+  const external = await convex.query(api.aggregator.getExternalByAnyId, {
+    id: offerId,
+  });
+  if (external) {
+    return relayExternalBuy(request, external, platformSecret);
+  }
 
   let offer;
   try {
