@@ -8,18 +8,17 @@ import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://payanagent.com";
-
-// Fee on routed buys. OFF by default — v1 is a pure non-custodial relay. When
-// set > 0 (basis points), the two-payment checkout adds a PayanAgent fee leg
-// (see the two FEE hooks below). Enabling also needs the buyer-side convention,
-// so this stays 0 until we're the default route (Phase 3).
-const FEE_BPS = Number(process.env.PAYANAGENT_FEE_BPS || "0");
-
 const BASE_NETWORKS = new Set(["eip155:8453", "base"]);
 
-// Headers we must not forward verbatim (hop-by-hop / length/encoding managed by
-// the runtime). Everything else — including the buyer's payment header — passes
-// through transparently in both directions.
+// The external resource shape the unified buy route hands us (public projection).
+export type RelayResource = {
+  _id: Id<"externalResources">;
+  resource: string;
+  payTo: string;
+  amountRaw: string;
+  network: string;
+};
+
 const STRIP_REQ = new Set([
   "host",
   "connection",
@@ -43,10 +42,10 @@ function passthroughResponseHeaders(from: Headers, extra: Record<string, string>
   return h;
 }
 
-// x402 sellers commonly carry the 402 challenge in a base64-JSON header (the
-// body may be empty). Rewrite the challenge's resource.url → our endpoint so a
-// client that follows it retries THROUGH PayanAgent; the signed terms
-// (accepts[].payTo/amount/asset/network) are left untouched.
+// x402 sellers commonly carry the 402 challenge in a base64-JSON header. Rewrite
+// the challenge's resource.url → our endpoint so a client that follows it
+// retries THROUGH PayanAgent; the signed terms (payTo/amount/asset/network) are
+// left untouched.
 const CHALLENGE_HEADERS = ["payment-required", "x-payment-required", "www-authenticate"];
 function rewriteChallengeB64(value: string, newUrl: string): string {
   try {
@@ -61,9 +60,6 @@ function rewriteChallengeB64(value: string, newUrl: string): string {
   return value;
 }
 
-// Parse a settlement tx hash from the seller's X-PAYMENT-RESPONSE header
-// (base64 JSON { transaction }) if present. Best-effort — receipt records "" if
-// the seller doesn't surface it.
 function txHashFromResponse(res: Response): string {
   const raw = res.headers.get("x-payment-response") || res.headers.get("payment-response");
   if (!raw) return "";
@@ -75,48 +71,30 @@ function txHashFromResponse(res: Response): string {
   }
 }
 
-// GET|POST /x402/ext/:id — buy an EXTERNAL x402 resource THROUGH PayanAgent.
-// Non-custodial transparent relay: we forward the seller's own 402 (buyer pays
-// the seller directly, the seller's facilitator settles), relay the content
-// back, and record a receipt so the external seller earns reputation and the
-// pass-through volume is measured. We never touch the funds.
-async function handle(request: NextRequest, id: string): Promise<NextResponse> {
+// Buy an EXTERNAL x402 resource THROUGH PayanAgent — non-custodial transparent
+// relay. Called by the unified /x402/:id route when the id resolves to an
+// ecosystem resource. We forward the seller's own 402 (buyer pays the seller
+// directly, the seller's facilitator settles), relay the content back, and
+// record a receipt so the external seller earns reputation. We never touch funds.
+export async function relayExternalBuy(
+  request: NextRequest,
+  resource: RelayResource,
+  platformSecret: string,
+): Promise<NextResponse> {
   const startedAt = Date.now();
-
-  const platformSecret = process.env.PLATFORM_INTERNAL_KEY || "";
-  if (!platformSecret) {
-    return NextResponse.json(
-      { error: "Platform misconfigured: missing PLATFORM_INTERNAL_KEY" },
-      { status: 500 },
-    );
-  }
-
   const convex = getConvexClient();
 
-  let resource;
-  try {
-    resource = await convex.query(api.aggregator.getExternalById, {
-      id: id as Id<"externalResources">,
-    });
-  } catch {
-    return NextResponse.json({ error: "Invalid resource ID" }, { status: 400 });
-  }
-  if (!resource) {
-    return NextResponse.json({ error: "Resource not found" }, { status: 404 });
-  }
-
-  // v1: only Base resources are routable (the buyer signs USDC-on-Base terms).
+  // Only Base resources are routable (the buyer signs USDC-on-Base terms).
   if (!BASE_NETWORKS.has(resource.network)) {
     return NextResponse.json(
       {
         error: `Resource is on '${resource.network}', not yet routable through PayanAgent`,
-        hint: "Only Base (eip155:8453) resources are buyable via /x402/ext for now.",
+        hint: "Only Base (eip155:8453) resources are buyable for now.",
       },
       { status: 501 },
     );
   }
 
-  // SSRF guard the seller URL before every fetch (defends DNS rebinding).
   try {
     await assertPublicHttpUrl(resource.resource);
   } catch (err) {
@@ -127,13 +105,12 @@ async function handle(request: NextRequest, id: string): Promise<NextResponse> {
     );
   }
 
-  const canonicalUrl = `${APP_URL}/x402/ext/${id}`;
+  const canonicalUrl = `${APP_URL}/x402/${resource._id}`;
   const paymentHeader =
     request.headers.get("x-payment") ||
     request.headers.get("payment-signature") ||
     request.headers.get("payment");
 
-  // Rate limit: probes by IP, paid calls by buyer wallet (the economic gate).
   const ip = getClientIp(request);
   if (!paymentHeader) {
     const rl = await checkRateLimit(`extprobe:${ip}`, RATE_LIMITS.unauthenticated);
@@ -142,11 +119,8 @@ async function handle(request: NextRequest, id: string): Promise<NextResponse> {
     }
   }
 
-  // Read the buyer's body once and forward it verbatim.
   const rawBody = request.method === "GET" ? undefined : await request.text().catch(() => "");
 
-  // Build the forwarded request: copy the buyer's headers (incl. the payment
-  // header) minus hop-by-hop. This keeps the relay format-agnostic.
   const fwdHeaders = new Headers();
   request.headers.forEach((value, key) => {
     if (!STRIP_REQ.has(key.toLowerCase())) fwdHeaders.set(key, value);
@@ -167,9 +141,7 @@ async function handle(request: NextRequest, id: string): Promise<NextResponse> {
     );
   }
 
-  // --- Unpaid: relay the seller's 402 challenge (rewrite resource.url → us so
-  // the buyer's client retries through PayanAgent, keeping us the route). The
-  // signed terms (payTo/amount/asset/network) are passed through untouched. ---
+  // Unpaid: relay the seller's 402 (rewrite resource.url → us, terms untouched).
   if (!paymentHeader || sellerRes.status === 402) {
     const text = await sellerRes.text();
     let body = text;
@@ -178,8 +150,6 @@ async function handle(request: NextRequest, id: string): Promise<NextResponse> {
       if (json && typeof json === "object" && json.resource?.url) {
         json.resource.url = canonicalUrl;
       }
-      // FEE hook (1/2): when FEE_BPS > 0, append a PayanAgent fee entry to
-      // json.accepts here (payTo = platform wallet, amount = feeBps of price).
       body = JSON.stringify(json);
     } catch {
       // Non-JSON challenge — relay verbatim.
@@ -187,19 +157,15 @@ async function handle(request: NextRequest, id: string): Promise<NextResponse> {
     const headers = passthroughResponseHeaders(sellerRes.headers, {
       "Content-Type": sellerRes.headers.get("content-type") || "application/json",
     });
-    // Rewrite the resource.url inside any base64 challenge header → us.
     for (const name of CHALLENGE_HEADERS) {
       const v = headers.get(name);
       if (v) headers.set(name, rewriteChallengeB64(v, canonicalUrl));
     }
-    // Advertise the optional PayanAgent fee leg (no-op when the fee is off).
     attachFeeAdvert(headers, Number(resource.amountRaw) || 0);
     return new NextResponse(body, { status: 402, headers });
   }
 
-  // --- Paid: the buyer's payment was forwarded; the seller verified+settled
-  // buyer→seller and returned content. Relay it back, and record a receipt on
-  // a clean delivery (2xx). ---
+  // Paid: forward settled buyer→seller, relay content, record a receipt on 2xx.
   const buyerWallet = extractBuyerWallet(paymentHeader);
   const responseBody = await sellerRes.text();
 
@@ -221,7 +187,7 @@ async function handle(request: NextRequest, id: string): Promise<NextResponse> {
         platformSecret,
         buyerId,
         sellerId,
-        externalResourceId: id as Id<"externalResources">,
+        externalResourceId: resource._id,
         amountCents: Math.round(amountMicroUsd / 10000),
         amountMicroUsd,
         currency: "USDC",
@@ -237,12 +203,8 @@ async function handle(request: NextRequest, id: string): Promise<NextResponse> {
         receiptId,
         delivered: true,
       });
-      // Collect the optional, buyer-signed fee leg → platform wallet
-      // (non-custodial; no-op when the fee is off or absent).
       await collectFee(request);
     } catch {
-      // Delivery succeeded for the buyer; only our bookkeeping failed. Don't
-      // fail the buyer's response over a receipt write.
       receiptId = null;
     }
   }
@@ -255,20 +217,4 @@ async function handle(request: NextRequest, id: string): Promise<NextResponse> {
       "X-Routed-Through": "payanagent",
     }),
   });
-}
-
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const { id } = await params;
-  return handle(request, id);
-}
-
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const { id } = await params;
-  return handle(request, id);
 }
