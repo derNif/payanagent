@@ -287,6 +287,98 @@ export const getReputation = query({
   },
 });
 
+// One-shot data for the leaderboard dashboard: global stats, ranked sellers
+// (with reputation), and a recent settlement feed (with party names). Capped
+// reads. Designed for a single live useQuery so the board feels alive.
+export const getLeaderboard = query({
+  args: {},
+  handler: async (ctx) => {
+    const recent = await ctx.db
+      .query("receipts")
+      .withIndex("by_emittedAt")
+      .order("desc")
+      .take(2000);
+    const confirmed = recent.filter((r) => r.status === "confirmed");
+    const now = recent.length ? recent[0].emittedAt : 0;
+    const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
+    const last7d = confirmed.filter((r) => r.emittedAt >= weekAgo);
+
+    // Aggregate per seller.
+    type Acc = { sellerId: Id<"agents">; volumeCents: number; sales: number; buyers: Set<string>; delivered: number };
+    const bySeller = new Map<string, Acc>();
+    for (const r of confirmed) {
+      const k = String(r.sellerId);
+      const cur = bySeller.get(k) ?? { sellerId: r.sellerId, volumeCents: 0, sales: 0, buyers: new Set(), delivered: 0 };
+      cur.volumeCents += r.amountCents;
+      cur.sales += 1;
+      cur.buyers.add(String(r.buyerId));
+      if (r.delivered !== false) cur.delivered += 1;
+      bySeller.set(k, cur);
+    }
+    const ranked = [...bySeller.values()]
+      .map((s) => {
+        const distinctBuyers = s.buyers.size;
+        const successRate = s.sales ? s.delivered / s.sales : 1;
+        const confidence = Math.min(1, distinctBuyers / 5);
+        return {
+          sellerId: s.sellerId,
+          volumeCents: s.volumeCents,
+          sales: s.sales,
+          distinctBuyers,
+          successRate: Math.round(successRate * 100) / 100,
+          score: Math.round(successRate * 100 * (0.5 + 0.5 * confidence)),
+          trusted: distinctBuyers >= 3 && successRate >= 0.9 && s.sales >= 5,
+        };
+      })
+      .sort((a, b) => b.volumeCents - a.volumeCents)
+      .slice(0, 50);
+
+    // Resolve names (sellers + feed parties), cached.
+    const nameCache = new Map<string, { name: string; providerType: string } | null>();
+    const resolve = async (id: Id<"agents">) => {
+      const k = String(id);
+      if (!nameCache.has(k)) {
+        const a = await ctx.db.get(id);
+        nameCache.set(k, a ? { name: a.name, providerType: a.providerType } : null);
+      }
+      return nameCache.get(k);
+    };
+
+    const topSellers = [];
+    for (const s of ranked) {
+      const info = await resolve(s.sellerId);
+      topSellers.push({ ...s, name: info?.name ?? "Unknown", providerType: info?.providerType ?? "agent" });
+    }
+
+    const feed = [];
+    for (const r of confirmed.slice(0, 25)) {
+      const [buyer, seller] = [await resolve(r.buyerId), await resolve(r.sellerId)];
+      feed.push({
+        _id: r._id,
+        amountCents: r.amountCents,
+        settlementType: r.settlementType,
+        delivered: r.delivered,
+        emittedAt: r.emittedAt,
+        buyerName: buyer?.name ?? "agent",
+        sellerName: seller?.name ?? "agent",
+      });
+    }
+
+    return {
+      stats: {
+        totalVolumeCents: confirmed.reduce((s, r) => s + r.amountCents, 0),
+        totalReceipts: confirmed.length,
+        distinctSellers: bySeller.size,
+        distinctBuyers: new Set(confirmed.map((r) => String(r.buyerId))).size,
+        volume7dCents: last7d.reduce((s, r) => s + r.amountCents, 0),
+        receipts7d: last7d.length,
+      },
+      topSellers,
+      feed,
+    };
+  },
+});
+
 export const getAgentStats = query({
   args: { agentId: v.id("agents") },
   handler: async (
