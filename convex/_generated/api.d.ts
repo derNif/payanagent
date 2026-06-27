@@ -9,6 +9,7 @@
  */
 
 import type * as agents from "../agents.js";
+import type * as aggregator from "../aggregator.js";
 import type * as apiKeys from "../apiKeys.js";
 import type * as offers from "../offers.js";
 import type * as receipts from "../receipts.js";
@@ -23,6 +24,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   agents: typeof agents;
+  aggregator: typeof aggregator;
   apiKeys: typeof apiKeys;
   offers: typeof offers;
   receipts: typeof receipts;

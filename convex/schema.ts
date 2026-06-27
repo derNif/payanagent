@@ -190,6 +190,49 @@ export default defineSchema({
     .index("by_emittedAt", ["emittedAt"])
     .index("by_settlementType", ["settlementType", "emittedAt"]),
 
+  // External x402 resources discovered across the ecosystem (CDP Bazaar today),
+  // mirrored so they are discoverable — and buyable — *through* PayanAgent. We
+  // never custody: the stored payTo stays the external seller's wallet; the
+  // proxy-buy path forwards their 402 and records a receipt. Keyed by `resource`
+  // (the canonical URL) for idempotent re-ingestion.
+  externalResources: defineTable({
+    source: v.string(), // "bazaar"
+    resource: v.string(), // canonical external URL (unique key)
+    serviceName: v.optional(v.string()),
+    description: v.string(),
+    tags: v.array(v.string()),
+    category: v.string(),
+    type: v.optional(v.string()), // "http"
+    iconUrl: v.optional(v.string()),
+
+    // Chosen payment terms (prefer Base-mainnet USDC `exact`). Raw atomic amount
+    // is authoritative; priceUsd is a display convenience (USDC = 6 decimals).
+    amountRaw: v.string(),
+    asset: v.string(),
+    network: v.string(),
+    payTo: v.string(),
+    scheme: v.string(),
+    priceUsd: v.optional(v.number()),
+
+    inputSchema: v.optional(v.string()),
+    outputSchema: v.optional(v.string()),
+    x402Version: v.optional(v.number()),
+    qualityScore: v.optional(v.number()),
+
+    sourceLastUpdated: v.optional(v.string()),
+    firstSeenAt: v.number(),
+    lastSeenAt: v.number(),
+    status: v.union(v.literal("active"), v.literal("stale")),
+  })
+    .index("by_resource", ["resource"])
+    .index("by_status", ["status", "lastSeenAt"])
+    .index("by_network", ["network", "status"])
+    .index("by_category", ["category", "status"])
+    .searchIndex("search_external", {
+      searchField: "description",
+      filterFields: ["status", "network", "category"],
+    }),
+
   // Bids on open requests.
   bids: defineTable({
     requestId: v.id("requests"),
