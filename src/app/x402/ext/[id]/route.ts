@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
 import { extractBuyerWallet, getNetwork } from "@/lib/x402";
 import { assertPublicHttpUrl } from "@/lib/ssrf";
+import { attachFeeAdvert, collectFee } from "@/lib/x402-fee";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
@@ -191,6 +192,8 @@ async function handle(request: NextRequest, id: string): Promise<NextResponse> {
       const v = headers.get(name);
       if (v) headers.set(name, rewriteChallengeB64(v, canonicalUrl));
     }
+    // Advertise the optional PayanAgent fee leg (no-op when the fee is off).
+    attachFeeAdvert(headers, Number(resource.amountRaw) || 0);
     return new NextResponse(body, { status: 402, headers });
   }
 
@@ -234,9 +237,9 @@ async function handle(request: NextRequest, id: string): Promise<NextResponse> {
         receiptId,
         delivered: true,
       });
-      // FEE hook (2/2): when FEE_BPS > 0, settle the buyer-signed fee leg here
-      // via settlePayment(feePayload) → platform wallet (non-custodial: it's a
-      // separate buyer→PayanAgent authorization, not skimmed from the seller).
+      // Collect the optional, buyer-signed fee leg → platform wallet
+      // (non-custodial; no-op when the fee is off or absent).
+      await collectFee(request);
     } catch {
       // Delivery succeeded for the buyer; only our bookkeeping failed. Don't
       // fail the buyer's response over a receipt write.
