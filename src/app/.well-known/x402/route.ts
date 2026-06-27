@@ -37,6 +37,18 @@ export async function GET() {
           category: o.category,
           input: o.inputSchema ?? undefined,
           output: o.outputSchema ?? undefined,
+          // Receipt-derived seller reputation, inline for discovering agents.
+          seller: o.reputation
+            ? {
+                name: o.sellerName,
+                trusted: o.reputation.trusted,
+                score: o.reputation.score,
+                sales: o.reputation.sales,
+                distinctBuyers: o.reputation.distinctBuyers,
+                successRate: o.reputation.successRate,
+                volumeUsd: (o.reputation.volumeCents / 100).toFixed(2),
+              }
+            : undefined,
         },
       }));
   } catch {

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { getConvexClient } from "@/lib/convex";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
+import { VerifiedBadge } from "@/components/verified-badge";
 
 type Props = {
   params: Promise<{ offerId: string }>;
@@ -49,10 +50,10 @@ export default async function OfferPage({ params }: Props) {
   if (!offer) notFound();
 
   const convex = getConvexClient();
-  const [seller, sellerStats] = await Promise.all([
+  const [seller, reputation] = await Promise.all([
     convex.query(api.agents.getById, { agentId: offer.sellerId }).catch(() => null),
     convex
-      .query(api.receipts.getAgentStats, { agentId: offer.sellerId })
+      .query(api.receipts.getReputation, { agentId: offer.sellerId })
       .catch(() => null),
   ]);
 
@@ -181,20 +182,28 @@ export default async function OfferPage({ params }: Props) {
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <Link
               href={`/marketplace/agents/${offer.sellerId}`}
-              className="text-sm text-foreground hover:text-primary font-semibold"
+              className="inline-flex items-center gap-1.5 text-sm text-foreground hover:text-primary font-semibold"
             >
-              {seller?.name ?? "Unknown agent"} →
+              {seller?.name ?? "Unknown agent"}
+              {reputation?.trusted && <VerifiedBadge size={15} />}
+              <span aria-hidden>→</span>
             </Link>
-            {sellerStats && (
-              <p className="text-xs font-mono text-muted-foreground">
-                {sellerStats.receiptsSold} receipts sold · $
-                {(sellerStats.totalEarnedCents / 100).toFixed(2)} earned
-              </p>
+            {reputation && reputation.sales > 0 && (
+              <div className="flex items-center gap-3 text-xs font-mono text-muted-foreground">
+                <span className="text-foreground/90">score {reputation.score}</span>
+                <span>{Math.round(reputation.successRate * 100)}% delivered</span>
+                <span>{reputation.distinctBuyers} buyers</span>
+                <span>${(reputation.volumeCents / 100).toFixed(2)} settled</span>
+              </div>
             )}
           </div>
           <p className="mt-2 text-xs text-muted-foreground/70 leading-relaxed">
-            Reputation on PayanAgent is the seller&apos;s public receipt history —
-            signed settlement records, not star ratings.
+            {reputation?.trusted
+              ? "Verified seller — score is delivery rate weighted by distinct-buyer diversity, derived from on-chain settled receipts (not star ratings). "
+              : "Reputation is derived from the seller's public, signed receipt history — settled on-chain, not star ratings. "}
+            <Link href="/marketplace/receipts" className="text-primary hover:underline">
+              See the receipts →
+            </Link>
           </p>
         </div>
 

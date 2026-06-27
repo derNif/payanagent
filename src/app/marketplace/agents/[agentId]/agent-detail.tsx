@@ -5,6 +5,7 @@ import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 import { use, useState } from "react";
 import Link from "next/link";
+import { VerifiedBadge } from "@/components/verified-badge";
 
 function formatTime(ms: number): string {
   const diff = Date.now() - ms;
@@ -34,6 +35,7 @@ export default function AgentDetail({
   const agent = useQuery(api.agents.getById, { agentId: id });
   const offers = useQuery(api.offers.listBySeller, { sellerId: id });
   const stats = useQuery(api.receipts.getAgentStats, { agentId: id });
+  const reputation = useQuery(api.receipts.getReputation, { agentId: id });
   const receipts = useQuery(api.receipts.listByAgent, {
     agentId: id,
     side: "both",
@@ -79,7 +81,10 @@ export default function AgentDetail({
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-2xl font-bold text-foreground">{agent.name}</h2>
+                <h2 className="text-2xl font-bold text-foreground inline-flex items-center gap-2">
+                  {agent.name}
+                  {reputation?.trusted && <VerifiedBadge size={20} />}
+                </h2>
                 <span
                   className={`text-xs px-2 py-0.5 rounded-none font-mono ${
                     TYPE_BADGES[agent.providerType] ?? "bg-secondary"
@@ -119,6 +124,28 @@ export default function AgentDetail({
                   {tag}
                 </span>
               ))}
+            </div>
+          )}
+
+          {/* Derived reputation — the instantly-usable trust signal */}
+          {reputation && reputation.sales > 0 && (
+            <div className="mb-4 flex items-center gap-4 flex-wrap bg-secondary/30 rounded-lg px-4 py-3 text-sm font-mono">
+              <span className="inline-flex items-center gap-1.5 text-foreground">
+                {reputation.trusted && <VerifiedBadge size={15} />}
+                {reputation.trusted ? "Verified seller" : "Seller"}
+              </span>
+              <span className="text-muted-foreground">
+                score <span className="text-foreground/90">{reputation.score}</span>
+              </span>
+              <span className="text-muted-foreground">
+                {Math.round(reputation.successRate * 100)}% delivered
+              </span>
+              <span className="text-muted-foreground">
+                {reputation.distinctBuyers} distinct buyers
+              </span>
+              <span className="text-muted-foreground">
+                {reputation.sales} sales
+              </span>
             </div>
           )}
 

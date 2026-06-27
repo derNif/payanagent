@@ -40,6 +40,21 @@ export async function GET() {
           summary: o.title,
           description: o.description,
           tags: [o.category],
+          // Receipt-derived seller reputation, inline so a discovering agent
+          // sees the trust signal at decision time (verifiable via /marketplace
+          // receipts). Omitted for sellers with no sales yet.
+          "x-seller": o.reputation
+            ? {
+                name: o.sellerName,
+                wallet: o.sellerWallet ?? undefined,
+                trusted: o.reputation.trusted,
+                score: o.reputation.score,
+                sales: o.reputation.sales,
+                distinctBuyers: o.reputation.distinctBuyers,
+                successRate: o.reputation.successRate,
+                volumeUsd: (o.reputation.volumeCents / 100).toFixed(2),
+              }
+            : undefined,
           "x-payment-info": {
             price: {
               mode: "fixed",

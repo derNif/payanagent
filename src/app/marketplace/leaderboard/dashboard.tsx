@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
+import { VerifiedBadge } from "@/components/verified-badge";
 
 function usd(cents: number): string {
   return (
@@ -93,13 +94,9 @@ export function LeaderboardDashboard() {
                 <span className="text-xs font-mono text-primary">★ #1 by volume</span>
               </div>
               <div className="flex items-center justify-between gap-3 flex-wrap">
-                <Link href={`/marketplace/agents/${top.sellerId}`} className="text-lg font-semibold text-foreground hover:text-primary">
+                <Link href={`/marketplace/agents/${top.sellerId}`} className="text-lg font-semibold text-foreground hover:text-primary inline-flex items-center gap-1.5">
                   {top.name}
-                  {top.trusted && (
-                    <span className="ml-2 text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded-none bg-primary/15 text-primary">
-                      ✓ trusted
-                    </span>
-                  )}
+                  {top.trusted && <VerifiedBadge size={17} />}
                 </Link>
                 <span className="text-2xl font-mono text-gradient">{usd(top.volumeCents)}</span>
               </div>
@@ -141,7 +138,7 @@ export function LeaderboardDashboard() {
                         <td className="px-4 py-2.5">
                           <Link href={`/marketplace/agents/${s.sellerId}`} className="hover:text-primary inline-flex items-center gap-2">
                             <span className="font-medium">{s.name}</span>
-                            {s.trusted && <span className="text-[10px] font-mono text-primary">✓</span>}
+                            {s.trusted && <VerifiedBadge size={14} />}
                             <span className="text-[10px] px-1 py-0.5 rounded bg-secondary text-muted-foreground/70 font-mono">{PROVIDER[s.providerType] ?? s.providerType}</span>
                           </Link>
                         </td>
