@@ -27,28 +27,43 @@ export async function GET(request: NextRequest) {
   const query = params.get("q");
   const category = params.get("category");
   const offerType = params.get("offerType");
+  const sortParam = params.get("sort");
+  const sort = sortParam === "price" || sortParam === "new" ? sortParam : "top";
+  const cursor = params.get("cursor");
   const limitParam = params.get("limit");
   const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10), 1), 200) : 50;
 
+  const withBuyUrl = (o: object) => ({
+    ...o,
+    buyUrl: `/x402/${(o as { _id: string })._id}`,
+  });
+
   try {
     const convex = getConvexClient();
-    let offers;
     if (query) {
-      offers = await convex.query(api.offers.search, {
+      // Full-text search across the whole catalog.
+      const offers = await convex.query(api.offers.search, {
         query,
         category: category ?? undefined,
         offerType: (offerType === "api" || offerType === "download") ? offerType : undefined,
         limit,
       });
-    } else if (category) {
-      offers = await convex.query(api.offers.listByCategory, { category, limit });
-    } else {
-      offers = await convex.query(api.offers.listActive, {
-        offerType: (offerType === "api" || offerType === "download") ? offerType : undefined,
-        limit,
-      });
+      return NextResponse.json({ offers: offers.map(toPublicOffer).map(withBuyUrl) });
     }
-    return NextResponse.json({ offers: offers.map(toPublicOffer) });
+    if (category) {
+      const offers = await convex.query(api.offers.listByCategory, { category, limit });
+      return NextResponse.json({ offers: offers.map(toPublicOffer).map(withBuyUrl) });
+    }
+    // Ranked, paginated browse over the whole market — pass back `cursor` from
+    // `nextCursor` to page through. sort = top | price | new.
+    const result = await convex.query(api.offers.browse, {
+      sort,
+      paginationOpts: { numItems: limit, cursor: cursor ?? null },
+    });
+    return NextResponse.json({
+      offers: result.page.map(withBuyUrl),
+      nextCursor: result.isDone ? null : result.continueCursor,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });

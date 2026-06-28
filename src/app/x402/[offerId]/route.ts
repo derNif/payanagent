@@ -219,6 +219,12 @@ async function handle(
   // the ecosystem route.
   await collectFee(request);
 
+  // Float this offer into the "sold" rank tier (proven offers rank top).
+  await convex.mutation(api.offers.bumpRankOnSale, {
+    platformSecret,
+    offerId: offer._id,
+  });
+
   // Record whether the service actually delivered (honest receipts).
   const mark = (delivered: boolean, deliveryStatus?: string) =>
     convex.mutation(api.receipts.markDelivered, {

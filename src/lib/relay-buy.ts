@@ -204,11 +204,16 @@ export async function relayExternalBuy(
         receiptId,
         delivered: true,
       });
-      // First sale → make this proxied seller first-class (ranks in leaderboard).
+      // First sale → make this proxied seller first-class (ranks in leaderboard)
+      // and float the offer into the "sold" rank tier.
       await convex.mutation(api.offers.backfillSeller, {
         platformSecret,
         offerId: offer._id,
         sellerId,
+      });
+      await convex.mutation(api.offers.bumpRankOnSale, {
+        platformSecret,
+        offerId: offer._id,
       });
       await collectFee(request);
     } catch {

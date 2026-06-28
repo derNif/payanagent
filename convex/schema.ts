@@ -229,33 +229,12 @@ export default defineSchema({
     .index("by_emittedAt", ["emittedAt"])
     .index("by_settlementType", ["settlementType", "emittedAt"]),
 
-  // DEPRECATED — proxied listings now live in `offers`. Kept only so its rows
-  // can be purged before the table is dropped (Convex blocks dropping a table
-  // that still has documents). No code reads it.
-  externalResources: defineTable({
-    source: v.string(),
-    resource: v.string(),
-    serviceName: v.optional(v.string()),
-    description: v.string(),
-    tags: v.array(v.string()),
-    category: v.string(),
-    type: v.optional(v.string()),
-    iconUrl: v.optional(v.string()),
-    amountRaw: v.string(),
-    asset: v.string(),
-    network: v.string(),
-    payTo: v.string(),
-    scheme: v.string(),
-    priceUsd: v.optional(v.number()),
-    inputSchema: v.optional(v.string()),
-    outputSchema: v.optional(v.string()),
-    x402Version: v.optional(v.number()),
-    qualityScore: v.optional(v.number()),
-    sourceLastUpdated: v.optional(v.string()),
-    firstSeenAt: v.number(),
-    lastSeenAt: v.number(),
-    status: v.union(v.literal("active"), v.literal("stale")),
-  }).index("by_status", ["status", "lastSeenAt"]),
+  // Cheap denormalized counters (e.g. "activeOffers") so the overview doesn't
+  // scan a 24.8k table to show a count.
+  counters: defineTable({
+    key: v.string(),
+    value: v.number(),
+  }).index("by_key", ["key"]),
 
   // Bids on open requests.
   bids: defineTable({

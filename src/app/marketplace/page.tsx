@@ -60,10 +60,10 @@ function TopSellerName({ sellerId }: { sellerId: Id<"agents"> }) {
 export default function MarketplacePage() {
   const agentStats = useQuery(api.agents.getStats);
   const globalReceipts = useQuery(api.receipts.getGlobalStats, {});
-  const activeOffers = useQuery(api.offers.listActive, { limit: 200 });
+  const offerCount = useQuery(api.offers.activeCount, {});
+  const latestOffers = useQuery(api.offers.listActive, { limit: 4 });
   const latestReceipts = useQuery(api.receipts.listFeed, { limit: 6 });
   const topSellers = useQuery(api.receipts.topSellers, { limit: 3 });
-  const latestOffers = activeOffers?.slice(0, 4);
 
   return (
     <div>
@@ -93,7 +93,7 @@ export default function MarketplacePage() {
         />
         <StatCard
           label="Offers live"
-          value={activeOffers?.length ?? "-"}
+          value={offerCount != null ? offerCount.toLocaleString() : "-"}
           sub="services & products"
         />
         <StatCard

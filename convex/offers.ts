@@ -1,12 +1,25 @@
 import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
-import { mutation, query, QueryCtx } from "./_generated/server";
+import { mutation, query, QueryCtx, MutationCtx } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
 import { computeReputation } from "./receipts";
 
-// Native offers get a ranking boost so our curated supply surfaces above the
-// bulk proxied inventory; proxied offers rank by their source quality score.
-const NATIVE_RANK = 100;
+// Ranking tiers for the default "top" browse:
+//   sold/proven  → SOLD_BASE + reputation score (settled offers float to top)
+//   native       → NATIVE_RANK (our curated supply, above the bulk)
+//   proxied      → source qualityScore (0–100)
+const SOLD_BASE = 10000;
+const NATIVE_RANK = 1000;
+
+// Counter helpers (cheap denormalized counts).
+async function bumpCounter(ctx: MutationCtx, key: string, delta: number) {
+  const row = await ctx.db
+    .query("counters")
+    .withIndex("by_key", (q) => q.eq("key", key))
+    .first();
+  if (row) await ctx.db.patch(row._id, { value: Math.max(0, row.value + delta) });
+  else await ctx.db.insert("counters", { key, value: Math.max(0, delta) });
+}
 
 const PLATFORM_INTERNAL_KEY = process.env.PLATFORM_INTERNAL_KEY ?? "";
 
@@ -118,12 +131,14 @@ export const create = mutation({
     if (args.priceCents < 1) {
       throw new Error("priceCents must be at least 1");
     }
-    return await ctx.db.insert("offers", {
+    const id = await ctx.db.insert("offers", {
       ...args,
       source: "native",
       rankScore: NATIVE_RANK,
       isActive: true,
     });
+    await bumpCounter(ctx, "activeOffers", 1);
+    return id;
   },
 });
 
@@ -155,7 +170,9 @@ export const update = mutation({
 export const deactivate = mutation({
   args: { offerId: v.id("offers") },
   handler: async (ctx, args) => {
+    const offer = await ctx.db.get(args.offerId);
     await ctx.db.patch(args.offerId, { isActive: false });
+    if (offer?.isActive) await bumpCounter(ctx, "activeOffers", -1);
   },
 });
 
@@ -541,6 +558,7 @@ export const upsertExternalBulk = mutation({
         created++;
       }
     }
+    if (created > 0) await bumpCounter(ctx, "activeOffers", created);
     return { created, updated };
   },
 });
@@ -561,7 +579,63 @@ export const sweepStaleExternal = mutation({
         swept++;
       }
     }
+    if (swept > 0) await bumpCounter(ctx, "activeOffers", -swept);
     return { swept };
+  },
+});
+
+// Cheap live offer count for the overview (reads one counter row).
+export const activeCount = query({
+  args: {},
+  handler: async (ctx): Promise<number> => {
+    const row = await ctx.db
+      .query("counters")
+      .withIndex("by_key", (q) => q.eq("key", "activeOffers"))
+      .first();
+    return row?.value ?? 0;
+  },
+});
+
+// Count a page of active offers (for one-time counter init). Loop from a script.
+export const countActivePage = query({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    const page = await ctx.db
+      .query("offers")
+      .withIndex("by_active", (q) => q.eq("isActive", true))
+      .paginate(args.paginationOpts);
+    return { count: page.page.length, isDone: page.isDone, continueCursor: page.continueCursor };
+  },
+});
+
+// Set a counter to a known value (one-time init / repair). Gated.
+export const setCounter = mutation({
+  args: { platformSecret: v.string(), key: v.string(), value: v.number() },
+  handler: async (ctx, args) => {
+    requireSecret(args.platformSecret);
+    const row = await ctx.db
+      .query("counters")
+      .withIndex("by_key", (q) => q.eq("key", args.key))
+      .first();
+    if (row) await ctx.db.patch(row._id, { value: args.value });
+    else await ctx.db.insert("counters", { key: args.key, value: args.value });
+  },
+});
+
+// Bump an offer into the "sold" rank tier (by its seller's reputation) after a
+// settlement, so proven offers float to the top of the default browse. Gated.
+export const bumpRankOnSale = mutation({
+  args: { platformSecret: v.string(), offerId: v.id("offers") },
+  handler: async (ctx, args) => {
+    requireSecret(args.platformSecret);
+    const offer = await ctx.db.get(args.offerId);
+    if (!offer || !offer.sellerId) return;
+    const sold = await ctx.db
+      .query("receipts")
+      .withIndex("by_sellerId", (q) => q.eq("sellerId", offer.sellerId!))
+      .take(500);
+    const rep = computeReputation(sold);
+    await ctx.db.patch(args.offerId, { rankScore: SOLD_BASE + rep.score });
   },
 });
 
@@ -612,7 +686,18 @@ export const backfillRank = mutation({
       .paginate({ numItems: 500, cursor: args.cursor ?? null });
     let patched = 0;
     for (const o of page.page) {
-      const rank = o.source === "bazaar" ? (o.qualityScore ?? 0) : NATIVE_RANK;
+      let rank = o.source === "bazaar" ? (o.qualityScore ?? 0) : NATIVE_RANK;
+      // Offers whose seller has sales float into the "sold" tier (receipt read
+      // only happens for the few offers that have a seller — unsold proxied
+      // offers have none).
+      if (o.sellerId) {
+        const sold = await ctx.db
+          .query("receipts")
+          .withIndex("by_sellerId", (q) => q.eq("sellerId", o.sellerId!))
+          .take(500);
+        const rep = computeReputation(sold);
+        if (rep.sales > 0) rank = SOLD_BASE + rep.score;
+      }
       if (o.rankScore !== rank) {
         await ctx.db.patch(o._id, { rankScore: rank });
         patched++;
@@ -622,14 +707,3 @@ export const backfillRank = mutation({
   },
 });
 
-// Cleanup: delete the orphaned externalResources rows so the table can be
-// dropped from the schema. Paginated; loop from a script until deleted === 0.
-export const purgeExternalResources = mutation({
-  args: { platformSecret: v.string() },
-  handler: async (ctx, args) => {
-    requireSecret(args.platformSecret);
-    const rows = await ctx.db.query("externalResources").take(800);
-    for (const r of rows) await ctx.db.delete(r._id);
-    return { deleted: rows.length };
-  },
-});
