@@ -10,13 +10,18 @@ const PLATFORM_INTERNAL_KEY = process.env.PLATFORM_INTERNAL_KEY ?? "";
 // the paid `fileUrl` deliverable, or the operator-private `internalHandler`.
 export type PublicOffer = Omit<
   Doc<"offers">,
-  "endpoint" | "fileUrl" | "internalHandler"
+  "endpoint" | "fileUrl" | "internalHandler" | "externalUrl" | "source"
 >;
+// Strip operator-private fields. `externalUrl`/`source` are stripped too so a
+// proxied external offer is indistinguishable from a native one to customers —
+// to a buyer it's just an offer (we're the intermediary; that's our business).
 function publicOffer(o: Doc<"offers">): PublicOffer {
-  const { endpoint, fileUrl, internalHandler, ...rest } = o;
+  const { endpoint, fileUrl, internalHandler, externalUrl, source, ...rest } = o;
   void endpoint;
   void fileUrl;
   void internalHandler;
+  void externalUrl;
+  void source;
   return rest;
 }
 
@@ -55,7 +60,11 @@ export const create = mutation({
     if (args.priceCents < 1) {
       throw new Error("priceCents must be at least 1");
     }
-    return await ctx.db.insert("offers", { ...args, isActive: true });
+    return await ctx.db.insert("offers", {
+      ...args,
+      source: "native",
+      isActive: true,
+    });
   },
 });
 
@@ -166,9 +175,12 @@ export const listActiveWithSellers = query({
         .take(limit);
     }
 
-    // Resolve each unique seller once: name + confirmed-receipt stats.
-    // Capped reads per seller keep worst-case I/O bounded.
-    const sellerIds = [...new Set(offers.map((o) => String(o.sellerId)))];
+    // Resolve each registered seller once (offers without a sellerId yet — an
+    // unsold proxied offer — use their inline sellerName + empty reputation).
+    const emptyRep = computeReputation([]);
+    const sellerIds = [
+      ...new Set(offers.filter((o) => o.sellerId).map((o) => String(o.sellerId))),
+    ];
     const sellers = new Map<
       string,
       {
@@ -208,27 +220,45 @@ export const listActiveWithSellers = query({
       outputSchema: o.outputSchema,
       estimatedDurationSeconds: o.estimatedDurationSeconds,
       previewDescription: o.previewDescription,
-      seller: sellers.get(String(o.sellerId))!,
+      seller: (o.sellerId && sellers.get(String(o.sellerId))) || {
+        name: o.sellerName ?? "Provider",
+        receiptsSold: 0,
+        totalEarnedCents: 0,
+        reputation: emptyRep,
+      },
     }));
   },
 });
 
-// Active offers joined with the seller's wallet, for the conformant x402
-// discovery document. Returns only public + payment fields (no endpoint/fileUrl/
-// internalHandler). Capped reads.
+// The discovery document (/openapi.json, /.well-known/x402): ALL native offers
+// (curated, small) + the top proxied offers (Base, buyable, quality-ranked) so
+// the manifest advertises that we carry the market without ballooning to 24.7k.
+// The full catalog stays searchable via `search`. Returns public + payment
+// fields incl. exact x402 terms (external carry real atomic amount/asset/network;
+// native derive from priceCents + Base USDC).
 export const listForDiscovery = query({
-  args: { limit: v.optional(v.number()) },
+  args: { ecoLimit: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    const limit = Math.min(args.limit ?? 200, 500);
-    const offers = await ctx.db
-      .query("offers")
-      .filter((q) => q.eq(q.field("isActive"), true))
-      .order("desc")
-      .take(limit);
+    const ecoLimit = Math.min(args.ecoLimit ?? 100, 300);
+    const emptyRep = computeReputation([]);
 
-    // Resolve each unique seller once: wallet + name + receipt-derived
-    // reputation, so a discovering agent sees the trust signal inline (no
-    // second round-trip). Capped reads keep worst-case I/O bounded.
+    const native = await ctx.db
+      .query("offers")
+      .withIndex("by_source", (q) => q.eq("source", "native").eq("isActive", true))
+      .take(300);
+
+    const extBatch = await ctx.db
+      .query("offers")
+      .withIndex("by_source", (q) => q.eq("source", "bazaar").eq("isActive", true))
+      .order("desc")
+      .take(1500);
+    const extTop = extBatch
+      .filter((o) => o.network === "eip155:8453" || o.network === "base")
+      .sort((a, b) => (b.qualityScore ?? 0) - (a.qualityScore ?? 0))
+      .slice(0, ecoLimit);
+
+    const all = [...native, ...extTop];
+
     const sellers = new Map<
       string,
       {
@@ -237,7 +267,7 @@ export const listForDiscovery = query({
         reputation: ReturnType<typeof computeReputation>;
       }
     >();
-    for (const id of new Set(offers.map((o) => String(o.sellerId)))) {
+    for (const id of new Set(all.filter((o) => o.sellerId).map((o) => String(o.sellerId)))) {
       const sellerId = id as Id<"agents">;
       const seller = await ctx.db.get(sellerId);
       const sold = await ctx.db
@@ -251,8 +281,8 @@ export const listForDiscovery = query({
       });
     }
 
-    return offers.map((o) => {
-      const s = sellers.get(String(o.sellerId));
+    return all.map((o) => {
+      const s = o.sellerId ? sellers.get(String(o.sellerId)) : undefined;
       return {
         _id: o._id,
         title: o.title,
@@ -262,9 +292,13 @@ export const listForDiscovery = query({
         offerType: o.offerType,
         inputSchema: o.inputSchema,
         outputSchema: o.outputSchema,
-        sellerWallet: s?.wallet ?? null,
-        sellerName: s?.name ?? "Unknown agent",
-        reputation: s?.reputation ?? null,
+        sellerWallet: s?.wallet ?? o.payTo ?? null,
+        sellerName: s?.name ?? o.sellerName ?? "Provider",
+        reputation: s?.reputation ?? emptyRep,
+        // Exact x402 payment terms (undefined for native → caller derives).
+        amountRaw: o.amountRaw,
+        asset: o.asset,
+        network: o.network,
       };
     });
   },
@@ -329,5 +363,129 @@ export const search = query({
       })
       .take(limit);
     return rows.map(publicOffer);
+  },
+});
+
+// --- proxied external offers (the aggregated launch inventory) ---
+
+function requireSecret(secret: string) {
+  if (!PLATFORM_INTERNAL_KEY || secret !== PLATFORM_INTERNAL_KEY) {
+    throw new Error("unauthorized: invalid platform secret");
+  }
+}
+
+// One ingested external listing, already normalized by the ingester. Upsert by
+// `externalUrl` so re-ingestion is idempotent (refreshes lastSeenAt + reactivates).
+const EXTERNAL_FIELDS = {
+  externalUrl: v.string(),
+  sellerName: v.optional(v.string()),
+  title: v.string(),
+  description: v.string(),
+  category: v.string(),
+  tags: v.array(v.string()),
+  priceCents: v.number(),
+  payTo: v.string(),
+  asset: v.string(),
+  network: v.string(),
+  amountRaw: v.string(),
+  inputSchema: v.optional(v.string()),
+  outputSchema: v.optional(v.string()),
+  qualityScore: v.optional(v.number()),
+  sourceLastUpdated: v.optional(v.string()),
+};
+
+export const upsertExternalBulk = mutation({
+  args: {
+    platformSecret: v.string(),
+    now: v.number(),
+    offers: v.array(v.object(EXTERNAL_FIELDS)),
+  },
+  handler: async (ctx, args) => {
+    requireSecret(args.platformSecret);
+    let created = 0;
+    let updated = 0;
+    for (const f of args.offers) {
+      const existing = await ctx.db
+        .query("offers")
+        .withIndex("by_externalUrl", (q) => q.eq("externalUrl", f.externalUrl))
+        .first();
+      if (existing) {
+        await ctx.db.patch(existing._id, {
+          ...f,
+          source: "bazaar",
+          offerType: "api" as const,
+          isActive: true,
+          lastSeenAt: args.now,
+        });
+        updated++;
+      } else {
+        await ctx.db.insert("offers", {
+          ...f,
+          source: "bazaar",
+          offerType: "api" as const,
+          isActive: true,
+          lastSeenAt: args.now,
+          // sellerId stays undefined until the first sale backfills it.
+        });
+        created++;
+      }
+    }
+    return { created, updated };
+  },
+});
+
+// Deactivate proxied offers not seen since a cutoff (dropped from the source).
+export const sweepStaleExternal = mutation({
+  args: { platformSecret: v.string(), cutoff: v.number(), limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    requireSecret(args.platformSecret);
+    const stale = await ctx.db
+      .query("offers")
+      .withIndex("by_source", (q) => q.eq("source", "bazaar").eq("isActive", true))
+      .take(Math.min(args.limit ?? 1000, 4000));
+    let swept = 0;
+    for (const o of stale) {
+      if ((o.lastSeenAt ?? 0) < args.cutoff) {
+        await ctx.db.patch(o._id, { isActive: false });
+        swept++;
+      }
+    }
+    return { swept };
+  },
+});
+
+// One-time: tag pre-existing native offers with source:"native" so the
+// discovery split (native vs bazaar) works. Cheap — runs before external ingest
+// when the table holds only our handful of offers.
+export const backfillNativeSource = mutation({
+  args: { platformSecret: v.string() },
+  handler: async (ctx, args) => {
+    requireSecret(args.platformSecret);
+    const all = await ctx.db.query("offers").take(2000);
+    let patched = 0;
+    for (const o of all) {
+      if (!o.source && !o.externalUrl) {
+        await ctx.db.patch(o._id, { source: "native" });
+        patched++;
+      }
+    }
+    return { patched };
+  },
+});
+
+// Backfill a proxied offer's seller once it makes its first sale (the relay
+// creates the seller agent from payTo, then calls this). Idempotent.
+export const backfillSeller = mutation({
+  args: {
+    platformSecret: v.string(),
+    offerId: v.id("offers"),
+    sellerId: v.id("agents"),
+  },
+  handler: async (ctx, args) => {
+    requireSecret(args.platformSecret);
+    const offer = await ctx.db.get(args.offerId);
+    if (offer && !offer.sellerId) {
+      await ctx.db.patch(args.offerId, { sellerId: args.sellerId });
+    }
   },
 });

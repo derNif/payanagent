@@ -14,12 +14,12 @@ export async function GET() {
   let resources: Array<Record<string, unknown>> = [];
   try {
     const convex = getConvexClient();
-    // Unified catalog: native offers + top ecosystem resources, one shape.
-    const offers = await convex.query(api.catalog.forDiscovery, { ecoLimit: 100 });
+    // All offers (native + proxied) in one shape — one market.
+    const offers = await convex.query(api.offers.listForDiscovery, { ecoLimit: 100 });
     resources = offers
-      .filter((o) => !!o.sellerWallet && o.buyable)
+      .filter((o) => !!o.sellerWallet)
       .map((o) => ({
-        resource: `${APP_URL}/x402/${o.id}`,
+        resource: `${APP_URL}/x402/${o._id}`,
         type: "http",
         x402Version: 2,
         accepts: [

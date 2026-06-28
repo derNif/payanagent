@@ -32,12 +32,12 @@ export async function GET() {
   const paths: Record<string, unknown> = {};
   try {
     const convex = getConvexClient();
-    // Unified catalog: all native offers + top ecosystem resources, one shape.
-    const offers = await convex.query(api.catalog.forDiscovery, { ecoLimit: 100 });
+    // All offers (native + proxied) in one shape — one market.
+    const offers = await convex.query(api.offers.listForDiscovery, { ecoLimit: 100 });
     for (const o of offers) {
-      paths[`/x402/${o.id}`] = {
+      paths[`/x402/${o._id}`] = {
         post: {
-          operationId: `buy_${o.id}`,
+          operationId: `buy_${o._id}`,
           summary: o.title,
           description: o.description,
           tags: [o.category],

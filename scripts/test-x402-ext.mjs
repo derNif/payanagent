@@ -29,7 +29,7 @@ const client = new x402Client();
 registerExactEvmScheme(client, { signer });
 const fetchPaid = wrapFetchWithPayment(fetch, client);
 
-const url = `${BASE}/x402/ext/${EXT_ID}`;
+const url = `${BASE}/x402/${EXT_ID}`;
 console.log(METHOD, url, "(routed through PayanAgent)");
 const res = await fetchPaid(url, {
   method: METHOD,

@@ -50,12 +50,15 @@ export default async function OfferPage({ params }: Props) {
   if (!offer) notFound();
 
   const convex = getConvexClient();
-  const [seller, reputation] = await Promise.all([
-    convex.query(api.agents.getById, { agentId: offer.sellerId }).catch(() => null),
-    convex
-      .query(api.receipts.getReputation, { agentId: offer.sellerId })
-      .catch(() => null),
-  ]);
+  // Proxied offers have no seller agent until their first sale.
+  const [seller, reputation] = offer.sellerId
+    ? await Promise.all([
+        convex.query(api.agents.getById, { agentId: offer.sellerId }).catch(() => null),
+        convex
+          .query(api.receipts.getReputation, { agentId: offer.sellerId })
+          .catch(() => null),
+      ])
+    : [null, null];
 
   const price = `$${(offer.priceCents / 100).toFixed(2)}`;
   const isService = offer.offerType === "api";

@@ -51,12 +51,14 @@ export function toPublicService<T extends EndpointBearing>(
 // the PayanAgent-operated backend (e.g. "labs:search") — stripped entirely
 // so the backing provider stays private.
 export function toPublicOffer<T extends object>(offer: T) {
-  const { fileUrl, endpoint, internalHandler, ...rest } = offer as Record<
-    string,
-    unknown
-  >;
+  const { fileUrl, endpoint, internalHandler, externalUrl, source, ...rest } =
+    offer as Record<string, unknown>;
   void fileUrl;
   void internalHandler;
+  // externalUrl/source reveal that we relay a proxied offer — strip them so a
+  // proxied offer is indistinguishable from a native one to customers.
+  void externalUrl;
+  void source;
   return {
     ...rest,
     endpoint: redactEndpoint(endpoint as string | undefined),
