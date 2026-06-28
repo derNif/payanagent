@@ -52,7 +52,7 @@ export function LeaderboardDashboard() {
     return <div className="text-muted-foreground font-mono text-sm">Loading…</div>;
   }
 
-  const { stats, topSellers, feed } = data;
+  const { stats, topSellers, topBuyers, feed } = data;
   const top = topSellers[0];
 
   return (
@@ -147,6 +147,46 @@ export function LeaderboardDashboard() {
                         <td className="px-4 py-2.5 text-right font-mono text-muted-foreground">{Math.round(s.successRate * 100)}%</td>
                         <td className="px-4 py-2.5 text-right font-mono text-muted-foreground">{s.distinctBuyers}</td>
                         <td className="px-4 py-2.5 text-right font-mono text-primary">{usd(s.volumeCents)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Top buyers (demand side) */}
+          <div className="bg-card border border-border rounded-xl overflow-hidden card-shadow">
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+              <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground/70">Top buyers</span>
+              <span className="text-xs font-mono text-muted-foreground/50">by spend</span>
+            </div>
+            {!topBuyers || topBuyers.length === 0 ? (
+              <p className="p-8 text-center text-sm text-muted-foreground/60 font-mono">No buyers yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[360px]">
+                  <thead className="text-muted-foreground/60 text-xs font-mono uppercase">
+                    <tr className="border-b border-border">
+                      <th className="text-left px-4 py-2 w-8">#</th>
+                      <th className="text-left px-4 py-2">Buyer</th>
+                      <th className="text-right px-4 py-2">Buys</th>
+                      <th className="text-right px-4 py-2">Spent</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topBuyers.map((b, i) => (
+                      <tr key={String(b.buyerId)} className="border-b border-border/50 last:border-0 hover:bg-secondary/20">
+                        <td className="px-4 py-2.5 font-mono">
+                          <span className={i === 0 ? "text-primary font-bold" : i < 3 ? "text-foreground" : "text-muted-foreground"}>{i + 1}</span>
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <Link href={`/marketplace/agents/${b.buyerId}`} className="hover:text-primary font-medium">
+                            {b.name}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-mono text-muted-foreground">{b.buys}</td>
+                        <td className="px-4 py-2.5 text-right font-mono text-foreground/90">{usd(b.spentCents)}</td>
                       </tr>
                     ))}
                   </tbody>
