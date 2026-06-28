@@ -19,6 +19,13 @@ function shortId(id: string): string {
   return id.length > 12 ? `${id.slice(0, 6)}…${id.slice(-4)}` : id;
 }
 
+// Sub-cent-aware price (proxied offers are often $0.001 → 0 cents).
+function offerPrice(o: { amountRaw?: string; priceCents: number }): string {
+  const v = o.amountRaw ? Number(o.amountRaw) / 1e6 : o.priceCents / 100;
+  if (!Number.isFinite(v) || v <= 0) return "free";
+  return v < 0.01 ? `$${v.toFixed(4)}` : `$${v.toFixed(2)}`;
+}
+
 function StatCard({
   label,
   value,
@@ -213,7 +220,7 @@ export default function MarketplacePage() {
                     </p>
                   </div>
                   <span className="font-mono text-sm text-primary shrink-0">
-                    ${(o.priceCents / 100).toFixed(2)}
+                    {offerPrice(o)}
                   </span>
                 </Link>
               ))}

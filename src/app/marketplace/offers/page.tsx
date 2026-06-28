@@ -16,10 +16,10 @@ const SORTS: [SortKey, string][] = [
   ["new", "newest"],
 ];
 
-function fmtUsd(cents: number): string {
-  const v = cents / 100;
-  if (!Number.isFinite(v) || v === 0) return "—";
-  return v < 0.01 ? `$${v.toFixed(4)}` : `$${v.toFixed(2)}`;
+function fmtUsd(v: number): string {
+  if (!Number.isFinite(v) || v <= 0) return "free";
+  if (v < 0.01) return `$${v.toFixed(4)}`;
+  return `$${v.toFixed(2)}`;
 }
 
 type EnrichedOffer = {
@@ -28,6 +28,7 @@ type EnrichedOffer = {
   description: string;
   category: string;
   priceCents: number;
+  priceUsd: number;
   offerType: "api" | "download";
   seller: {
     name: string;
@@ -72,7 +73,7 @@ function OfferRow({ o }: { o: EnrichedOffer }) {
           </span>
         </div>
         <div className="text-right shrink-0">
-          <p className="text-lg font-mono text-primary">{fmtUsd(o.priceCents)}</p>
+          <p className="text-lg font-mono text-primary">{fmtUsd(o.priceUsd)}</p>
           <p className="text-xs text-muted-foreground/60">
             {o.offerType === "download" ? "one-time" : "per call"}
           </p>

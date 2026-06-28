@@ -60,7 +60,16 @@ export default async function OfferPage({ params }: Props) {
       ])
     : [null, null];
 
-  const price = `$${(offer.priceCents / 100).toFixed(2)}`;
+  // Sub-cent aware (proxied offers are often $0.001 → 0 cents).
+  const priceUsdVal = offer.amountRaw
+    ? Number(offer.amountRaw) / 1e6
+    : offer.priceCents / 100;
+  const price =
+    priceUsdVal <= 0
+      ? "free"
+      : priceUsdVal < 0.01
+        ? `$${priceUsdVal.toFixed(4)}`
+        : `$${priceUsdVal.toFixed(2)}`;
   const isService = offer.offerType === "api";
 
   const buySnippet = `curl -X POST https://payanagent.com/api/v1/offers/${offer._id}/buy \\

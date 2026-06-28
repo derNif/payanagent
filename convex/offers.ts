@@ -83,6 +83,9 @@ async function enrichOffers(ctx: QueryCtx, offers: Doc<"offers">[]) {
     category: o.category,
     tags: o.tags,
     priceCents: o.priceCents,
+    // Exact USD price (sub-cent aware) — proxied offers are often $0.001, which
+    // rounds to 0 cents; derive from the atomic amount so the real price shows.
+    priceUsd: o.amountRaw ? Number(o.amountRaw) / 1e6 : o.priceCents / 100,
     offerType: o.offerType,
     inputSchema: o.inputSchema,
     outputSchema: o.outputSchema,
