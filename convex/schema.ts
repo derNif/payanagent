@@ -104,6 +104,11 @@ export default defineSchema({
     sourceLastUpdated: v.optional(v.string()),
     lastSeenAt: v.optional(v.number()),
 
+    // Default browse ranking. Native offers get a boost; proxied offers use the
+    // source quality score; bumped by reputation on sale. Indexed so the market
+    // can paginate in ranked order instead of by raw recency.
+    rankScore: v.optional(v.number()),
+
     isActive: v.boolean(),
   })
     .index("by_sellerId", ["sellerId", "isActive"])
@@ -111,6 +116,9 @@ export default defineSchema({
     .index("by_offerType", ["offerType", "isActive"])
     .index("by_externalUrl", ["externalUrl"])
     .index("by_source", ["source", "isActive"])
+    .index("by_rank", ["isActive", "rankScore"])
+    .index("by_active", ["isActive"])
+    .index("by_price", ["isActive", "priceCents"])
     .searchIndex("search_offers", {
       searchField: "description",
       filterFields: ["category", "isActive", "offerType"],
@@ -173,10 +181,10 @@ export default defineSchema({
 
     offerId: v.optional(v.id("offers")),
     requestId: v.optional(v.id("requests")),
-    // Set when this receipt is a buy routed through PayanAgent to an EXTERNAL
-    // x402 resource (aggregator proxy-buy). Non-custodial: buyer paid the
-    // external seller directly; we recorded the receipt.
-    externalResourceId: v.optional(v.id("externalResources")),
+    // Vestigial: a handful of historical proxy-buy receipts carry the old
+    // externalResources id (that table is dropped). Kept as a plain string so
+    // those rows still validate; new receipts use offerId.
+    externalResourceId: v.optional(v.string()),
 
     amountCents: v.number(),
     // Exact value in USDC base units (6 decimals = millionths of a dollar), so
@@ -221,48 +229,33 @@ export default defineSchema({
     .index("by_emittedAt", ["emittedAt"])
     .index("by_settlementType", ["settlementType", "emittedAt"]),
 
-  // External x402 resources discovered across the ecosystem (CDP Bazaar today),
-  // mirrored so they are discoverable — and buyable — *through* PayanAgent. We
-  // never custody: the stored payTo stays the external seller's wallet; the
-  // proxy-buy path forwards their 402 and records a receipt. Keyed by `resource`
-  // (the canonical URL) for idempotent re-ingestion.
+  // DEPRECATED — proxied listings now live in `offers`. Kept only so its rows
+  // can be purged before the table is dropped (Convex blocks dropping a table
+  // that still has documents). No code reads it.
   externalResources: defineTable({
-    source: v.string(), // "bazaar"
-    resource: v.string(), // canonical external URL (unique key)
+    source: v.string(),
+    resource: v.string(),
     serviceName: v.optional(v.string()),
     description: v.string(),
     tags: v.array(v.string()),
     category: v.string(),
-    type: v.optional(v.string()), // "http"
+    type: v.optional(v.string()),
     iconUrl: v.optional(v.string()),
-
-    // Chosen payment terms (prefer Base-mainnet USDC `exact`). Raw atomic amount
-    // is authoritative; priceUsd is a display convenience (USDC = 6 decimals).
     amountRaw: v.string(),
     asset: v.string(),
     network: v.string(),
     payTo: v.string(),
     scheme: v.string(),
     priceUsd: v.optional(v.number()),
-
     inputSchema: v.optional(v.string()),
     outputSchema: v.optional(v.string()),
     x402Version: v.optional(v.number()),
     qualityScore: v.optional(v.number()),
-
     sourceLastUpdated: v.optional(v.string()),
     firstSeenAt: v.number(),
     lastSeenAt: v.number(),
     status: v.union(v.literal("active"), v.literal("stale")),
-  })
-    .index("by_resource", ["resource"])
-    .index("by_status", ["status", "lastSeenAt"])
-    .index("by_network", ["network", "status"])
-    .index("by_category", ["category", "status"])
-    .searchIndex("search_external", {
-      searchField: "description",
-      filterFields: ["status", "network", "category"],
-    }),
+  }).index("by_status", ["status", "lastSeenAt"]),
 
   // Bids on open requests.
   bids: defineTable({

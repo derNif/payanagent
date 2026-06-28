@@ -1,7 +1,12 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { paginationOptsValidator } from "convex/server";
+import { mutation, query, QueryCtx } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
 import { computeReputation } from "./receipts";
+
+// Native offers get a ranking boost so our curated supply surfaces above the
+// bulk proxied inventory; proxied offers rank by their source quality score.
+const NATIVE_RANK = 100;
 
 const PLATFORM_INTERNAL_KEY = process.env.PLATFORM_INTERNAL_KEY ?? "";
 
@@ -23,6 +28,59 @@ function publicOffer(o: Doc<"offers">): PublicOffer {
   void externalUrl;
   void source;
   return rest;
+}
+
+// Enrich a page of offers with seller name + receipt-derived reputation. Offers
+// without a sellerId yet (an unsold proxied offer) fall back to their inline
+// sellerName + empty reputation. Shared by the marketplace browse/search.
+async function enrichOffers(ctx: QueryCtx, offers: Doc<"offers">[]) {
+  const emptyRep = computeReputation([]);
+  const sellerIds = [
+    ...new Set(offers.filter((o) => o.sellerId).map((o) => String(o.sellerId))),
+  ];
+  const sellers = new Map<
+    string,
+    {
+      name: string;
+      receiptsSold: number;
+      totalEarnedCents: number;
+      reputation: ReturnType<typeof computeReputation>;
+    }
+  >();
+  for (const id of sellerIds) {
+    const sellerId = id as Id<"agents">;
+    const agent = await ctx.db.get(sellerId);
+    const sold = await ctx.db
+      .query("receipts")
+      .withIndex("by_sellerId", (q) => q.eq("sellerId", sellerId))
+      .take(500);
+    const reputation = computeReputation(sold);
+    sellers.set(id, {
+      name: agent?.name ?? "Unknown agent",
+      receiptsSold: reputation.sales,
+      totalEarnedCents: reputation.volumeCents,
+      reputation,
+    });
+  }
+  return offers.map((o) => ({
+    _id: o._id,
+    _creationTime: o._creationTime,
+    title: o.title,
+    description: o.description,
+    category: o.category,
+    tags: o.tags,
+    priceCents: o.priceCents,
+    offerType: o.offerType,
+    inputSchema: o.inputSchema,
+    outputSchema: o.outputSchema,
+    previewDescription: o.previewDescription,
+    seller: (o.sellerId && sellers.get(String(o.sellerId))) || {
+      name: o.sellerName ?? "Provider",
+      receiptsSold: 0,
+      totalEarnedCents: 0,
+      reputation: emptyRep,
+    },
+  }));
 }
 
 // Offers — what agents sell on PayanAgent.
@@ -63,6 +121,7 @@ export const create = mutation({
     return await ctx.db.insert("offers", {
       ...args,
       source: "native",
+      rankScore: NATIVE_RANK,
       isActive: true,
     });
   },
@@ -366,6 +425,56 @@ export const search = query({
   },
 });
 
+// --- marketplace browse + search (paginated, enriched) ---
+
+// Ranked, paginated browse of the whole market. `top` = quality/reputation rank
+// (the sensible default — native + high-quality proxied first), `price` =
+// cheapest first, `new` = most recent. Use with usePaginatedQuery for load-more.
+export const browse = query({
+  args: {
+    sort: v.optional(v.union(v.literal("top"), v.literal("price"), v.literal("new"))),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const sort = args.sort ?? "top";
+    const result =
+      sort === "price"
+        ? await ctx.db
+            .query("offers")
+            .withIndex("by_price", (q) => q.eq("isActive", true))
+            .order("asc")
+            .paginate(args.paginationOpts)
+        : sort === "new"
+          ? await ctx.db
+              .query("offers")
+              .withIndex("by_active", (q) => q.eq("isActive", true))
+              .order("desc")
+              .paginate(args.paginationOpts)
+          : await ctx.db
+              .query("offers")
+              .withIndex("by_rank", (q) => q.eq("isActive", true))
+              .order("desc")
+              .paginate(args.paginationOpts);
+    return { ...result, page: await enrichOffers(ctx, result.page) };
+  },
+});
+
+// Full-text search across the whole market, enriched. Relevance-ranked top N
+// (refine the query rather than paginate).
+export const searchPage = query({
+  args: { query: v.string(), limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const limit = Math.min(args.limit ?? 40, 100);
+    const rows = await ctx.db
+      .query("offers")
+      .withSearchIndex("search_offers", (q) =>
+        q.search("description", args.query).eq("isActive", true),
+      )
+      .take(limit);
+    return enrichOffers(ctx, rows);
+  },
+});
+
 // --- proxied external offers (the aggregated launch inventory) ---
 
 function requireSecret(secret: string) {
@@ -414,6 +523,7 @@ export const upsertExternalBulk = mutation({
           ...f,
           source: "bazaar",
           offerType: "api" as const,
+          rankScore: f.qualityScore ?? 0,
           isActive: true,
           lastSeenAt: args.now,
         });
@@ -423,6 +533,7 @@ export const upsertExternalBulk = mutation({
           ...f,
           source: "bazaar",
           offerType: "api" as const,
+          rankScore: f.qualityScore ?? 0,
           isActive: true,
           lastSeenAt: args.now,
           // sellerId stays undefined until the first sale backfills it.
@@ -487,5 +598,38 @@ export const backfillSeller = mutation({
     if (offer && !offer.sellerId) {
       await ctx.db.patch(args.offerId, { sellerId: args.sellerId });
     }
+  },
+});
+
+// One-time: set rankScore on existing offers (proxied → qualityScore, native →
+// boost). Paginated; loop from a script until isDone.
+export const backfillRank = mutation({
+  args: { platformSecret: v.string(), cursor: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    requireSecret(args.platformSecret);
+    const page = await ctx.db
+      .query("offers")
+      .paginate({ numItems: 500, cursor: args.cursor ?? null });
+    let patched = 0;
+    for (const o of page.page) {
+      const rank = o.source === "bazaar" ? (o.qualityScore ?? 0) : NATIVE_RANK;
+      if (o.rankScore !== rank) {
+        await ctx.db.patch(o._id, { rankScore: rank });
+        patched++;
+      }
+    }
+    return { isDone: page.isDone, cursor: page.continueCursor, patched };
+  },
+});
+
+// Cleanup: delete the orphaned externalResources rows so the table can be
+// dropped from the schema. Paginated; loop from a script until deleted === 0.
+export const purgeExternalResources = mutation({
+  args: { platformSecret: v.string() },
+  handler: async (ctx, args) => {
+    requireSecret(args.platformSecret);
+    const rows = await ctx.db.query("externalResources").take(800);
+    for (const r of rows) await ctx.db.delete(r._id);
+    return { deleted: rows.length };
   },
 });

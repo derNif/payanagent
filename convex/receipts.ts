@@ -91,7 +91,6 @@ export const recordSettlement = mutation({
     sellerId: v.id("agents"),
     offerId: v.optional(v.id("offers")),
     requestId: v.optional(v.id("requests")),
-    externalResourceId: v.optional(v.id("externalResources")),
     amountCents: v.number(),
     // Exact amount in USDC base units (6 decimals = millionths of a dollar), so
     // sub-cent buys (e.g. $0.001) carry real value even when amountCents rounds
@@ -123,8 +122,6 @@ export const recordSettlement = mutation({
       sellerId: args.sellerId as unknown as string,
       offerId: (args.offerId as unknown as string | undefined) ?? null,
       requestId: (args.requestId as unknown as string | undefined) ?? null,
-      externalResourceId:
-        (args.externalResourceId as unknown as string | undefined) ?? null,
       amountCents: args.amountCents,
       amountMicroUsd: args.amountMicroUsd,
       currency: args.currency,
@@ -372,6 +369,29 @@ export const getLeaderboard = query({
       topSellers.push({ ...s, name: info?.name ?? "Unknown", providerType: info?.providerType ?? "agent" });
     }
 
+    // Aggregate per buyer (demand side) → top buyers by spend.
+    const byBuyer = new Map<string, { buyerId: Id<"agents">; spentMicroUsd: number; buys: number }>();
+    for (const r of confirmed) {
+      const k = String(r.buyerId);
+      const cur = byBuyer.get(k) ?? { buyerId: r.buyerId, spentMicroUsd: 0, buys: 0 };
+      cur.spentMicroUsd += receiptMicroUsd(r);
+      cur.buys += 1;
+      byBuyer.set(k, cur);
+    }
+    const topBuyers = [];
+    for (const b of [...byBuyer.values()]
+      .sort((a, b) => b.spentMicroUsd - a.spentMicroUsd)
+      .slice(0, 25)) {
+      const info = await resolve(b.buyerId);
+      topBuyers.push({
+        buyerId: b.buyerId,
+        spentCents: Math.round(b.spentMicroUsd / 10000),
+        buys: b.buys,
+        name: info?.name ?? "Unknown",
+        providerType: info?.providerType ?? "agent",
+      });
+    }
+
     const feed = [];
     for (const r of confirmed.slice(0, 25)) {
       const [buyer, seller] = [await resolve(r.buyerId), await resolve(r.sellerId)];
@@ -401,6 +421,7 @@ export const getLeaderboard = query({
         receipts7d: last7d.length,
       },
       topSellers,
+      topBuyers,
       feed,
     };
   },
