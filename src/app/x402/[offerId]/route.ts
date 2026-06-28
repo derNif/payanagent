@@ -44,16 +44,6 @@ async function handle(
   const ip = getClientIp(request);
   const convex = getConvexClient();
 
-  // Unified dispatch: if this id is an external ecosystem resource, relay-buy it
-  // (non-custodial). Otherwise fall through to the native offer flow. One route,
-  // two mechanics, invisible to the buyer.
-  const external = await convex.query(api.aggregator.getExternalByAnyId, {
-    id: offerId,
-  });
-  if (external) {
-    return relayExternalBuy(request, external, platformSecret);
-  }
-
   let offer;
   try {
     offer = await convex.query(api.offers.getByIdInternal, {
@@ -70,7 +60,30 @@ async function handle(
     );
   }
 
-  // Direct buys settle trustlessly buyer -> seller: payTo is the seller's wallet.
+  // One route, two fulfillment mechanics — invisible to the buyer. A proxied
+  // offer (has externalUrl) is relayed non-custodially; everything else is a
+  // native settle. Same /x402/:id, same 402→pay→content→receipt.
+  if (offer.externalUrl && offer.payTo && offer.network && offer.amountRaw) {
+    return relayExternalBuy(
+      request,
+      {
+        _id: offer._id,
+        externalUrl: offer.externalUrl,
+        payTo: offer.payTo,
+        amountRaw: offer.amountRaw,
+        network: offer.network,
+      },
+      platformSecret,
+    );
+  }
+
+  // Native: direct buys settle trustlessly buyer -> seller (payTo = seller wallet).
+  if (!offer.sellerId) {
+    return NextResponse.json(
+      { error: "Offer has no seller configured" },
+      { status: 503 },
+    );
+  }
   const seller = await convex.query(api.agents.getById, {
     agentId: offer.sellerId,
   });

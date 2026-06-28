@@ -63,7 +63,9 @@ export default defineSchema({
     }),
 
   offers: defineTable({
-    sellerId: v.id("agents"),
+    // Null for proxied external offers until their first sale (then backfilled
+    // to the auto-created seller agent). Native offers always have it.
+    sellerId: v.optional(v.id("agents")),
     title: v.string(),
     description: v.string(),
     category: v.string(),
@@ -86,11 +88,29 @@ export default defineSchema({
     fileUrl: v.optional(v.string()),
     previewDescription: v.optional(v.string()),
 
+    // ── Proxied external offers (the Airbnb/Craigslist launch inventory). An
+    // offer with `externalUrl` set is fulfilled by RELAYING the external x402
+    // resource (non-custodial) instead of us settling. `source:"bazaar"`. These
+    // fields are internal/stripped from public projections — customers just see
+    // an offer. `sellerName` is the inline display name (no agent until sold).
+    source: v.optional(v.string()),
+    externalUrl: v.optional(v.string()),
+    sellerName: v.optional(v.string()),
+    payTo: v.optional(v.string()),
+    asset: v.optional(v.string()),
+    network: v.optional(v.string()),
+    amountRaw: v.optional(v.string()),
+    qualityScore: v.optional(v.number()),
+    sourceLastUpdated: v.optional(v.string()),
+    lastSeenAt: v.optional(v.number()),
+
     isActive: v.boolean(),
   })
     .index("by_sellerId", ["sellerId", "isActive"])
     .index("by_category", ["category", "isActive"])
     .index("by_offerType", ["offerType", "isActive"])
+    .index("by_externalUrl", ["externalUrl"])
+    .index("by_source", ["source", "isActive"])
     .searchIndex("search_offers", {
       searchField: "description",
       filterFields: ["category", "isActive", "offerType"],

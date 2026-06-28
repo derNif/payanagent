@@ -10,10 +10,12 @@ import { Id } from "@convex/_generated/dataModel";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://payanagent.com";
 const BASE_NETWORKS = new Set(["eip155:8453", "base"]);
 
-// The external resource shape the unified buy route hands us (public projection).
-export type RelayResource = {
-  _id: Id<"externalResources">;
-  resource: string;
+// The fields the relay needs from a proxied (external) offer. The full offer doc
+// satisfies this — `externalUrl` is the relay target, `payTo`/`amountRaw`/
+// `network` are the seller's on-chain terms.
+export type RelayOffer = {
+  _id: Id<"offers">;
+  externalUrl: string;
   payTo: string;
   amountRaw: string;
   network: string;
@@ -43,9 +45,8 @@ function passthroughResponseHeaders(from: Headers, extra: Record<string, string>
 }
 
 // x402 sellers commonly carry the 402 challenge in a base64-JSON header. Rewrite
-// the challenge's resource.url → our endpoint so a client that follows it
-// retries THROUGH PayanAgent; the signed terms (payTo/amount/asset/network) are
-// left untouched.
+// the challenge's resource.url → our endpoint so a client that follows it retries
+// THROUGH PayanAgent; the signed terms (payTo/amount/asset/network) are untouched.
 const CHALLENGE_HEADERS = ["payment-required", "x-payment-required", "www-authenticate"];
 function rewriteChallengeB64(value: string, newUrl: string): string {
   try {
@@ -71,41 +72,41 @@ function txHashFromResponse(res: Response): string {
   }
 }
 
-// Buy an EXTERNAL x402 resource THROUGH PayanAgent — non-custodial transparent
-// relay. Called by the unified /x402/:id route when the id resolves to an
-// ecosystem resource. We forward the seller's own 402 (buyer pays the seller
-// directly, the seller's facilitator settles), relay the content back, and
-// record a receipt so the external seller earns reputation. We never touch funds.
+// Fulfill a PROXIED offer by relaying its external x402 resource — non-custodial.
+// Called by the unified /x402/:id route when the offer has an `externalUrl`. We
+// forward the seller's own 402 (buyer pays the seller directly, the seller's
+// facilitator settles), relay the content back, record a receipt against the
+// offer, and backfill the offer's seller agent on its first sale so it ranks in
+// the leaderboard like any other. We never touch funds.
 export async function relayExternalBuy(
   request: NextRequest,
-  resource: RelayResource,
+  offer: RelayOffer,
   platformSecret: string,
 ): Promise<NextResponse> {
   const startedAt = Date.now();
   const convex = getConvexClient();
 
-  // Only Base resources are routable (the buyer signs USDC-on-Base terms).
-  if (!BASE_NETWORKS.has(resource.network)) {
+  if (!BASE_NETWORKS.has(offer.network)) {
     return NextResponse.json(
       {
-        error: `Resource is on '${resource.network}', not yet routable through PayanAgent`,
-        hint: "Only Base (eip155:8453) resources are buyable for now.",
+        error: `This offer settles on '${offer.network}', not yet routable through PayanAgent`,
+        hint: "Only Base (eip155:8453) offers are buyable for now.",
       },
       { status: 501 },
     );
   }
 
   try {
-    await assertPublicHttpUrl(resource.resource);
+    await assertPublicHttpUrl(offer.externalUrl);
   } catch (err) {
     const message = err instanceof Error ? err.message : "blocked";
     return NextResponse.json(
-      { error: `Resource endpoint not allowed: ${message}` },
+      { error: `Offer endpoint not allowed: ${message}` },
       { status: 502 },
     );
   }
 
-  const canonicalUrl = `${APP_URL}/x402/${resource._id}`;
+  const canonicalUrl = `${APP_URL}/x402/${offer._id}`;
   const paymentHeader =
     request.headers.get("x-payment") ||
     request.headers.get("payment-signature") ||
@@ -128,7 +129,7 @@ export async function relayExternalBuy(
 
   let sellerRes: Response;
   try {
-    sellerRes = await fetch(resource.resource, {
+    sellerRes = await fetch(offer.externalUrl, {
       method: request.method,
       headers: fwdHeaders,
       body: rawBody && rawBody.length ? rawBody : undefined,
@@ -136,7 +137,7 @@ export async function relayExternalBuy(
     });
   } catch {
     return NextResponse.json(
-      { error: "Failed to reach the resource", resource: resource.resource },
+      { error: "Failed to reach the offer endpoint" },
       { status: 502 },
     );
   }
@@ -161,7 +162,7 @@ export async function relayExternalBuy(
       const v = headers.get(name);
       if (v) headers.set(name, rewriteChallengeB64(v, canonicalUrl));
     }
-    attachFeeAdvert(headers, Number(resource.amountRaw) || 0);
+    attachFeeAdvert(headers, Number(offer.amountRaw) || 0);
     return new NextResponse(body, { status: 402, headers });
   }
 
@@ -170,7 +171,7 @@ export async function relayExternalBuy(
   const responseBody = await sellerRes.text();
 
   let receiptId: Id<"receipts"> | null = null;
-  if (sellerRes.ok && buyerWallet && buyerWallet.toLowerCase() !== resource.payTo.toLowerCase()) {
+  if (sellerRes.ok && buyerWallet && buyerWallet.toLowerCase() !== offer.payTo.toLowerCase()) {
     try {
       const [buyerId, sellerId] = await Promise.all([
         convex.mutation(api.agents.getOrCreateByWallet, {
@@ -178,21 +179,21 @@ export async function relayExternalBuy(
           chain: getNetwork(),
         }),
         convex.mutation(api.agents.getOrCreateByWallet, {
-          walletAddress: resource.payTo,
+          walletAddress: offer.payTo,
           chain: getNetwork(),
         }),
       ]);
-      const amountMicroUsd = Number(resource.amountRaw) || 0;
+      const amountMicroUsd = Number(offer.amountRaw) || 0;
       receiptId = await convex.mutation(api.receipts.recordSettlement, {
         platformSecret,
         buyerId,
         sellerId,
-        externalResourceId: resource._id,
+        offerId: offer._id,
         amountCents: Math.round(amountMicroUsd / 10000),
         amountMicroUsd,
         currency: "USDC",
         chain: "base",
-        network: resource.network,
+        network: offer.network,
         txHash: txHashFromResponse(sellerRes),
         settlementType: "external",
         status: "confirmed",
@@ -202,6 +203,12 @@ export async function relayExternalBuy(
         platformSecret,
         receiptId,
         delivered: true,
+      });
+      // First sale → make this proxied seller first-class (ranks in leaderboard).
+      await convex.mutation(api.offers.backfillSeller, {
+        platformSecret,
+        offerId: offer._id,
+        sellerId,
       });
       await collectFee(request);
     } catch {

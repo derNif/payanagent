@@ -63,29 +63,28 @@ function qualityScore(q) {
   return undefined;
 }
 
+// Map a Bazaar item → a proxied OFFER payload (offers.upsertExternalBulk).
 function mapItem(item) {
   if (!item?.resource) return null;
   const accept = pickAccept(item.accepts);
   if (!accept?.payTo || !accept?.asset || !accept?.network) return null;
   const tags = Array.isArray(item.tags) ? item.tags.slice(0, 12) : [];
+  const usd = priceUsd(accept);
+  const name = item.serviceName ? String(item.serviceName).slice(0, 200) : undefined;
   return {
-    source: "bazaar",
-    resource: String(item.resource),
-    serviceName: item.serviceName ? String(item.serviceName).slice(0, 200) : undefined,
+    externalUrl: String(item.resource),
+    sellerName: name,
+    title: (name || String(item.resource)).slice(0, 200),
     description: String(item.description || item.serviceName || item.resource).slice(0, 2000),
-    tags,
     category: (tags[0] || "Other").slice(0, 60),
-    type: item.type ? String(item.type) : undefined,
-    iconUrl: item.iconUrl ? String(item.iconUrl).slice(0, 500) : undefined,
+    tags,
+    priceCents: usd != null ? Math.round(usd * 100) : 0,
     amountRaw: String(accept.amount ?? "0"),
     asset: String(accept.asset),
     network: String(accept.network),
     payTo: String(accept.payTo),
-    scheme: String(accept.scheme || "exact"),
-    priceUsd: priceUsd(accept),
     inputSchema: S(item.extensions?.bazaar?.info?.input),
     outputSchema: S(item.extensions?.bazaar?.info?.output),
-    x402Version: typeof item.x402Version === "number" ? item.x402Version : undefined,
     qualityScore: qualityScore(item.quality),
     sourceLastUpdated: item.lastUpdated ? String(item.lastUpdated) : undefined,
   };
@@ -109,25 +108,25 @@ while (page < MAX_PAGES) {
   total = data.pagination?.total ?? total;
   if (items.length === 0) break;
 
-  // Dedupe within the page by resource (the source can repeat URLs).
+  // Dedupe within the page by externalUrl (the source can repeat URLs).
   const byUrl = new Map();
   for (const it of items) {
     const m = mapItem(it);
-    if (m) byUrl.set(m.resource, m);
+    if (m) byUrl.set(m.externalUrl, m);
   }
-  const resources = [...byUrl.values()];
+  const offersBatch = [...byUrl.values()];
 
   if (DRY_RUN) {
     if (page === 0) {
-      console.log("--- dry-run: first 2 mapped resources ---");
-      console.log(JSON.stringify(resources.slice(0, 2), null, 2));
+      console.log("--- dry-run: first 2 mapped offers ---");
+      console.log(JSON.stringify(offersBatch.slice(0, 2), null, 2));
     }
-    totalCreated += resources.length; // count mapped (not written)
-  } else if (resources.length) {
-    const r = await client.mutation(anyApi.aggregator.upsertExternalResourcesBulk, {
+    totalCreated += offersBatch.length; // count mapped (not written)
+  } else if (offersBatch.length) {
+    const r = await client.mutation(anyApi.offers.upsertExternalBulk, {
       platformSecret: secret,
       now: Date.now(),
-      resources,
+      offers: offersBatch,
     });
     totalCreated += r.created;
     totalUpdated += r.updated;

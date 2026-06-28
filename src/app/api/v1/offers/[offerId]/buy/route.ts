@@ -57,7 +57,16 @@ export async function POST(
       { status: 404 },
     );
   }
-  if (offer.sellerId === agent._id) {
+  // Proxied (external) offers are relayed, not settled here — buy them via the
+  // wallet-native /x402/:id route (no API key needed).
+  if (offer.externalUrl || !offer.sellerId) {
+    return NextResponse.json(
+      { error: "Buy this offer at /x402/" + offer._id + " (wallet payment)" },
+      { status: 409 },
+    );
+  }
+  const sellerId = offer.sellerId;
+  if (sellerId === agent._id) {
     return NextResponse.json(
       { error: "Cannot buy your own offer" },
       { status: 400 },
@@ -67,7 +76,7 @@ export async function POST(
   // Direct buys settle trustlessly buyer -> seller: payTo is the seller's
   // wallet, the platform never takes custody.
   const seller = await convex.query(api.agents.getById, {
-    agentId: offer.sellerId,
+    agentId: sellerId,
   });
   if (!seller?.walletAddress) {
     return NextResponse.json(
@@ -144,7 +153,7 @@ export async function POST(
     {
       platformSecret,
       buyerId: agent._id,
-      sellerId: offer.sellerId,
+      sellerId,
       offerId: offer._id,
       amountCents: offer.priceCents,
       currency: "USDC",
