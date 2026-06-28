@@ -66,7 +66,7 @@ function OfferRow({ o }: { o: EnrichedOffer }) {
             {o.seller.reputation.trusted && <VerifiedBadge size={12} />}
             {o.seller.receiptsSold > 0 && (
               <span className="text-muted-foreground/50">
-                · score {o.seller.reputation.score} · {o.seller.receiptsSold} receipts
+                · trust {o.seller.reputation.score} · {o.seller.receiptsSold} receipts
               </span>
             )}
           </span>

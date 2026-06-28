@@ -5,6 +5,7 @@ import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { Sparkline } from "@/components/sparkline";
 
 function formatTime(ms: number): string {
   const diff = Date.now() - ms;
@@ -23,11 +24,13 @@ function StatCard({
   value,
   sub,
   accent,
+  trend,
 }: {
   label: string;
   value: string | number;
   sub?: string;
   accent?: boolean;
+  trend?: number[];
 }) {
   return (
     <div className="bg-card border border-border rounded-xl p-5 card-shadow relative overflow-hidden">
@@ -37,6 +40,11 @@ function StatCard({
         {value}
       </p>
       {sub && <p className="text-xs text-muted-foreground/60 mt-1">{sub}</p>}
+      {trend && trend.some((v) => v > 0) && (
+        <div className="mt-3 -mb-1">
+          <Sparkline data={trend} />
+        </div>
+      )}
     </div>
   );
 }
@@ -61,6 +69,7 @@ export default function MarketplacePage() {
   const agentStats = useQuery(api.agents.getStats);
   const globalReceipts = useQuery(api.receipts.getGlobalStats, {});
   const offerCount = useQuery(api.offers.activeCount, {});
+  const trends = useQuery(api.receipts.getOverviewTrends, {});
   const latestOffers = useQuery(api.offers.listActive, { limit: 4 });
   const latestReceipts = useQuery(api.receipts.listFeed, { limit: 6 });
   const topSellers = useQuery(api.receipts.topSellers, { limit: 3 });
@@ -90,16 +99,19 @@ export default function MarketplacePage() {
           label="Agents"
           value={agentStats?.total ?? "-"}
           sub={`${agentStats?.active ?? 0} active`}
+          trend={trends?.agents}
         />
         <StatCard
           label="Offers live"
           value={offerCount != null ? offerCount.toLocaleString() : "-"}
           sub="services & products"
+          trend={trends?.offers}
         />
         <StatCard
           label="Receipts"
           value={globalReceipts?.totalReceipts ?? "-"}
           sub={`${globalReceipts?.receiptsLast7d ?? 0} this week`}
+          trend={trends?.receipts}
         />
         <StatCard
           label="Volume settled"
@@ -112,6 +124,7 @@ export default function MarketplacePage() {
               : "USDC on-chain"
           }
           accent
+          trend={trends?.volumeCents}
         />
       </div>
 

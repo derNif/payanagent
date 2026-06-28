@@ -461,6 +461,53 @@ export const getAgentStats = query({
   },
 });
 
+// 14-day daily series for the overview stat sparklines: new agents, new offers,
+// receipts, and settled volume per day. Bounded reads.
+export const getOverviewTrends = query({
+  args: {},
+  handler: async (ctx) => {
+    const DAYS = 14;
+    const dayMs = 86_400_000;
+    const start = Date.now() - (DAYS - 1) * dayMs;
+    const bucket = (t: number) => Math.floor((t - start) / dayMs);
+
+    const receipts = new Array(DAYS).fill(0);
+    const volMicro = new Array(DAYS).fill(0);
+    const recv = await ctx.db
+      .query("receipts")
+      .withIndex("by_emittedAt")
+      .order("desc")
+      .take(3000);
+    for (const r of recv) {
+      if (r.status !== "confirmed") continue;
+      const i = bucket(r.emittedAt);
+      if (i >= 0 && i < DAYS) {
+        receipts[i] += 1;
+        volMicro[i] += receiptMicroUsd(r);
+      }
+    }
+
+    const agents = new Array(DAYS).fill(0);
+    for (const a of await ctx.db.query("agents").order("desc").take(1000)) {
+      const i = bucket(a._creationTime);
+      if (i >= 0 && i < DAYS) agents[i] += 1;
+    }
+
+    const offers = new Array(DAYS).fill(0);
+    for (const o of await ctx.db.query("offers").order("desc").take(1000)) {
+      const i = bucket(o._creationTime);
+      if (i >= 0 && i < DAYS) offers[i] += 1;
+    }
+
+    return {
+      agents,
+      offers,
+      receipts,
+      volumeCents: volMicro.map((v) => Math.round(v / 10000)),
+    };
+  },
+});
+
 export const getGlobalStats = query({
   args: {},
   handler: async (

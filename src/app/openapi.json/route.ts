@@ -49,7 +49,7 @@ export async function GET() {
                 name: o.sellerName,
                 wallet: o.sellerWallet ?? undefined,
                 trusted: o.reputation.trusted,
-                score: o.reputation.score,
+                trustScore: o.reputation.score,
                 sales: o.reputation.sales,
                 distinctBuyers: o.reputation.distinctBuyers,
                 successRate: o.reputation.successRate,
