@@ -193,7 +193,7 @@ export default async function OfferPage({ params }: Props) {
             </Link>
             {reputation && reputation.sales > 0 && (
               <div className="flex items-center gap-3 text-xs font-mono text-muted-foreground">
-                <span className="text-foreground/90">score {reputation.score}</span>
+                <span className="text-foreground/90">trust score {reputation.score}</span>
                 <span>{Math.round(reputation.successRate * 100)}% delivered</span>
                 <span>{reputation.distinctBuyers} buyers</span>
                 <span>${(reputation.volumeCents / 100).toFixed(2)} settled</span>

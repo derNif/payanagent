@@ -57,30 +57,32 @@ export function LeaderboardDashboard() {
 
   return (
     <div>
-      {/* Hero */}
-      <div className="mb-3">
-        <div className="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-muted-foreground/60 mb-3">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-60" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
-          </span>
-          Live · the market never sleeps
+      {/* Header — hero volume + headline stats, one block */}
+      <div className="bg-card border border-border rounded-xl card-shadow p-5 sm:p-6 mb-8 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
+        <div>
+          <div className="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-muted-foreground/60 mb-2">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-60" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
+            </span>
+            Live · settled by agents
+          </div>
+          <p className="text-xs text-muted-foreground/60 font-mono uppercase tracking-widest">
+            Total settled volume
+          </p>
+          <div className="flex items-end gap-3">
+            <span className="text-5xl sm:text-6xl font-mono font-bold text-gradient leading-none">
+              {usd(stats.totalVolumeCents)}
+            </span>
+            <span className="text-primary text-2xl mb-1">▲</span>
+          </div>
         </div>
-        <p className="text-sm text-muted-foreground">Settled by agents on PayanAgent</p>
-        <div className="flex items-end gap-3">
-          <span className="text-5xl sm:text-6xl font-mono font-bold text-gradient leading-none">
-            {usd(stats.totalVolumeCents)}
-          </span>
-          <span className="text-primary text-2xl mb-1">▲</span>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 sm:gap-7 shrink-0">
+          <Stat label="Settled 7d" value={usd(stats.volume7dCents)} sub={`${stats.receipts7d} receipts`} />
+          <Stat label="Receipts" value={String(stats.totalReceipts)} sub="all-time" />
+          <Stat label="Sellers" value={String(stats.distinctSellers)} />
+          <Stat label="Buyers" value={String(stats.distinctBuyers)} />
         </div>
-      </div>
-
-      {/* Sub-stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-border rounded-xl overflow-hidden card-shadow mb-8">
-        <div className="bg-black"><Stat label="Settled 7d" value={usd(stats.volume7dCents)} sub={`${stats.receipts7d} receipts`} /></div>
-        <div className="bg-black"><Stat label="Receipts" value={String(stats.totalReceipts)} sub="all-time" /></div>
-        <div className="bg-black"><Stat label="Sellers" value={String(stats.distinctSellers)} /></div>
-        <div className="bg-black"><Stat label="Buyers" value={String(stats.distinctBuyers)} /></div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -102,7 +104,7 @@ export function LeaderboardDashboard() {
                 <span className="text-2xl font-mono text-gradient">{usd(top.volumeCents)}</span>
               </div>
               <div className="mt-2 flex gap-4 text-xs font-mono text-muted-foreground/70">
-                <span>score {top.score}</span>
+                <span>trust score {top.score}</span>
                 <span>{Math.round(top.successRate * 100)}% delivered</span>
                 <span>{top.distinctBuyers} buyers</span>
                 <span>{top.sales} sales</span>
@@ -118,13 +120,13 @@ export function LeaderboardDashboard() {
             {topSellers.length === 0 ? (
               <p className="p-8 text-center text-sm text-muted-foreground/60 font-mono">No settlements yet.</p>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-auto max-h-[440px]">
                 <table className="w-full text-sm min-w-[520px]">
                   <thead className="text-muted-foreground/60 text-xs font-mono uppercase">
                     <tr className="border-b border-border">
                       <th className="text-left px-4 py-2 w-8">#</th>
                       <th className="text-left px-4 py-2">Seller</th>
-                      <th className="text-right px-4 py-2">Score</th>
+                      <th className="text-right px-4 py-2">Trust</th>
                       <th className="text-right px-4 py-2">Delivered</th>
                       <th className="text-right px-4 py-2">Buyers</th>
                       <th className="text-right px-4 py-2">Settled</th>
@@ -164,7 +166,7 @@ export function LeaderboardDashboard() {
             {!topBuyers || topBuyers.length === 0 ? (
               <p className="p-8 text-center text-sm text-muted-foreground/60 font-mono">No buyers yet.</p>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-auto max-h-[440px]">
                 <table className="w-full text-sm min-w-[360px]">
                   <thead className="text-muted-foreground/60 text-xs font-mono uppercase">
                     <tr className="border-b border-border">

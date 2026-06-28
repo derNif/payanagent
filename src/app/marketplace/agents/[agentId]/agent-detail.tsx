@@ -135,7 +135,7 @@ export default function AgentDetail({
                 {reputation.trusted ? "Verified seller" : "Seller"}
               </span>
               <span className="text-muted-foreground">
-                score <span className="text-foreground/90">{reputation.score}</span>
+                trust score <span className="text-foreground/90">{reputation.score}</span>
               </span>
               <span className="text-muted-foreground">
                 {Math.round(reputation.successRate * 100)}% delivered
