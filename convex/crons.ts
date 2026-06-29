@@ -3,11 +3,13 @@ import { internal } from "./_generated/api";
 
 const crons = cronJobs();
 
-// Daily: refresh the proxied catalog from the Bazaar (new sellers, price
-// changes) and sweep dropped ones. runStart is stamped inside the action.
-crons.daily(
+// Weekly: refresh the proxied catalog from the Bazaar — adds new sellers and
+// patches genuinely-changed offers (the upsert skips no-op writes), so a run is
+// mostly reads + a handful of writes. The catalog is slow-moving, so weekly
+// keeps it fresh at a fraction of the cost. runStart is stamped in the action.
+crons.weekly(
   "refresh catalog",
-  { hourUTC: 7, minuteUTC: 0 },
+  { dayOfWeek: "sunday", hourUTC: 7, minuteUTC: 0 },
   internal.ingest.refreshCatalog,
   { offset: 0 },
 );
