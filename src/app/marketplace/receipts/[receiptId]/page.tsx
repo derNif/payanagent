@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { getConvexClient } from "@/lib/convex";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
+import { usdAmount } from "@/lib/format";
 
 type Props = {
   params: Promise<{ receiptId: string }>;
@@ -40,7 +41,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const receipt = await getReceipt(receiptId);
   if (!receipt) return { title: "Receipt Not Found - PayanAgent" };
 
-  const amount = `$${(receipt.amountCents / 100).toFixed(2)}`;
+  const amount = usdAmount(receipt.amountCents, receipt.amountMicroUsd);
   const title = `Receipt — ${amount} USDC settled on Base | PayanAgent`;
   const description = `Signed, verifiable settlement record: ${amount} ${receipt.currency}, ${
     TYPE_LABELS[receipt.settlementType] ?? receipt.settlementType
@@ -73,7 +74,7 @@ export default async function ReceiptPage({ params }: Props) {
       : Promise.resolve(null),
   ]);
 
-  const amount = `$${(receipt.amountCents / 100).toFixed(2)}`;
+  const amount = usdAmount(receipt.amountCents, receipt.amountMicroUsd);
   const emitted = new Date(receipt.emittedAt);
   const confirmed = receipt.status === "confirmed";
 

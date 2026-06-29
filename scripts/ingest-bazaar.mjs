@@ -64,10 +64,14 @@ function qualityScore(q) {
 }
 
 // Map a Bazaar item → a proxied OFFER payload (offers.upsertExternalBulk).
+const BASE_NETWORKS = new Set(["eip155:8453", "base"]);
+
 function mapItem(item) {
   if (!item?.resource) return null;
   const accept = pickAccept(item.accepts);
   if (!accept?.payTo || !accept?.asset || !accept?.network) return null;
+  // We only relay Base — don't list what we can't sell.
+  if (!BASE_NETWORKS.has(accept.network)) return null;
   const tags = Array.isArray(item.tags) ? item.tags.slice(0, 12) : [];
   const usd = priceUsd(accept);
   const name = item.serviceName ? String(item.serviceName).slice(0, 200) : undefined;

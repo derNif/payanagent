@@ -150,6 +150,40 @@ export const listAdmin = query({
   },
 });
 
+// Deactivate the handful of internal dev/test agents accumulated over building,
+// so the overview's active count reflects real participants. Conservative name
+// allowlist — never touches organic agents. Gated. One-time.
+export const deactivateTestAgents = mutation({
+  args: { platformSecret: v.string() },
+  handler: async (ctx, args) => {
+    if (!PLATFORM_INTERNAL_KEY || args.platformSecret !== PLATFORM_INTERNAL_KEY) {
+      throw new Error("unauthorized: invalid platform secret");
+    }
+    const PATTERNS = [
+      "test seller",
+      "labs buy tester",
+      "labs smoke",
+      "smoke test",
+      "sepolia settlement",
+      "sepolia smoke",
+      "audit agent",
+      "linus audit",
+    ];
+    const all = await ctx.db.query("agents").take(2000);
+    let deactivated = 0;
+    const names: string[] = [];
+    for (const a of all) {
+      const n = a.name.toLowerCase();
+      if (a.status !== "deactivated" && PATTERNS.some((p) => n.includes(p))) {
+        await ctx.db.patch(a._id, { status: "deactivated" as const });
+        deactivated++;
+        names.push(a.name);
+      }
+    }
+    return { deactivated, names };
+  },
+});
+
 export const update = mutation({
   args: {
     agentId: v.id("agents"),

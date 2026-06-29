@@ -104,8 +104,8 @@ export default function MarketplacePage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
         <StatCard
           label="Agents"
-          value={agentStats?.total ?? "-"}
-          sub={`${agentStats?.active ?? 0} active`}
+          value={agentStats?.active ?? "-"}
+          sub={`${agentStats?.total ?? 0} registered`}
           trend={trends?.agents}
         />
         <StatCard

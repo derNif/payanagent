@@ -116,6 +116,7 @@ export default defineSchema({
     .index("by_offerType", ["offerType", "isActive"])
     .index("by_externalUrl", ["externalUrl"])
     .index("by_source", ["source", "isActive"])
+    .index("by_source_lastSeen", ["source", "lastSeenAt"])
     .index("by_rank", ["isActive", "rankScore"])
     .index("by_active", ["isActive"])
     .index("by_price", ["isActive", "priceCents"])

@@ -398,8 +398,8 @@ export const getLeaderboard = query({
       feed.push({
         _id: r._id,
         amountCents: r.amountCents,
+        amountMicroUsd: r.amountMicroUsd ?? null,
         settlementType: r.settlementType,
-        externalResourceId: r.externalResourceId ?? null,
         delivered: r.delivered,
         emittedAt: r.emittedAt,
         buyerName: buyer?.name ?? "agent",
