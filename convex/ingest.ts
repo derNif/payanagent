@@ -128,14 +128,11 @@ export const refreshCatalog = internalAction({
         offset,
         runStart,
       });
-      return;
     }
-
-    // Final chunk done → deactivate offers not refreshed this run.
-    await ctx.runMutation(api.offers.sweepStaleExternal, {
-      platformSecret,
-      cutoff: runStart,
-      limit: 4000,
-    });
+    // No stale-sweep here: the upsert skips no-op writes (doesn't touch
+    // lastSeenAt on unchanged rows), so a lastSeenAt-based sweep would wrongly
+    // flag present-but-unchanged offers. Removed sellers are rare and just 502
+    // on buy; `offers.sweepStaleExternal` stays available for an occasional
+    // manual full pass if dead listings ever pile up.
   },
 });

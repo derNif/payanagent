@@ -533,21 +533,49 @@ export const upsertExternalBulk = mutation({
     requireSecret(args.platformSecret);
     let created = 0;
     let updated = 0;
+    let reactivated = 0;
+    let unchanged = 0;
     for (const f of args.offers) {
       const existing = await ctx.db
         .query("offers")
         .withIndex("by_externalUrl", (q) => q.eq("externalUrl", f.externalUrl))
         .first();
       if (existing) {
+        // Skip the write entirely when nothing meaningful changed — the daily
+        // refresh otherwise re-patches all ~24.8k rows for no reason.
+        const same =
+          existing.isActive &&
+          existing.title === f.title &&
+          existing.description === f.description &&
+          existing.category === f.category &&
+          existing.priceCents === f.priceCents &&
+          existing.amountRaw === f.amountRaw &&
+          existing.payTo === f.payTo &&
+          existing.network === f.network &&
+          (existing.inputSchema ?? null) === (f.inputSchema ?? null) &&
+          (existing.outputSchema ?? null) === (f.outputSchema ?? null) &&
+          (existing.qualityScore ?? null) === (f.qualityScore ?? null) &&
+          (existing.sellerName ?? null) === (f.sellerName ?? null) &&
+          JSON.stringify(existing.tags) === JSON.stringify(f.tags);
+        if (same) {
+          unchanged++;
+          continue;
+        }
+        const wasInactive = !existing.isActive;
         await ctx.db.patch(existing._id, {
           ...f,
           source: "bazaar",
           offerType: "api" as const,
-          rankScore: f.qualityScore ?? 0,
+          // Preserve the "sold" rank tier; otherwise rank by source quality.
+          rankScore:
+            existing.rankScore != null && existing.rankScore >= SOLD_BASE
+              ? existing.rankScore
+              : f.qualityScore ?? 0,
           isActive: true,
           lastSeenAt: args.now,
         });
-        updated++;
+        if (wasInactive) reactivated++;
+        else updated++;
       } else {
         await ctx.db.insert("offers", {
           ...f,
@@ -561,8 +589,9 @@ export const upsertExternalBulk = mutation({
         created++;
       }
     }
-    if (created > 0) await bumpCounter(ctx, "activeOffers", created);
-    return { created, updated };
+    const activated = created + reactivated;
+    if (activated > 0) await bumpCounter(ctx, "activeOffers", activated);
+    return { created, updated, reactivated, unchanged };
   },
 });
 
