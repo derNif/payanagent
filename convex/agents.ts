@@ -159,14 +159,16 @@ export const deactivateTestAgents = mutation({
     if (!PLATFORM_INTERNAL_KEY || args.platformSecret !== PLATFORM_INTERNAL_KEY) {
       throw new Error("unauthorized: invalid platform secret");
     }
+    // Specific internal names only — never broad words like "audit" that would
+    // catch organic agents (e.g. "Codex Audit Agent").
     const PATTERNS = [
-      "test seller",
+      "test seller agent",
       "labs buy tester",
-      "labs smoke",
-      "smoke test",
+      "labs smoke tester",
+      "smoke tester",
       "sepolia settlement",
-      "sepolia smoke",
-      "audit agent",
+      "audit agent a",
+      "audit agent b",
       "linus audit",
     ];
     const all = await ctx.db.query("agents").take(2000);
@@ -181,6 +183,25 @@ export const deactivateTestAgents = mutation({
       }
     }
     return { deactivated, names };
+  },
+});
+
+// Reactivate an agent by exact name (repair a wrong deactivation). Gated.
+export const reactivateByName = mutation({
+  args: { platformSecret: v.string(), name: v.string() },
+  handler: async (ctx, args) => {
+    if (!PLATFORM_INTERNAL_KEY || args.platformSecret !== PLATFORM_INTERNAL_KEY) {
+      throw new Error("unauthorized: invalid platform secret");
+    }
+    const all = await ctx.db.query("agents").take(2000);
+    let reactivated = 0;
+    for (const a of all) {
+      if (a.name === args.name && a.status === "deactivated") {
+        await ctx.db.patch(a._id, { status: "active" as const });
+        reactivated++;
+      }
+    }
+    return { reactivated };
   },
 });
 
