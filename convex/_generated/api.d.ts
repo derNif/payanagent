@@ -10,6 +10,8 @@
 
 import type * as agents from "../agents.js";
 import type * as apiKeys from "../apiKeys.js";
+import type * as crons from "../crons.js";
+import type * as ingest from "../ingest.js";
 import type * as offers from "../offers.js";
 import type * as receipts from "../receipts.js";
 import type * as requests from "../requests.js";
@@ -24,6 +26,8 @@ import type {
 declare const fullApi: ApiFromModules<{
   agents: typeof agents;
   apiKeys: typeof apiKeys;
+  crons: typeof crons;
+  ingest: typeof ingest;
   offers: typeof offers;
   receipts: typeof receipts;
   requests: typeof requests;

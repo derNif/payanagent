@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { VerifiedBadge } from "@/components/verified-badge";
+import { usdAmount } from "@/lib/format";
 
 function usd(cents: number): string {
   return (
@@ -35,7 +37,7 @@ const PROVIDER: Record<string, string> = { agent: "Agent", saas: "SaaS", api: "A
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="px-4 py-3 sm:px-5 sm:py-4">
+    <div>
       <p className="text-[10px] sm:text-xs font-mono uppercase tracking-widest text-muted-foreground/60">
         {label}
       </p>
@@ -47,6 +49,7 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
 
 export function LeaderboardDashboard() {
   const data = useQuery(api.receipts.getLeaderboard, {});
+  const [tab, setTab] = useState<"sellers" | "buyers">("sellers");
 
   if (!data) {
     return <div className="text-muted-foreground font-mono text-sm">Loading…</div>;
@@ -60,16 +63,13 @@ export function LeaderboardDashboard() {
       {/* Header — hero volume + headline stats, one block */}
       <div className="bg-card border border-border rounded-xl card-shadow p-5 sm:p-6 mb-8 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
         <div>
-          <div className="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-muted-foreground/60 mb-2">
+          <div className="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-muted-foreground/60 mb-3">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-60" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
             </span>
             Live · settled by agents
           </div>
-          <p className="text-xs text-muted-foreground/60 font-mono uppercase tracking-widest">
-            Total settled volume
-          </p>
           <div className="flex items-end gap-3">
             <span className="text-5xl sm:text-6xl font-mono font-bold text-gradient leading-none">
               {usd(stats.totalVolumeCents)}
@@ -86,7 +86,7 @@ export function LeaderboardDashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: top sellers */}
+        {/* Left: top seller highlight + sellers/buyers tabs */}
         <div className="lg:col-span-2 space-y-6">
           {top && (
             <div className="bg-card border border-border rounded-xl p-5 card-shadow">
@@ -112,63 +112,73 @@ export function LeaderboardDashboard() {
             </div>
           )}
 
+          {/* Tabbed sellers / buyers */}
           <div className="bg-card border border-border rounded-xl overflow-hidden card-shadow">
-            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-              <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground/70">Top sellers</span>
-              <span className="text-xs font-mono text-muted-foreground/50">by settled volume</span>
+            <div className="px-4 py-2.5 border-b border-border flex items-center gap-1">
+              {(["sellers", "buyers"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTab(t)}
+                  className={
+                    (tab === t
+                      ? "bg-secondary text-foreground"
+                      : "text-muted-foreground/60 hover:text-foreground") +
+                    " text-xs px-3 py-1 rounded font-mono uppercase tracking-wider"
+                  }
+                >
+                  Top {t}
+                </button>
+              ))}
+              <span className="ml-auto text-xs font-mono text-muted-foreground/50">
+                {tab === "sellers" ? "by settled volume" : "by spend"}
+              </span>
             </div>
-            {topSellers.length === 0 ? (
-              <p className="p-8 text-center text-sm text-muted-foreground/60 font-mono">No settlements yet.</p>
-            ) : (
-              <div className="overflow-auto max-h-[440px]">
-                <table className="w-full text-sm min-w-[520px]">
-                  <thead className="text-muted-foreground/60 text-xs font-mono uppercase">
-                    <tr className="border-b border-border">
-                      <th className="text-left px-4 py-2 w-8">#</th>
-                      <th className="text-left px-4 py-2">Seller</th>
-                      <th className="text-right px-4 py-2">Trust</th>
-                      <th className="text-right px-4 py-2">Delivered</th>
-                      <th className="text-right px-4 py-2">Buyers</th>
-                      <th className="text-right px-4 py-2">Settled</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {topSellers.map((s, i) => (
-                      <tr key={String(s.sellerId)} className="border-b border-border/50 last:border-0 hover:bg-secondary/20">
-                        <td className="px-4 py-2.5 font-mono">
-                          <span className={i === 0 ? "text-primary font-bold" : i < 3 ? "text-foreground" : "text-muted-foreground"}>{i + 1}</span>
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <Link href={`/marketplace/agents/${s.sellerId}`} className="hover:text-primary inline-flex items-center gap-2">
-                            <span className="font-medium">{s.name}</span>
-                            {s.trusted && <VerifiedBadge size={14} />}
-                            <span className="text-[10px] px-1 py-0.5 rounded bg-secondary text-muted-foreground/70 font-mono">{PROVIDER[s.providerType] ?? s.providerType}</span>
-                          </Link>
-                        </td>
-                        <td className="px-4 py-2.5 text-right font-mono text-foreground/90">{s.score}</td>
-                        <td className="px-4 py-2.5 text-right font-mono text-muted-foreground">{Math.round(s.successRate * 100)}%</td>
-                        <td className="px-4 py-2.5 text-right font-mono text-muted-foreground">{s.distinctBuyers}</td>
-                        <td className="px-4 py-2.5 text-right font-mono text-primary">{usd(s.volumeCents)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
 
-          {/* Top buyers (demand side) */}
-          <div className="bg-card border border-border rounded-xl overflow-hidden card-shadow">
-            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-              <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground/70">Top buyers</span>
-              <span className="text-xs font-mono text-muted-foreground/50">by spend</span>
-            </div>
-            {!topBuyers || topBuyers.length === 0 ? (
+            {tab === "sellers" ? (
+              topSellers.length === 0 ? (
+                <p className="p-8 text-center text-sm text-muted-foreground/60 font-mono">No settlements yet.</p>
+              ) : (
+                <div className="overflow-auto max-h-[460px]">
+                  <table className="w-full text-sm min-w-[520px]">
+                    <thead className="text-muted-foreground/60 text-xs font-mono uppercase sticky top-0 bg-card">
+                      <tr className="border-b border-border">
+                        <th className="text-left px-4 py-2 w-8">#</th>
+                        <th className="text-left px-4 py-2">Seller</th>
+                        <th className="text-right px-4 py-2">Trust</th>
+                        <th className="text-right px-4 py-2">Delivered</th>
+                        <th className="text-right px-4 py-2">Buyers</th>
+                        <th className="text-right px-4 py-2">Settled</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {topSellers.map((s, i) => (
+                        <tr key={String(s.sellerId)} className="border-b border-border/50 last:border-0 hover:bg-secondary/20">
+                          <td className="px-4 py-2.5 font-mono">
+                            <span className={i === 0 ? "text-primary font-bold" : i < 3 ? "text-foreground" : "text-muted-foreground"}>{i + 1}</span>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <Link href={`/marketplace/agents/${s.sellerId}`} className="hover:text-primary inline-flex items-center gap-2">
+                              <span className="font-medium">{s.name}</span>
+                              {s.trusted && <VerifiedBadge size={14} />}
+                              <span className="text-[10px] px-1 py-0.5 rounded bg-secondary text-muted-foreground/70 font-mono">{PROVIDER[s.providerType] ?? s.providerType}</span>
+                            </Link>
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-mono text-foreground/90">{s.score}</td>
+                          <td className="px-4 py-2.5 text-right font-mono text-muted-foreground">{Math.round(s.successRate * 100)}%</td>
+                          <td className="px-4 py-2.5 text-right font-mono text-muted-foreground">{s.distinctBuyers}</td>
+                          <td className="px-4 py-2.5 text-right font-mono text-primary">{usd(s.volumeCents)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            ) : !topBuyers || topBuyers.length === 0 ? (
               <p className="p-8 text-center text-sm text-muted-foreground/60 font-mono">No buyers yet.</p>
             ) : (
-              <div className="overflow-auto max-h-[440px]">
+              <div className="overflow-auto max-h-[460px]">
                 <table className="w-full text-sm min-w-[360px]">
-                  <thead className="text-muted-foreground/60 text-xs font-mono uppercase">
+                  <thead className="text-muted-foreground/60 text-xs font-mono uppercase sticky top-0 bg-card">
                     <tr className="border-b border-border">
                       <th className="text-left px-4 py-2 w-8">#</th>
                       <th className="text-left px-4 py-2">Buyer</th>
@@ -215,7 +225,7 @@ export function LeaderboardDashboard() {
                   className="flex items-center gap-2 px-3 py-2 hover:bg-secondary/20 transition-colors"
                 >
                   <span className="text-muted-foreground/40 shrink-0 w-8">{ago(r.emittedAt)}</span>
-                  <span className="text-primary shrink-0">{usd(r.amountCents)}</span>
+                  <span className="text-primary shrink-0">{usdAmount(r.amountCents, r.amountMicroUsd)}</span>
                   <span className="text-muted-foreground/70 truncate">
                     {r.buyerName} <span className="text-muted-foreground/40">→</span> {r.sellerName}
                   </span>

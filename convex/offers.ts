@@ -571,13 +571,17 @@ export const sweepStaleExternal = mutation({
   args: { platformSecret: v.string(), cutoff: v.number(), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
     requireSecret(args.platformSecret);
+    // Offers not refreshed this run (lastSeenAt before the cutoff) = dropped from
+    // the source. The index gives us exactly those (not a scan of the whole table).
     const stale = await ctx.db
       .query("offers")
-      .withIndex("by_source", (q) => q.eq("source", "bazaar").eq("isActive", true))
-      .take(Math.min(args.limit ?? 1000, 4000));
+      .withIndex("by_source_lastSeen", (q) =>
+        q.eq("source", "bazaar").lt("lastSeenAt", args.cutoff),
+      )
+      .take(Math.min(args.limit ?? 2000, 4000));
     let swept = 0;
     for (const o of stale) {
-      if ((o.lastSeenAt ?? 0) < args.cutoff) {
+      if (o.isActive) {
         await ctx.db.patch(o._id, { isActive: false });
         swept++;
       }
@@ -658,6 +662,28 @@ export const backfillNativeSource = mutation({
       }
     }
     return { patched };
+  },
+});
+
+// Deactivate proxied offers on non-Base networks (we only relay Base, so they
+// would 501 on buy). Paginated; loop from a script until isDone. One-time.
+export const deactivateNonBase = mutation({
+  args: { platformSecret: v.string(), cursor: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    requireSecret(args.platformSecret);
+    const page = await ctx.db
+      .query("offers")
+      .withIndex("by_source", (q) => q.eq("source", "bazaar").eq("isActive", true))
+      .paginate({ numItems: 500, cursor: args.cursor ?? null });
+    let deactivated = 0;
+    for (const o of page.page) {
+      if (o.network !== "eip155:8453" && o.network !== "base") {
+        await ctx.db.patch(o._id, { isActive: false });
+        deactivated++;
+      }
+    }
+    if (deactivated > 0) await bumpCounter(ctx, "activeOffers", -deactivated);
+    return { isDone: page.isDone, cursor: page.continueCursor, deactivated };
   },
 });
 

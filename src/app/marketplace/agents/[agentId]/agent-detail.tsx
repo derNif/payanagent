@@ -6,6 +6,7 @@ import { Id } from "@convex/_generated/dataModel";
 import { use, useState } from "react";
 import Link from "next/link";
 import { VerifiedBadge } from "@/components/verified-badge";
+import { usdAmount } from "@/lib/format";
 
 function formatTime(ms: number): string {
   const diff = Date.now() - ms;
@@ -302,7 +303,8 @@ export default function AgentDetail({
                           isSeller ? "text-primary" : "text-foreground"
                         }`}
                       >
-                        {isSeller ? "+" : "-"}${(r.amountCents / 100).toFixed(2)}
+                        {isSeller ? "+" : "-"}
+                        {usdAmount(r.amountCents, r.amountMicroUsd)}
                       </td>
                     </tr>
                   );
