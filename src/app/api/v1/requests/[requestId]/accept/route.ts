@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getConvexClient } from "@/lib/convex";
+import { getConvexClient, PLATFORM_SECRET } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
 import { validateBody, acceptBidOnRequestSchema } from "@/lib/validation";
 import { api } from "@convex/_generated/api";
@@ -48,7 +48,12 @@ export async function POST(
 
   try {
     await convex.mutation(api.requests.acceptBid, {
+      platformSecret: PLATFORM_SECRET,
       bidId: data.bidId as Id<"bids">,
+      // Authorization is re-checked inside the mutation against the BID's own
+      // request — the route's ownership check alone was bypassable.
+      requestId: requestId as Id<"requests">,
+      buyerId: agent._id,
     });
     return NextResponse.json({ ok: true });
   } catch (e) {

@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { getConvexClient } from "./convex";
+import { getConvexClient, PLATFORM_SECRET } from "./convex";
 import { api } from "@convex/_generated/api";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "./rate-limit";
 
@@ -51,13 +51,19 @@ export async function authenticateRequest(
 
   const convex = getConvexClient();
 
-  const keyRecord = await convex.query(api.apiKeys.getByHash, { keyHash });
+  const keyRecord = await convex.query(api.apiKeys.getByHash, {
+    platformSecret: PLATFORM_SECRET,
+    keyHash,
+  });
   if (!keyRecord || !keyRecord.isActive) {
     return { error: unauthorizedResponse() };
   }
 
   // Update last used (fire and forget)
-  convex.mutation(api.apiKeys.updateLastUsed, { keyId: keyRecord._id });
+  convex.mutation(api.apiKeys.updateLastUsed, {
+    platformSecret: PLATFORM_SECRET,
+    keyId: keyRecord._id,
+  });
 
   const agent = await convex.query(api.agents.getById, {
     agentId: keyRecord.agentId,

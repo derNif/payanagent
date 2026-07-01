@@ -106,6 +106,7 @@ async function enrichOffers(ctx: QueryCtx, offers: Doc<"offers">[]) {
 
 export const create = mutation({
   args: {
+    platformSecret: v.string(),
     sellerId: v.id("agents"),
     title: v.string(),
     description: v.string(),
@@ -123,19 +124,21 @@ export const create = mutation({
     previewDescription: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<Id<"offers">> => {
+    const { platformSecret, ...fields } = args;
+    requireSecret(platformSecret);
     // API offers settle to either an external endpoint or a PayanAgent-operated
     // internal handler.
-    if (args.offerType === "api" && !args.endpoint && !args.internalHandler) {
+    if (fields.offerType === "api" && !fields.endpoint && !fields.internalHandler) {
       throw new Error("API offers require an endpoint or internalHandler");
     }
-    if (args.offerType === "download" && !args.fileUrl) {
+    if (fields.offerType === "download" && !fields.fileUrl) {
       throw new Error("Download offers require a fileUrl");
     }
-    if (args.priceCents < 1) {
+    if (fields.priceCents < 1) {
       throw new Error("priceCents must be at least 1");
     }
     const id = await ctx.db.insert("offers", {
-      ...args,
+      ...fields,
       source: "native",
       rankScore: NATIVE_RANK,
       isActive: true,
@@ -147,6 +150,7 @@ export const create = mutation({
 
 export const update = mutation({
   args: {
+    platformSecret: v.string(),
     offerId: v.id("offers"),
     title: v.optional(v.string()),
     description: v.optional(v.string()),
@@ -163,7 +167,8 @@ export const update = mutation({
     isActive: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const { offerId, ...patch } = args;
+    const { platformSecret, offerId, ...patch } = args;
+    requireSecret(platformSecret);
     const offer = await ctx.db.get(offerId);
     if (!offer) throw new Error("Offer not found");
     await ctx.db.patch(offerId, patch);
@@ -171,8 +176,9 @@ export const update = mutation({
 });
 
 export const deactivate = mutation({
-  args: { offerId: v.id("offers") },
+  args: { platformSecret: v.string(), offerId: v.id("offers") },
   handler: async (ctx, args) => {
+    requireSecret(args.platformSecret);
     const offer = await ctx.db.get(args.offerId);
     await ctx.db.patch(args.offerId, { isActive: false });
     if (offer?.isActive) await bumpCounter(ctx, "activeOffers", -1);

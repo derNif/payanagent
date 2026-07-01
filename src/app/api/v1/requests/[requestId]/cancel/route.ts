@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getConvexClient } from "@/lib/convex";
+import { getConvexClient, PLATFORM_SECRET } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
 import { validateBody, cancelSchema } from "@/lib/validation";
 import {
@@ -66,10 +66,29 @@ export async function POST(
       { status: 400 },
     );
   }
+  // Once work is delivered, the buyer can't instantly cancel-refund and walk
+  // off with the deliverable — the provider gets a protection window. After it,
+  // cancel remains an escape hatch (e.g. a non-delivering "fulfilled" that's
+  // actually junk). The buyer's normal path from `fulfilled` is /approve.
+  const DELIVERY_PROTECTION_MS = 7 * 24 * 60 * 60 * 1000;
+  if (
+    req.status === "fulfilled" &&
+    req.fulfilledAt &&
+    Date.now() - req.fulfilledAt < DELIVERY_PROTECTION_MS
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "Work has been delivered — approve it, or wait out the 7-day provider-protection window before cancelling.",
+      },
+      { status: 403 },
+    );
+  }
 
   // No escrow → straight cancel
   if (!req.escrow) {
     await convex.mutation(api.requests.markCancelled, {
+      platformSecret: PLATFORM_SECRET,
       requestId: req._id,
       reason: data.reason,
     });
@@ -91,6 +110,7 @@ export async function POST(
   // cancel/cancel or cancel/approve can't double-spend the platform wallet.
   try {
     await convex.mutation(api.requests.claimForSettlement, {
+        platformSecret: PLATFORM_SECRET,
       requestId: req._id,
       allowedFrom: ["open", "accepted", "fulfilled"],
     });
@@ -108,6 +128,7 @@ export async function POST(
   });
   if (existing) {
     await convex.mutation(api.requests.markCancelled, {
+      platformSecret: PLATFORM_SECRET,
       requestId: req._id,
       reason: data.reason,
       refundReceiptId: existing._id,
@@ -127,7 +148,7 @@ export async function POST(
 
   const refund = await releaseEscrow(buyer.walletAddress, refundAmount);
   if (!refund.success || !refund.txHash) {
-    await convex.mutation(api.requests.revertSettlement, { requestId: req._id });
+    await convex.mutation(api.requests.revertSettlement, { platformSecret: PLATFORM_SECRET, requestId: req._id });
     return NextResponse.json(
       { error: `Refund failed: ${refund.error || "unknown"}` },
       { status: 502 },
@@ -155,6 +176,7 @@ export async function POST(
   );
 
   await convex.mutation(api.requests.markCancelled, {
+      platformSecret: PLATFORM_SECRET,
     requestId: req._id,
     reason: data.reason,
     refundReceiptId: receiptId,

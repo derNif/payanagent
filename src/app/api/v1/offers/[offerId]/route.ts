@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getConvexClient } from "@/lib/convex";
+import { getConvexClient, PLATFORM_SECRET } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { toPublicOffer } from "@/lib/public-projections";
@@ -87,6 +87,7 @@ export async function PATCH(
 
   try {
     await convex.mutation(api.offers.update, {
+      platformSecret: PLATFORM_SECRET,
       offerId: offerId as Id<"offers">,
       ...data,
     });
@@ -126,6 +127,7 @@ export async function DELETE(
   }
 
   await convex.mutation(api.offers.deactivate, {
+      platformSecret: PLATFORM_SECRET,
     offerId: offerId as Id<"offers">,
   });
   return NextResponse.json({ ok: true });

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getConvexClient } from "@/lib/convex";
+import { getConvexClient, PLATFORM_SECRET } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
@@ -17,6 +17,7 @@ export async function DELETE(
 
   // Load the key and verify ownership
   const allKeys = await convex.query(api.apiKeys.listByAgent, {
+      platformSecret: PLATFORM_SECRET,
     agentId: agent._id as Id<"agents">,
   });
 
@@ -35,6 +36,7 @@ export async function DELETE(
   }
 
   await convex.mutation(api.apiKeys.deactivate, {
+      platformSecret: PLATFORM_SECRET,
     keyId: keyId as Id<"apiKeys">,
   });
 

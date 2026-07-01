@@ -6,17 +6,43 @@ import { Doc, Id } from "./_generated/dataModel";
 // Lifecycle:
 //   open -> accepted -> fulfilled -> approved   (success path)
 //   open|accepted -> cancelled                   (buyer-initiated, refund if escrow)
+//   fulfilled -> cancelled                       (only 7+ days after delivery)
 //   anything       -> disputed                   (rare, manual resolve)
 //
 // Settlement receipts are emitted at:
 //   - escrow funding (on create, if escrow=true) -> escrowReceiptId
 //   - approval (release to provider)             -> settlementReceiptId
 //   - cancel/timeout (refund to buyer)           -> receipt with settlementType=escrow_refund
+//
+// SECURITY: every mutation here is platform-gated. Convex functions are
+// publicly callable, but the ONLY legitimate callers are our API routes
+// (which enforce API-key auth + business rules server-side). Without the
+// gate, anyone could call e.g. markApproved directly and skip payment.
+
+const PLATFORM_INTERNAL_KEY = process.env.PLATFORM_INTERNAL_KEY ?? "";
+
+function requireSecret(secret: string) {
+  if (!PLATFORM_INTERNAL_KEY || secret !== PLATFORM_INTERNAL_KEY) {
+    throw new Error("unauthorized: invalid platform secret");
+  }
+}
+
+// Public projection: inputPayload/outputPayload are the paid work product —
+// never exposed on public queries (a fulfilled deliverable must not be
+// readable without buying). Parties access them via the gated REST detail.
+function publicRequest(r: Doc<"requests">) {
+  const { inputPayload, outputPayload, ...rest } = r;
+  void inputPayload;
+  void outputPayload;
+  return rest;
+}
+export type PublicRequest = ReturnType<typeof publicRequest>;
 
 // --- creation ---
 
 export const create = mutation({
   args: {
+    platformSecret: v.string(),
     buyerId: v.id("agents"),
     title: v.string(),
     description: v.string(),
@@ -27,6 +53,7 @@ export const create = mutation({
     agreedPriceCents: v.optional(v.number()), // required when providerId set
   },
   handler: async (ctx, args): Promise<Id<"requests">> => {
+    requireSecret(args.platformSecret);
     if (args.providerId && !args.agreedPriceCents) {
       throw new Error("direct hire requires agreedPriceCents");
     }
@@ -57,11 +84,13 @@ export const create = mutation({
 // Mark escrow funded — called after x402 settle on create.
 export const linkEscrowReceipt = mutation({
   args: {
+    platformSecret: v.string(),
     requestId: v.id("requests"),
     escrowReceiptId: v.id("receipts"),
     escrowDepositedCents: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    requireSecret(args.platformSecret);
     await ctx.db.patch(args.requestId, {
       escrowReceiptId: args.escrowReceiptId,
       escrowDepositedCents: args.escrowDepositedCents,
@@ -76,10 +105,12 @@ export const linkEscrowReceipt = mutation({
 // approve/approve or approve/cancel can't double-spend the platform wallet.
 export const claimForSettlement = mutation({
   args: {
+    platformSecret: v.string(),
     requestId: v.id("requests"),
     allowedFrom: v.array(v.string()),
   },
   handler: async (ctx, args): Promise<Doc<"requests">> => {
+    requireSecret(args.platformSecret);
     const req = await ctx.db.get(args.requestId);
     if (!req) throw new Error("Request not found");
     if (!args.allowedFrom.includes(req.status)) {
@@ -95,8 +126,9 @@ export const claimForSettlement = mutation({
 
 // Release the lock back to the pre-claim status (on-chain transfer failed).
 export const revertSettlement = mutation({
-  args: { requestId: v.id("requests") },
+  args: { platformSecret: v.string(), requestId: v.id("requests") },
   handler: async (ctx, args) => {
+    requireSecret(args.platformSecret);
     const req = await ctx.db.get(args.requestId);
     if (!req) throw new Error("Request not found");
     if (req.status !== "completing") return; // nothing to revert
@@ -113,6 +145,7 @@ export const revertSettlement = mutation({
 
 export const submitBid = mutation({
   args: {
+    platformSecret: v.string(),
     requestId: v.id("requests"),
     bidderId: v.id("agents"),
     priceCents: v.number(),
@@ -120,6 +153,7 @@ export const submitBid = mutation({
     message: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<Id<"bids">> => {
+    requireSecret(args.platformSecret);
     const req = await ctx.db.get(args.requestId);
     if (!req) throw new Error("Request not found");
     if (req.status !== "open") {
@@ -143,14 +177,29 @@ export const submitBid = mutation({
 });
 
 export const acceptBid = mutation({
-  args: { bidId: v.id("bids") },
+  args: {
+    platformSecret: v.string(),
+    bidId: v.id("bids"),
+    // Authorization is enforced HERE, on the bid's own request — not just at
+    // the route. Without this, accepting a bid via a request you own would
+    // install you as provider on someone ELSE's request (the bid's).
+    requestId: v.id("requests"),
+    buyerId: v.id("agents"),
+  },
   handler: async (ctx, args) => {
+    requireSecret(args.platformSecret);
     const bid = await ctx.db.get(args.bidId);
     if (!bid) throw new Error("Bid not found");
     if (bid.status !== "pending") throw new Error("Bid not pending");
     if (!bid.requestId) throw new Error("Legacy bid (no requestId)");
+    if (bid.requestId !== args.requestId) {
+      throw new Error("bid belongs to a different request");
+    }
     const req = await ctx.db.get(bid.requestId);
     if (!req) throw new Error("Request not found");
+    if (req.buyerId !== args.buyerId) {
+      throw new Error("only the buyer can accept a bid");
+    }
     if (req.status !== "open") throw new Error("Request not open");
 
     // mark this bid accepted, others rejected
@@ -178,11 +227,13 @@ export const acceptBid = mutation({
 
 export const fulfill = mutation({
   args: {
+    platformSecret: v.string(),
     requestId: v.id("requests"),
     providerId: v.id("agents"),
     outputPayload: v.string(),
   },
   handler: async (ctx, args) => {
+    requireSecret(args.platformSecret);
     const req = await ctx.db.get(args.requestId);
     if (!req) throw new Error("Request not found");
     if (req.providerId !== args.providerId) {
@@ -202,14 +253,16 @@ export const fulfill = mutation({
 // Set request to approved — should be called AFTER settlement receipt is emitted.
 export const markApproved = mutation({
   args: {
+    platformSecret: v.string(),
     requestId: v.id("requests"),
     settlementReceiptId: v.id("receipts"),
   },
   handler: async (ctx, args) => {
+    requireSecret(args.platformSecret);
     const req = await ctx.db.get(args.requestId);
     if (!req) throw new Error("Request not found");
-    // `completing` = escrow path (lock acquired before release); `fulfilled` =
-    // non-escrow path (buyer pays provider directly, no platform lock needed).
+    // `completing` = settlement path (lock acquired before pay/release);
+    // `fulfilled` kept for safety.
     if (req.status !== "fulfilled" && req.status !== "completing") {
       throw new Error(`cannot approve in status: ${req.status}`);
     }
@@ -224,11 +277,13 @@ export const markApproved = mutation({
 
 export const markCancelled = mutation({
   args: {
+    platformSecret: v.string(),
     requestId: v.id("requests"),
     reason: v.optional(v.string()),
     refundReceiptId: v.optional(v.id("receipts")),
   },
   handler: async (ctx, args) => {
+    requireSecret(args.platformSecret);
     const req = await ctx.db.get(args.requestId);
     if (!req) throw new Error("Request not found");
     if (req.status === "approved" || req.status === "cancelled") {
@@ -244,11 +299,47 @@ export const markCancelled = mutation({
   },
 });
 
+// Operator repair: a request stuck in `completing` (crash mid-settlement)
+// can be reverted after MANUALLY verifying on-chain that no transfer left the
+// platform wallet. Never auto-revert: a crash after releaseEscrow succeeded
+// but before the receipt write would otherwise allow a double-release.
+export const forceRevertSettlement = mutation({
+  args: { platformSecret: v.string(), requestId: v.id("requests") },
+  handler: async (ctx, args) => {
+    requireSecret(args.platformSecret);
+    const req = await ctx.db.get(args.requestId);
+    if (!req) throw new Error("Request not found");
+    if (req.status !== "completing") {
+      throw new Error(`not in completing: ${req.status}`);
+    }
+    const prev =
+      (req.lockedFromStatus as Doc<"requests">["status"] | undefined) ?? "fulfilled";
+    await ctx.db.patch(args.requestId, {
+      status: prev,
+      lockedFromStatus: undefined,
+    });
+    return { revertedTo: prev };
+  },
+});
+
 // --- queries ---
 
+// Public-projected read (no work-product payloads). Routes use this for
+// status/ownership checks; parties read payloads via getFullInternal.
 export const getById = query({
   args: { requestId: v.id("requests") },
+  handler: async (ctx, args): Promise<PublicRequest | null> => {
+    const r = await ctx.db.get(args.requestId);
+    return r ? publicRequest(r) : null;
+  },
+});
+
+// Full doc incl. payloads — platform-gated, for the REST routes that enforce
+// party-based access (buyer/provider) server-side.
+export const getFullInternal = query({
+  args: { platformSecret: v.string(), requestId: v.id("requests") },
   handler: async (ctx, args): Promise<Doc<"requests"> | null> => {
+    requireSecret(args.platformSecret);
     return await ctx.db.get(args.requestId);
   },
 });
@@ -258,26 +349,27 @@ export const getWithBids = query({
   handler: async (
     ctx,
     args,
-  ): Promise<{ request: Doc<"requests"> | null; bids: Doc<"bids">[] }> => {
+  ): Promise<{ request: PublicRequest | null; bids: Doc<"bids">[] }> => {
     const request = await ctx.db.get(args.requestId);
     if (!request) return { request: null, bids: [] };
     const bids = await ctx.db
       .query("bids")
       .withIndex("by_requestId", (q) => q.eq("requestId", args.requestId))
       .collect();
-    return { request, bids };
+    return { request: publicRequest(request), bids };
   },
 });
 
 export const listOpen = query({
   args: { limit: v.optional(v.number()) },
-  handler: async (ctx, args): Promise<Doc<"requests">[]> => {
+  handler: async (ctx, args): Promise<PublicRequest[]> => {
     const limit = Math.min(args.limit ?? 50, 200);
-    return await ctx.db
+    const rows = await ctx.db
       .query("requests")
       .withIndex("by_status", (q) => q.eq("status", "open"))
       .order("desc")
       .take(limit);
+    return rows.map(publicRequest);
   },
 });
 
@@ -286,11 +378,12 @@ export const listByBuyer = query({
     buyerId: v.id("agents"),
     status: v.optional(v.string()),
   },
-  handler: async (ctx, args): Promise<Doc<"requests">[]> => {
-    return await ctx.db
+  handler: async (ctx, args): Promise<PublicRequest[]> => {
+    const rows = await ctx.db
       .query("requests")
       .withIndex("by_buyerId", (q) => q.eq("buyerId", args.buyerId))
       .collect();
+    return rows.map(publicRequest);
   },
 });
 
@@ -299,11 +392,12 @@ export const listByProvider = query({
     providerId: v.id("agents"),
     status: v.optional(v.string()),
   },
-  handler: async (ctx, args): Promise<Doc<"requests">[]> => {
-    return await ctx.db
+  handler: async (ctx, args): Promise<PublicRequest[]> => {
+    const rows = await ctx.db
       .query("requests")
       .withIndex("by_providerId", (q) => q.eq("providerId", args.providerId))
       .collect();
+    return rows.map(publicRequest);
   },
 });
 
@@ -333,9 +427,9 @@ export const search = query({
     ),
     limit: v.optional(v.number()),
   },
-  handler: async (ctx, args): Promise<Doc<"requests">[]> => {
+  handler: async (ctx, args): Promise<PublicRequest[]> => {
     const limit = Math.min(args.limit ?? 50, 200);
-    return await ctx.db
+    const rows = await ctx.db
       .query("requests")
       .withSearchIndex("search_requests", (q) => {
         let s = q.search("description", args.query);
@@ -343,6 +437,7 @@ export const search = query({
         return s;
       })
       .take(limit);
+    return rows.map(publicRequest);
   },
 });
 
