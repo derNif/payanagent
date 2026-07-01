@@ -170,6 +170,7 @@ export async function POST(request: NextRequest) {
         sellerId: (data.providerId as Id<"agents"> | undefined) ?? agent._id,
         requestId,
         amountCents: escrowAmountCents,
+        amountMicroUsd: escrowAmountCents * 10000,
         currency: "USDC",
         chain: getNetwork(),
         network: getNetworkId(),

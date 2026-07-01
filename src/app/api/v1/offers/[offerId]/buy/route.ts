@@ -156,6 +156,7 @@ export async function POST(
       sellerId,
       offerId: offer._id,
       amountCents: offer.priceCents,
+      amountMicroUsd: offer.priceCents * 10000,
       currency: "USDC",
       chain: getNetwork(),
       network: getNetworkId(),

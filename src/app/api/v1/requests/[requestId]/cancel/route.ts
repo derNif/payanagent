@@ -142,6 +142,7 @@ export async function POST(
       sellerId: req.providerId ?? req.buyerId,
       requestId: req._id,
       amountCents: refundAmount,
+      amountMicroUsd: refundAmount * 10000,
       currency: "USDC",
       chain: getNetwork(),
       network: getNetworkId(),

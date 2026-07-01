@@ -255,12 +255,22 @@ export function receiptMicroUsd(r: Doc<"receipts">): number {
   return r.amountMicroUsd ?? r.amountCents * 10000;
 }
 
+// Escrow deposits/refunds are custody movements, not sales. They must never
+// count toward reputation or volume: deposit receipts carry sellerId=buyer as
+// a placeholder (a buyer would earn fake SELLER trust from its own deposits),
+// and deposit+release would count the same dollars twice.
+export function isEconomicSettlement(r: Doc<"receipts">): boolean {
+  return r.settlementType !== "escrow_deposit" && r.settlementType !== "escrow_refund";
+}
+
 // Objective, wash-resistant reputation derived from a seller's receipts. Pure
 // helper so offer/discovery queries can reuse it without N extra queries.
 // Success rate is weighted by buyer DIVERSITY (one wallet can't manufacture
 // trust) and every fake buy costs real USDC. Transparent components only.
 export function computeReputation(sellerReceipts: Doc<"receipts">[]) {
-  const confirmed = sellerReceipts.filter((r) => r.status === "confirmed");
+  const confirmed = sellerReceipts.filter(
+    (r) => r.status === "confirmed" && isEconomicSettlement(r),
+  );
   const sales = confirmed.length;
   if (sales === 0) {
     return {
@@ -318,14 +328,16 @@ export const getLeaderboard = query({
       .order("desc")
       .take(2000);
     const confirmed = recent.filter((r) => r.status === "confirmed");
+    // Feed shows all events; aggregates count only real sales (no deposits/refunds).
+    const sales = confirmed.filter(isEconomicSettlement);
     const now = recent.length ? recent[0].emittedAt : 0;
     const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
-    const last7d = confirmed.filter((r) => r.emittedAt >= weekAgo);
+    const last7d = sales.filter((r) => r.emittedAt >= weekAgo);
 
     // Aggregate per seller.
     type Acc = { sellerId: Id<"agents">; volumeMicroUsd: number; sales: number; buyers: Set<string>; delivered: number };
     const bySeller = new Map<string, Acc>();
-    for (const r of confirmed) {
+    for (const r of sales) {
       const k = String(r.sellerId);
       const cur = bySeller.get(k) ?? { sellerId: r.sellerId, volumeMicroUsd: 0, sales: 0, buyers: new Set(), delivered: 0 };
       cur.volumeMicroUsd += receiptMicroUsd(r);
@@ -371,7 +383,7 @@ export const getLeaderboard = query({
 
     // Aggregate per buyer (demand side) → top buyers by spend.
     const byBuyer = new Map<string, { buyerId: Id<"agents">; spentMicroUsd: number; buys: number }>();
-    for (const r of confirmed) {
+    for (const r of sales) {
       const k = String(r.buyerId);
       const cur = byBuyer.get(k) ?? { buyerId: r.buyerId, spentMicroUsd: 0, buys: 0 };
       cur.spentMicroUsd += receiptMicroUsd(r);
@@ -410,11 +422,11 @@ export const getLeaderboard = query({
     return {
       stats: {
         totalVolumeCents: Math.round(
-          confirmed.reduce((s, r) => s + receiptMicroUsd(r), 0) / 10000,
+          sales.reduce((s, r) => s + receiptMicroUsd(r), 0) / 10000,
         ),
-        totalReceipts: confirmed.length,
+        totalReceipts: sales.length,
         distinctSellers: bySeller.size,
-        distinctBuyers: new Set(confirmed.map((r) => String(r.buyerId))).size,
+        distinctBuyers: new Set(sales.map((r) => String(r.buyerId))).size,
         volume7dCents: Math.round(
           last7d.reduce((s, r) => s + receiptMicroUsd(r), 0) / 10000,
         ),
@@ -446,8 +458,12 @@ export const getAgentStats = query({
       .query("receipts")
       .withIndex("by_buyerId", (q) => q.eq("buyerId", args.agentId))
       .take(500);
-    const sellerConfirmed = asSeller.filter((r) => r.status === "confirmed");
-    const buyerConfirmed = asBuyer.filter((r) => r.status === "confirmed");
+    const sellerConfirmed = asSeller.filter(
+      (r) => r.status === "confirmed" && isEconomicSettlement(r),
+    );
+    const buyerConfirmed = asBuyer.filter(
+      (r) => r.status === "confirmed" && isEconomicSettlement(r),
+    );
     return {
       totalEarnedCents: Math.round(
         sellerConfirmed.reduce((s, r) => s + receiptMicroUsd(r), 0) / 10000,
@@ -479,7 +495,7 @@ export const getOverviewTrends = query({
       .order("desc")
       .take(3000);
     for (const r of recv) {
-      if (r.status !== "confirmed") continue;
+      if (r.status !== "confirmed" || !isEconomicSettlement(r)) continue;
       const i = bucket(r.emittedAt);
       if (i >= 0 && i < DAYS) {
         receipts[i] += 1;
@@ -523,7 +539,9 @@ export const getGlobalStats = query({
       .withIndex("by_emittedAt")
       .order("desc")
       .take(1000);
-    const confirmed = recent.filter((r) => r.status === "confirmed");
+    const confirmed = recent.filter(
+      (r) => r.status === "confirmed" && isEconomicSettlement(r),
+    );
     const now = Date.now();
     const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
     const last7d = confirmed.filter((r) => r.emittedAt >= oneWeekAgo);
@@ -556,7 +574,9 @@ export const topSellers = query({
       .withIndex("by_emittedAt")
       .order("desc")
       .take(2000);
-    const confirmed = recent.filter((r) => r.status === "confirmed");
+    const confirmed = recent.filter(
+      (r) => r.status === "confirmed" && isEconomicSettlement(r),
+    );
     const bySeller = new Map<
       string,
       { sellerId: Id<"agents">; totalEarnedCents: number; receiptCount: number }
