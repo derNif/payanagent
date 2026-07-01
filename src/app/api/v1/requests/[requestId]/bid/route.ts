@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getConvexClient } from "@/lib/convex";
+import { getConvexClient, PLATFORM_SECRET } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
 import { validateBody, createBidSchema } from "@/lib/validation";
 import { api } from "@convex/_generated/api";
@@ -22,6 +22,7 @@ export async function POST(
 
   try {
     const bidId = await convex.mutation(api.requests.submitBid, {
+      platformSecret: PLATFORM_SECRET,
       requestId: requestId as Id<"requests">,
       bidderId: agent._id,
       priceCents: data.priceCents,

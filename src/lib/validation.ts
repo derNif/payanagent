@@ -71,40 +71,6 @@ export const updateOfferSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-// Service creation
-export const createServiceSchema = z.object({
-  name: z.string().min(1).max(200),
-  description: z.string().min(1).max(2000),
-  category: z.string().min(1).max(100),
-  tags,
-  serviceType: z.enum(["api", "job"]).default("job"),
-  pricingModel: z.enum(["per_request", "per_job", "per_token", "hourly"]),
-  priceInCents: z.number().int().min(0).max(10_000_000),
-  endpoint: z.string().url().optional(),
-  httpMethod: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]).optional(),
-  inputSchema: z.string().optional(),
-  outputSchema: z.string().optional(),
-  maxInputTokens: z.number().int().positive().optional(),
-  estimatedDurationSeconds: z.number().int().positive().optional(),
-}).refine(
-  (data) => data.serviceType !== "api" || data.endpoint,
-  { message: "API services require an endpoint URL", path: ["endpoint"] }
-);
-
-// Request/job creation (legacy v1 — kept for compile-time compatibility with
-// any code still importing the old name. v0.2 routes use createRequestSchema
-// defined below.)
-export const legacyCreateRequestSchema = z.object({
-  title: z.string().min(1).max(300),
-  description: z.string().min(1).max(5000),
-  serviceId: z.string().optional(),
-  providerAgentId: z.string().optional(),
-  inputPayload: z.string().optional(),
-  budgetMaxCents: z.number().int().min(1).max(10_000_000).optional(),
-  jobType: z.enum(["direct", "open"]).optional(),
-  agreedPriceCents: z.number().int().min(1).max(10_000_000).optional(),
-});
-
 // Bid submission
 export const createBidSchema = z.object({
   priceCents: z.number().int().min(1).max(10_000_000),
@@ -138,65 +104,9 @@ export const acceptBidOnRequestSchema = z.object({
   bidId: z.string().min(1, "bidId is required"),
 });
 
-// Delivery
-export const deliverSchema = z.object({
-  outputPayload: z.string().min(1, "outputPayload is required"),
-});
-
 // Cancel
 export const cancelSchema = z.object({
   reason: z.string().min(1).max(500).optional(),
-});
-
-// Dispute (either party opens a dispute on a delivered job)
-export const disputeSchema = z.object({
-  reason: z.string().min(1).max(2000),
-});
-
-// Admin dispute resolution
-export const resolveDisputeSchema = z.object({
-  resolution: z.enum(["release", "refund"]),
-  note: z.string().max(2000).optional(),
-});
-
-// Admin force timeout (manual override for escrow timeout auto-refund)
-export const forceTimeoutSchema = z.object({
-  note: z.string().max(2000).optional(),
-});
-
-// Review
-export const reviewSchema = z.object({
-  rating: z.number().int().min(1).max(5),
-  comment: z.string().max(2000).optional(),
-});
-
-// Product creation (seller-initiated)
-export const createProductSchema = z.object({
-  title: z.string().min(1).max(200),
-  description: z.string().min(1).max(5000),
-  category: z.string().min(1).max(100),
-  tags,
-  priceCents: z.number().int().min(0).max(10_000_000),
-  fileUrl: z.string().url(),
-  previewDescription: z.string().max(500).optional(),
-});
-
-// Webhook registration
-export const WEBHOOK_EVENTS = [
-  "job.received",
-  "bid.received",
-  "bid.accepted",
-  "job.delivered",
-  "job.completed",
-  "job.cancelled",
-  "job.disputed",
-  "job.timed_out",
-] as const;
-export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
-
-export const webhookSchema = z.object({
-  url: z.string().url(),
-  events: z.array(z.enum(WEBHOOK_EVENTS)).min(1),
 });
 
 // Parse and validate request body, return parsed data or error response

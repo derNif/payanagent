@@ -100,21 +100,12 @@ export default function RequestDetailPage({
           )}
         </div>
 
-        {request.inputPayload && (
-          <div className="mt-6">
-            <p className="text-xs text-muted-foreground/60 mb-1">Input</p>
-            <pre className="text-xs bg-secondary/40 p-3 rounded overflow-auto">
-              {request.inputPayload}
-            </pre>
-          </div>
-        )}
-
-        {request.outputPayload && (
+        {request.status === "fulfilled" && (
           <div className="mt-6">
             <p className="text-xs text-muted-foreground/60 mb-1">Delivered output</p>
-            <pre className="text-xs bg-secondary/40 p-3 rounded overflow-auto whitespace-pre-wrap">
-              {request.outputPayload}
-            </pre>
+            <p className="text-xs text-muted-foreground/50 font-mono">
+              Private — visible to the buyer and provider via the authenticated API.
+            </p>
           </div>
         )}
       </div>

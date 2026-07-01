@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getConvexClient } from "@/lib/convex";
+import { getConvexClient, PLATFORM_SECRET } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
 import {
   buildPaymentRequiredResponse,
@@ -58,7 +58,10 @@ export async function POST(
       { status: 403 },
     );
   }
-  if (req.status !== "fulfilled") {
+  // `completing` is allowed through so a settlement that crashed mid-flight
+  // (lock acquired, then the process died) can recover via the idempotency
+  // check below instead of being stranded forever.
+  if (req.status !== "fulfilled" && req.status !== "completing") {
     return NextResponse.json(
       { error: `Cannot approve a request in status: ${req.status}` },
       { status: 400 },
@@ -99,6 +102,8 @@ export async function POST(
       request.headers.get("payment-signature") ||
       request.headers.get("x-payment");
     if (!paymentSignature) {
+      // Just asking for the challenge — take no lock (a buyer who never returns
+      // must not strand the request in `completing`).
       return buildPaymentRequiredResponse(
         req.agreedPriceCents,
         request.url,
@@ -107,12 +112,53 @@ export async function POST(
       );
     }
 
+    // We have a signed payment and are about to settle — acquire the same
+    // atomic lock the escrow path uses, so two concurrent approve calls can't
+    // both settle and double-charge the buyer.
+    try {
+      await convex.mutation(api.requests.claimForSettlement, {
+        platformSecret: PLATFORM_SECRET,
+        requestId: req._id,
+        allowedFrom: ["fulfilled", "completing"],
+      });
+    } catch {
+      return NextResponse.json(
+        { error: "Request is already being settled" },
+        { status: 409 },
+      );
+    }
+    // If a prior attempt already recorded a settlement, finalize idempotently.
+    const priorDirect = await convex.query(api.receipts.getSettlementForRequest, {
+      requestId: req._id,
+    });
+    if (priorDirect) {
+      await convex.mutation(api.requests.markApproved, {
+        platformSecret: PLATFORM_SECRET,
+        requestId: req._id,
+        settlementReceiptId: priorDirect._id,
+      });
+      return NextResponse.json({
+        ok: true,
+        receiptId: priorDirect._id,
+        txHash: priorDirect.txHash,
+      });
+    }
+
     const integrityCheck = verifyPaymentIntegrity(
       paymentSignature,
       req.agreedPriceCents,
       provider.walletAddress,
     );
+    // Any pre-settlement failure must release the lock back to `fulfilled`,
+    // else a bad/late payment attempt strands the request in `completing`.
+    const releaseLock = () =>
+      convex.mutation(api.requests.revertSettlement, {
+        platformSecret: PLATFORM_SECRET,
+        requestId: req._id,
+      });
+
     if (!integrityCheck.valid) {
+      await releaseLock();
       return NextResponse.json(
         { error: `Payment integrity check failed: ${integrityCheck.error}` },
         { status: 402 },
@@ -122,6 +168,7 @@ export async function POST(
     const paymentRequired = request.headers.get("payment-required") || "";
     const verification = await verifyPayment(paymentSignature, paymentRequired);
     if (!verification.valid) {
+      await releaseLock();
       return NextResponse.json(
         { error: `Payment verification failed: ${verification.error}` },
         { status: 402 },
@@ -130,6 +177,7 @@ export async function POST(
 
     const settlement = await settlePayment(paymentSignature, paymentRequired);
     if (!settlement.success) {
+      await releaseLock();
       return NextResponse.json(
         { error: `Payment settlement failed: ${settlement.error}` },
         { status: 402 },
@@ -157,6 +205,7 @@ export async function POST(
     );
 
     await convex.mutation(api.requests.markApproved, {
+        platformSecret: PLATFORM_SECRET,
       requestId: req._id,
       settlementReceiptId: receiptId,
     });
@@ -180,8 +229,9 @@ export async function POST(
   // can't both reach releaseEscrow and double-spend the shared platform wallet.
   try {
     await convex.mutation(api.requests.claimForSettlement, {
+        platformSecret: PLATFORM_SECRET,
       requestId: req._id,
-      allowedFrom: ["fulfilled"],
+      allowedFrom: ["fulfilled", "completing"],
     });
   } catch {
     return NextResponse.json(
@@ -197,6 +247,7 @@ export async function POST(
   });
   if (existing) {
     await convex.mutation(api.requests.markApproved, {
+        platformSecret: PLATFORM_SECRET,
       requestId: req._id,
       settlementReceiptId: existing._id,
     });
@@ -211,7 +262,7 @@ export async function POST(
   const release = await releaseEscrow(provider.walletAddress, req.agreedPriceCents);
   if (!release.success || !release.txHash) {
     // Transfer failed — revert the lock so the buyer can retry.
-    await convex.mutation(api.requests.revertSettlement, { requestId: req._id });
+    await convex.mutation(api.requests.revertSettlement, { platformSecret: PLATFORM_SECRET, requestId: req._id });
     return NextResponse.json(
       { error: `Escrow release failed: ${release.error || "unknown"}` },
       { status: 502 },
@@ -273,15 +324,21 @@ export async function POST(
 
   // Finalize: completing -> approved.
   await convex.mutation(api.requests.markApproved, {
+        platformSecret: PLATFORM_SECRET,
     requestId: req._id,
     settlementReceiptId: receiptId,
   });
+
+  // Surplus that couldn't be refunded on-chain sits in the platform wallet and
+  // needs a manual retry — surface it plainly instead of silently swallowing it.
+  const surplusPendingCents = surplus > 0 && !refundTxHash ? surplus : 0;
 
   return NextResponse.json({
     ok: true,
     receiptId,
     txHash: release.txHash,
     surplusRefundedCents: refundTxHash ? surplus : 0,
+    surplusPendingCents,
     refundReceiptId,
     refundTxHash,
   });

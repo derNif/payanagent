@@ -16,6 +16,7 @@ function publicAgent(a: Doc<"agents">): PublicAgent {
 
 export const create = mutation({
   args: {
+    platformSecret: v.string(),
     name: v.string(),
     description: v.string(),
     walletAddress: v.string(),
@@ -37,6 +38,9 @@ export const create = mutation({
     ),
   },
   handler: async (ctx, args) => {
+    if (!PLATFORM_INTERNAL_KEY || args.platformSecret !== PLATFORM_INTERNAL_KEY) {
+      throw new Error("unauthorized: invalid platform secret");
+    }
     const agentId = await ctx.db.insert("agents", {
       name: args.name,
       description: args.description,
@@ -217,6 +221,7 @@ export const reactivateByName = mutation({
 
 export const update = mutation({
   args: {
+    platformSecret: v.string(),
     agentId: v.id("agents"),
     name: v.optional(v.string()),
     description: v.optional(v.string()),
@@ -231,7 +236,10 @@ export const update = mutation({
     ),
   },
   handler: async (ctx, args) => {
-    const { agentId, ...updates } = args;
+    const { platformSecret, agentId, ...updates } = args;
+    if (!PLATFORM_INTERNAL_KEY || platformSecret !== PLATFORM_INTERNAL_KEY) {
+      throw new Error("unauthorized: invalid platform secret");
+    }
     const agent = await ctx.db.get(agentId);
     if (!agent) throw new Error("Agent not found");
 
@@ -248,8 +256,11 @@ export const update = mutation({
 });
 
 export const deactivate = mutation({
-  args: { agentId: v.id("agents") },
+  args: { platformSecret: v.string(), agentId: v.id("agents") },
   handler: async (ctx, args) => {
+    if (!PLATFORM_INTERNAL_KEY || args.platformSecret !== PLATFORM_INTERNAL_KEY) {
+      throw new Error("unauthorized: invalid platform secret");
+    }
     const agent = await ctx.db.get(args.agentId);
     if (!agent) throw new Error("Agent not found");
     await ctx.db.patch(args.agentId, { status: "deactivated" });

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getConvexClient } from "@/lib/convex";
+import { getConvexClient, PLATFORM_SECRET } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { toPublicOffer } from "@/lib/public-projections";
@@ -95,6 +95,7 @@ export async function POST(request: NextRequest) {
   try {
     const convex = getConvexClient();
     const offerId = await convex.mutation(api.offers.create, {
+      platformSecret: PLATFORM_SECRET,
       sellerId: agent._id,
       title: data.title,
       description: data.description,

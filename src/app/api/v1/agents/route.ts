@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getConvexClient } from "@/lib/convex";
+import { getConvexClient, PLATFORM_SECRET } from "@/lib/convex";
 import { generateApiKey, rateLimitResponse } from "@/lib/auth";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { validateBody, registerAgentSchema } from "@/lib/validation";
@@ -45,6 +45,7 @@ export async function POST(request: NextRequest) {
 
     // Create the agent
     const agentId = await convex.mutation(api.agents.create, {
+      platformSecret: PLATFORM_SECRET,
       name,
       description,
       walletAddress,
@@ -60,6 +61,7 @@ export async function POST(request: NextRequest) {
     // Generate and store API key
     const { key, hash, prefix } = generateApiKey();
     await convex.mutation(api.apiKeys.create, {
+      platformSecret: PLATFORM_SECRET,
       agentId,
       keyHash: hash,
       keyPrefix: prefix,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getConvexClient } from "@/lib/convex";
+import { getConvexClient, PLATFORM_SECRET } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
 import { validateBody, updateAgentSchema } from "@/lib/validation";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
@@ -69,6 +69,7 @@ export async function PATCH(
 
     const convex = getConvexClient();
     await convex.mutation(api.agents.update, {
+      platformSecret: PLATFORM_SECRET,
       agentId: agentId as Id<"agents">,
       name,
       description,

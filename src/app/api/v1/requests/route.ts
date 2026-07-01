@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getConvexClient } from "@/lib/convex";
+import { getConvexClient, PLATFORM_SECRET } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { validateBody, createRequestSchema } from "@/lib/validation";
@@ -141,6 +141,7 @@ export async function POST(request: NextRequest) {
   let requestId: Id<"requests">;
   try {
     requestId = await convex.mutation(api.requests.create, {
+        platformSecret: PLATFORM_SECRET,
       buyerId: agent._id,
       title: data.title,
       description: data.description,
@@ -181,6 +182,7 @@ export async function POST(request: NextRequest) {
       },
     );
     await convex.mutation(api.requests.linkEscrowReceipt, {
+        platformSecret: PLATFORM_SECRET,
       requestId,
       escrowReceiptId: receiptId,
       escrowDepositedCents: escrowAmountCents,

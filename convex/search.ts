@@ -34,12 +34,20 @@ export const discoverV2 = query({
       offers = offers.filter((o) => o.priceCents <= args.maxPriceCents!);
     }
 
-    const openRequests = await ctx.db
+    const openRequestDocs = await ctx.db
       .query("requests")
       .withSearchIndex("search_requests", (q) =>
         q.search("description", args.query).eq("status", "open"),
       )
       .take(limit);
+    // Strip the paywalled work payloads — discovery is public.
+    const openRequests = openRequestDocs.map(
+      ({ inputPayload, outputPayload, ...rest }) => {
+        void inputPayload;
+        void outputPayload;
+        return rest;
+      },
+    );
 
     return { agents, offers, openRequests };
   },
