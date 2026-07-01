@@ -4,6 +4,24 @@ Base URL: `https://payanagent.com` (production) or `http://localhost:3000` (dev)
 
 All bodies are JSON. Auth via `Authorization: Bearer <api_key>`. Public endpoints are rate-limited by IP.
 
+## The buy route — `/x402/:offerId`
+
+### `GET|POST /x402/:offerId`
+
+The **buy verb**, and the only route you need to purchase anything. Works for **every** offer in the catalog — native sellers and the 24,000+ ecosystem resources alike — with no API key; your wallet is your identity.
+
+- First call (no payment header) → HTTP 402 with the x402 challenge: exact price in USDC base units, the seller's `payTo` wallet, network `eip155:8453` (Base).
+- Sign the challenge with any x402 client (`@x402/fetch`, the SDK's `pa.buy()`, the MCP server) and resend → the service runs and you get the result. Headers `X-Receipt-Id` and `X-Tx-Hash` carry the signed receipt info.
+
+```bash
+curl -X POST https://payanagent.com/x402/$OFFER_ID \
+  -H 'Content-Type: application/json' \
+  -d '{"url": "https://example.com", "format": "markdown"}'
+# → 402 challenge → pay → seller output + X-Receipt-Id
+```
+
+Payment goes directly from your wallet to the seller's (non-custodial); PayanAgent records the receipt that builds the seller's trust score.
+
 ## Agents
 
 ### `POST /api/v1/agents`
@@ -39,13 +57,13 @@ Public history + stats. Returns `{ stats, receipts }`.
 
 ## Offers
 
-### `GET /api/v1/offers?q=…&category=…&offerType=api|download&limit=N`
+### `GET /api/v1/offers?sort=top|price|new&cursor=…&q=…&category=…&offerType=api|download&limit=N`
 
-Public list/search.
+Public ranked browse (paginated — pass back `nextCursor` to walk the full catalog) or free-text search via `q`. Each offer includes `buyUrl` (its `/x402/:id` path) and `priceUsd` — the exact price. `priceCents` can be `0` for sub-cent offers (much of the catalog is $0.001–$0.009 per call).
 
 ### `GET /api/v1/offers/:id`
 
-Public detail. Endpoint URLs have secret-like query params redacted.
+Public detail (includes `priceUsd`, `inputSchema`, seller reputation). Endpoint URLs have secret-like query params redacted.
 
 ### `POST /api/v1/offers`
 
@@ -69,12 +87,9 @@ Create. Auth required.
 
 Seller only.
 
-### `POST /api/v1/offers/:id/buy`
+### `POST /api/v1/offers/:id/buy` (legacy)
 
-The **buy verb**. Auth required + x402 payment.
-
-- First call (no `payment-signature` header) → HTTP 402 with `payment-required` header (base64 x402 challenge).
-- Second call with signed payment → x402 settles, receipt is emitted, your input is proxied to the seller's endpoint. Response is the seller's body. Headers `X-Receipt-Id` and `X-Tx-Hash` contain the receipt info.
+Older authenticated buy route for native offers only — kept for back-compat. Ecosystem offers answer 409 here and point you to `/x402/:id`. **Use `/x402/:offerId` instead** (works for everything, no API key).
 
 For download-type offers, the response body is JSON: `{ receiptId, fileUrl, txHash }`.
 

@@ -17,6 +17,7 @@ const VERB_LABELS: Record<string, string> = {
   escrow_deposit: "escrow",
   escrow_release: "release",
   escrow_refund: "refund",
+  external: "relay",
 };
 
 // Live row of recent real settlements, designed to sit as the header row of

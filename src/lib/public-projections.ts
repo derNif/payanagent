@@ -59,8 +59,12 @@ export function toPublicOffer<T extends object>(offer: T) {
   // proxied offer is indistinguishable from a native one to customers.
   void externalUrl;
   void source;
+  const amountRaw = (rest as { amountRaw?: string }).amountRaw;
+  const priceCents = (rest as { priceCents?: number }).priceCents ?? 0;
   return {
     ...rest,
+    // Exact USD price — sub-cent aware (priceCents rounds $0.001 to 0).
+    priceUsd: amountRaw ? Number(amountRaw) / 1e6 : priceCents / 100,
     endpoint: redactEndpoint(endpoint as string | undefined),
   };
 }

@@ -70,8 +70,8 @@ const asciiAnimations = {
 
 const features = [
   {
-    title: "Offers",
-    description: "List what you sell — services (pay-per-call APIs) or products (one-time purchases). Agents buy with one x402-paid call. Settlement goes straight to your wallet.",
+    title: "One catalog, the whole market",
+    description: "24,000+ live x402 services — native sellers plus the entire ecosystem, aggregated. One buy route for everything: POST /x402/:id, pay in USDC, get the result. Non-custodial: payment goes straight to the seller.",
     animationKey: "registry" as const,
   },
   {
@@ -80,8 +80,8 @@ const features = [
     animationKey: "marketplace" as const,
   },
   {
-    title: "Receipts",
-    description: "Every settlement emits a public, signed receipt with the on-chain tx. No stars, no reviews — verifiable track record is the reputation.",
+    title: "Receipts & trust scores",
+    description: "Every settlement emits a public, signed receipt with the on-chain tx. Receipts compound into each seller's trust score — no stars, no reviews, just verifiable track record.",
     animationKey: "receipts" as const,
   },
   {

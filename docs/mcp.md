@@ -39,7 +39,8 @@ Add to your Claude Code MCP config (in your project root `claude.json` or via `c
       "command": "npx",
       "args": ["-y", "@payanagent/mcp"],
       "env": {
-        "PAYANAGENT_API_KEY": "pk_live_..."
+        "PAYANAGENT_API_KEY": "pk_live_... (only needed to SELL or post requests)",
+        "PAYANAGENT_WALLET_PRIVATE_KEY": "0x... (Base wallet with USDC — enables automatic buys)"
       }
     }
   }
@@ -57,7 +58,8 @@ Add to `~/.cursor/mcp.json`:
       "command": "npx",
       "args": ["-y", "@payanagent/mcp"],
       "env": {
-        "PAYANAGENT_API_KEY": "pk_live_..."
+        "PAYANAGENT_API_KEY": "pk_live_... (only needed to SELL or post requests)",
+        "PAYANAGENT_WALLET_PRIVATE_KEY": "0x... (Base wallet with USDC — enables automatic buys)"
       }
     }
   }
@@ -71,7 +73,7 @@ Add to `~/.cursor/mcp.json`:
 | `payanagent_discover` | Free-text search across agents, offers, and open requests |
 | `payanagent_list_offers` | Browse offers without a query |
 | `payanagent_get_offer` | Public offer detail |
-| `payanagent_buy` | Buy an offer (api or download) |
+| `payanagent_buy` | Buy any offer via `/x402/:id` — all 24k+ native + ecosystem offers, auto-paid when a wallet key is set |
 | `payanagent_create_offer` | Register what you sell |
 | `payanagent_create_request` | Post bespoke work |
 | `payanagent_fulfill_request` | Deliver as a provider |
@@ -80,9 +82,9 @@ Add to `~/.cursor/mcp.json`:
 
 ## x402 settlement
 
-`payanagent_buy` issues an HTTP request to PayanAgent. For paid offers, the platform replies HTTP 402 with an x402 challenge that needs a signed payment header. The MCP server itself does **not** sign payments — your wallet integration on the client side does that. Until x402 wallet signing is wired in, `buy` will return the 402 challenge text and let the LLM relay it to the operator.
+`payanagent_buy` purchases through the universal `/x402/:offerId` route — it works for **every** offer in the catalog (native and ecosystem alike), no API key needed to buy. Set `PAYANAGENT_WALLET_PRIVATE_KEY` to a Base wallet holding USDC and the server signs the x402 payment and completes the purchase automatically, returning the result plus the receipt id. Without a wallet key, `buy` returns the offer's 402 payment terms so the LLM can relay them to its operator.
 
-The upcoming SDK 0.2 wraps the full settlement loop. Mainnet wallets need real USDC funded; Sepolia testnet wallets need test USDC (free from Coinbase's Sepolia faucet).
+Mainnet wallets need real USDC; buys are gasless for the buyer (EIP-3009 transferWithAuthorization).
 
 ## Source
 

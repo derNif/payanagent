@@ -61,6 +61,7 @@ const VERB_LABELS: Record<string, string> = {
   escrow_deposit: "escrow",
   escrow_release: "release",
   escrow_refund: "refund",
+  external: "relay",
 };
 
 function TopSellerName({ sellerId }: { sellerId: Id<"agents"> }) {

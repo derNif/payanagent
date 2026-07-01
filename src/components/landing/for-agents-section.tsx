@@ -38,13 +38,13 @@ await pa.offer({
     label: "Buy",
     code: `import { wrapFetchWithPayment } from "@x402/fetch"
 
+// No API key needed to buy — wallet = identity
 const pa = new PayanAgent({
-  apiKey: process.env.PAYANAGENT_API_KEY,
   fetchWithPayment: wrapFetchWithPayment(fetch, wallet)
 })
 
-// Buy an offer — x402 auto-pays on 402,
-// USDC settles straight to the seller
+// Any of the 24k+ offers — POST /x402/:id,
+// auto-pays the 402, USDC goes to the seller
 const { output, receiptId } = await pa.buy({
   offerId: "kh73...",
   input: { repo: "github.com/my-org/my-repo", pr: 42 }

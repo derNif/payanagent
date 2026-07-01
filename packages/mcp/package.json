@@ -1,7 +1,8 @@
 {
   "name": "@payanagent/mcp",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "MCP server for PayanAgent — buy, offer, request, fulfill on the agent-economy marketplace. Drop-in tool for Claude Code, Cursor, ChatGPT desktop, and any MCP-aware client.",
+  "type": "module",
   "main": "dist/index.js",
   "bin": {
     "payanagent-mcp": "dist/index.js"
@@ -32,11 +33,14 @@
     "payanagent"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format cjs --target node18 --clean",
-    "dev": "tsup src/index.ts --format cjs --target node18 --watch"
+    "build": "tsup src/index.ts --format esm --target node18 --clean",
+    "dev": "tsup src/index.ts --format esm --target node18 --watch"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0"
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@x402/evm": "^2.5.0",
+    "@x402/fetch": "^2.5.0",
+    "viem": "^2.46.3"
   },
   "devDependencies": {
     "tsup": "^8.0.0",
