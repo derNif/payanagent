@@ -330,13 +330,23 @@ export const listForDiscovery = query({
     // One ranked read: rankScore already encodes the right order globally
     // (sold tier > native > source quality), so the top of by_rank is exactly
     // "every native + the genuinely best externals" — not a recency window.
+    // Pull extra candidates because the curated discovery surface only showcases
+    // offers whose price we actually KNOW: a large share of ecosystem resources
+    // list amountRaw "0" (price declared dynamically at the 402), and a manifest
+    // can't honestly advertise those as free. They stay fully buyable via
+    // /x402/:id and appear in the main market — just not in the priced showcase.
     const ranked = await ctx.db
       .query("offers")
       .withIndex("by_rank", (q) => q.eq("isActive", true))
       .order("desc")
-      .take(300 + ecoLimit);
+      .take(300 + ecoLimit * 6);
+    const hasKnownPrice = (o: Doc<"offers">) =>
+      (o.amountRaw != null && o.amountRaw !== "0" && o.amountRaw !== "0.0") ||
+      o.priceCents > 0;
     const native = ranked.filter((o) => o.source === "native");
-    const extTop = ranked.filter((o) => o.source !== "native").slice(0, ecoLimit);
+    const extTop = ranked
+      .filter((o) => o.source !== "native" && hasKnownPrice(o))
+      .slice(0, ecoLimit);
 
     const all = [...native, ...extTop];
 

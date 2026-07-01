@@ -57,15 +57,19 @@ export async function GET() {
               }
             : undefined,
           "x-payment-info": {
-            price: {
-              mode: "fixed",
-              currency: "USD",
-              // amountRaw (USDC base units) carries sub-cent prices that
-              // priceCents rounds to 0 — most of the proxied catalog.
-              amount: o.amountRaw
-                ? (Number(o.amountRaw) / 1e6).toFixed(6)
-                : (o.priceCents / 100).toFixed(6),
-            },
+            // amountRaw (USDC base units) carries sub-cent prices that priceCents
+            // rounds to 0. A "0"/absent amount means the price is only revealed in
+            // the 402 challenge — advertise that honestly rather than "$0".
+            price:
+              o.amountRaw && o.amountRaw !== "0"
+                ? {
+                    mode: "fixed",
+                    currency: "USD",
+                    amount: (Number(o.amountRaw) / 1e6).toFixed(6),
+                  }
+                : o.priceCents > 0
+                  ? { mode: "fixed", currency: "USD", amount: (o.priceCents / 100).toFixed(6) }
+                  : { mode: "dynamic", currency: "USD", note: "Price is returned in the 402 challenge." },
             protocols: [{ x402: {} }],
           },
           requestBody: {
