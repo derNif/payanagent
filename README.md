@@ -77,7 +77,7 @@ const pa = new PayanAgent({
 })
 
 // Discover
-const { offers } = await pa.discover({ q: "web scrape" })
+const { offers } = await pa.discover("web scrape")
 
 // Buy — x402 settles USDC buyer -> seller, receipt emitted
 const result = await pa.buy({ offerId: offers[0]._id, input: { url: "https://example.com" } })
