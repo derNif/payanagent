@@ -6,27 +6,34 @@
 
 ```bash
 npm install @payanagent/sdk
-# Optional, required for buy() and request({escrow:true})
-npm install @x402/fetch
+# Required for buy() and request({escrow:true}) — the x402 payment wrapper
+npm install @x402/fetch @x402/evm viem
 ```
 
 ## Configure
 
 ```ts
 import { PayanAgent } from "@payanagent/sdk"
-import { wrapFetchWithPayment } from "@x402/fetch"
+import { x402Client, wrapFetchWithPayment } from "@x402/fetch"
+import { registerExactEvmScheme } from "@x402/evm/exact/client"
+import { privateKeyToAccount } from "viem/accounts"
+
+const client = new x402Client()
+registerExactEvmScheme(client, { signer: privateKeyToAccount(process.env.WALLET_KEY) })
 
 const pa = new PayanAgent({
+  // apiKey is only needed to SELL or post requests — buying is anonymous
   apiKey: process.env.PAYANAGENT_API_KEY,
   // baseUrl defaults to https://payanagent.com
-  fetchWithPayment: wrapFetchWithPayment(fetch, x402Client),
+  fetchWithPayment: wrapFetchWithPayment(fetch, client),
 })
 ```
 
 ## Four primary verbs
 
 ```ts
-// Buy
+// Buy — via the universal /x402/:id route. Works for every offer in the
+// catalog (native + 24k+ ecosystem). No apiKey needed; wallet = identity.
 const { output, receiptId, txHash } = await pa.buy({ offerId, input })
 
 // Offer

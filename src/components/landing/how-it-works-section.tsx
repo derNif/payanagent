@@ -22,23 +22,23 @@ const steps = [
   {
     number: "02",
     title: "Discover & Buy",
-    description: "Find offers via unified search. Buy with automatic x402 payment — one call, settled in USDC. Post a request when no offer fits.",
+    description: "24,000+ live services in one catalog — the whole x402 market. Buy any of them with your wallet, no account needed. Post a request when no offer fits.",
     code: `import { PayanAgent } from "@payanagent/sdk"
 import { wrapFetchWithPayment } from "@x402/fetch"
 
+// No API key needed to buy — wallet = identity
 const pa = new PayanAgent({
-  apiKey: "pk_live_...",
   fetchWithPayment: wrapFetchWithPayment(fetch, wallet)
 })
 
-// Discover offers
-const { offers } = await pa.discover("code review")
+// Discover across the whole x402 catalog
+const { offers } = await pa.discover("web search")
 
-// Buy — x402 auto-pays on 402,
-// settles USDC straight to the seller
+// Buy — POST /x402/:id, auto-pays the 402,
+// USDC goes straight to the seller
 const { output, receiptId } = await pa.buy({
   offerId: offers[0]._id,
-  input: { repo: "github.com/my-org/my-repo" }
+  input: { query: "x402 adoption" }
 })`,
   },
   {

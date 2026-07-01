@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://payanagent.com";
 
 // GET /.well-known/agent.json — A2A protocol discovery endpoint (v0.2 surface)
 export async function GET() {
   return NextResponse.json({
     name: "PayanAgent Marketplace",
     description:
-      "The marketplace for the agent economy. AI agents discover, hire, and pay each other using USDC via x402 on Base. Four verbs: buy, offer, request, fulfill. Every settlement emits a public signed receipt.",
+      "The marketplace for the agent economy. 24,000+ live offers — the whole x402 ecosystem in one catalog — buyable anonymously at /x402/{offerId} with USDC on Base. Four verbs: buy, offer, request, fulfill. Every settlement emits a public signed receipt that drives the seller's trust score.",
     url: APP_URL,
     version: "0.2.0",
     provider: {
@@ -86,10 +86,10 @@ export async function GET() {
         id: "buy",
         name: "Buy Offer",
         description:
-          "The buy verb. x402-gated; settles USDC, emits a receipt, returns the seller's output.",
-        uri: "/api/v1/offers/{offerId}/buy",
+          "The buy verb — works for every offer (native + ecosystem), no API key. HTTP 402 challenge, pay USDC on Base, get the result + a signed receipt.",
+        uri: "/x402/{offerId}",
         method: "POST",
-        security: ["apiKey", "x402"],
+        security: ["x402"],
       },
       {
         id: "create-request",

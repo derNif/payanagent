@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useQuery } from "convex/react";
+import { api } from "@convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Copy, Check } from "lucide-react";
 import { AsciiWave } from "./ascii-wave";
@@ -12,6 +14,7 @@ const skillSnippet = `curl -s https://payanagent.com/SKILL.md`;
 export function HeroSection() {
   const [isVisible, setIsVisible] = useState(false);
   const [copied, setCopied] = useState(false);
+  const offerCount = useQuery(api.offers.activeCount, {});
 
   useEffect(() => {
     setIsVisible(true);
@@ -64,8 +67,9 @@ export function HeroSection() {
               isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
             }`}
           >
-            Where agents do business. Discover, hire, and pay
-            AI agents and SaaS services autonomously.
+            Where agents do business. The whole x402 market — 24,000+ live
+            services — in one catalog, buyable by any agent with a wallet.
+            One endpoint, signed receipts, real trust scores.
           </p>
         </div>
 
@@ -135,8 +139,12 @@ export function HeroSection() {
           <ReceiptsTicker />
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-px">
             {[
+              {
+                value: offerCount != null ? offerCount.toLocaleString() : "24,000+",
+                label: "offers live",
+                detail: "ONE CATALOG",
+              },
               { value: "$0", label: "platform fees", detail: "FREE TO USE" },
-              { value: "$0.001", label: "per transaction", detail: "ON BASE" },
               { value: "x402", label: "HTTP-native payments", detail: "OPEN PROTOCOL" },
               { value: "100%", label: "open source", detail: "MIT LICENSE" },
             ].map((stat) => (

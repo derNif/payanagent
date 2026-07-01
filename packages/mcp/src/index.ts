@@ -13,6 +13,27 @@ import {
 
 const BASE_URL = (process.env.PAYANAGENT_BASE_URL ?? "https://payanagent.com").replace(/\/$/, "");
 const API_KEY = process.env.PAYANAGENT_API_KEY ?? "";
+// Optional wallet for completing x402 purchases (buys are anonymous — the
+// wallet is the identity; no API key needed to buy).
+const WALLET_KEY = process.env.PAYANAGENT_WALLET_PRIVATE_KEY ?? "";
+
+// Lazily-built x402-paying fetch (only when a wallet key is configured).
+let paidFetch: typeof fetch | null = null;
+async function getPaidFetch(): Promise<typeof fetch | null> {
+  if (!WALLET_KEY) return null;
+  if (paidFetch) return paidFetch;
+  const [{ x402Client, wrapFetchWithPayment }, { registerExactEvmScheme }, { privateKeyToAccount }] =
+    await Promise.all([
+      import("@x402/fetch"),
+      import("@x402/evm/exact/client"),
+      import("viem/accounts"),
+    ]);
+  const signer = privateKeyToAccount(WALLET_KEY as `0x${string}`);
+  const client = new x402Client();
+  registerExactEvmScheme(client, { signer });
+  paidFetch = wrapFetchWithPayment(fetch, client) as typeof fetch;
+  return paidFetch;
+}
 
 type Json = Record<string, unknown> | unknown[] | string | number | boolean | null;
 
@@ -100,13 +121,13 @@ const TOOLS = [
   {
     name: "payanagent_buy",
     description:
-      "Buy an offer on PayanAgent. For API-type offers, the provider's endpoint is called with the supplied input and the response is returned. For download-type offers, a fileUrl is returned. Requires the MCP server to be running with a wallet capable of x402 payment (configure via PAYANAGENT_API_KEY for auth; payment signing is handled separately by your client).",
+      "Buy any offer on PayanAgent (native or ecosystem — all 24k+ work the same) via the universal x402 route POST /x402/:offerId. Anonymous: no account or API key needed; the wallet is the identity. If the server is configured with PAYANAGENT_WALLET_PRIVATE_KEY, the purchase is completed automatically (USDC on Base, gasless) and the result + receipt id are returned. Without a wallet, the tool returns the offer's 402 payment terms and instructions so your operator can pay another way.",
     inputSchema: {
       type: "object",
       properties: {
         offerId: { type: "string" },
         input: {
-          description: "Payload sent to the seller's endpoint (api-type offers only).",
+          description: "JSON payload sent to the service (shape per the offer's inputSchema).",
         },
       },
       required: ["offerId"],
@@ -232,13 +253,45 @@ async function dispatch(name: string, args: ToolArgs): Promise<Json> {
       return (await http("GET", `/api/v1/offers/${args.offerId}`)) as Json;
     }
     case "payanagent_buy": {
-      if (!API_KEY) {
-        throw new Error("PAYANAGENT_API_KEY is required for buy.");
+      // Universal buy: /x402/:id serves every offer (native + ecosystem).
+      const url = `${BASE_URL}/x402/${args.offerId}`;
+      const body = JSON.stringify(args.input ?? {});
+      const f = await getPaidFetch();
+      const res = await (f ?? fetch)(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      });
+      const text = await res.text();
+      let parsed: unknown;
+      try {
+        parsed = text ? JSON.parse(text) : undefined;
+      } catch {
+        parsed = text;
       }
-      // Note: Real x402 settlement requires the client to sign a payment header.
-      // This MCP tool returns the 402 challenge if no payment is provided, which
-      // is itself useful information for an LLM to surface to its operator.
-      return (await http("POST", `/api/v1/offers/${args.offerId}/buy`, (args.input ?? {}) as Json)) as Json;
+      if (res.status === 402) {
+        // No wallet configured (or payment failed) — surface the terms.
+        return {
+          paymentRequired: true,
+          how: f
+            ? "The configured wallet's payment was not accepted — check its Base USDC balance."
+            : "Set PAYANAGENT_WALLET_PRIVATE_KEY on this MCP server (a Base wallet holding USDC) to complete purchases automatically, or pay this 402 challenge with any x402 client.",
+          buyUrl: url,
+          challenge: parsed,
+        } as Json;
+      }
+      if (!res.ok) {
+        throw new Error(
+          parsed && typeof parsed === "object" && "error" in parsed
+            ? String((parsed as { error: unknown }).error)
+            : `HTTP ${res.status}`,
+        );
+      }
+      return {
+        output: parsed,
+        receiptId: res.headers.get("X-Receipt-Id") ?? undefined,
+        txHash: res.headers.get("X-Tx-Hash") ?? undefined,
+      } as Json;
     }
     case "payanagent_create_offer": {
       const body: Json = {

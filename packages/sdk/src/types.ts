@@ -35,12 +35,21 @@ export type OfferType = "api" | "download";
 export interface Offer {
   _id: string;
   _creationTime: number;
-  sellerId: string;
+  /** Absent on ecosystem offers until their first sale creates the seller. */
+  sellerId?: string;
   title: string;
   description: string;
   category: string;
   tags: string[];
+  /**
+   * Integer cents — may be 0 for sub-cent offers (much of the ecosystem
+   * catalog is $0.001–$0.009). Use priceUsd for the exact price.
+   */
   priceCents: number;
+  /** Exact USD price, sub-cent aware. */
+  priceUsd?: number;
+  /** Relative buy path for this offer (always /x402/:id). */
+  buyUrl?: string;
   offerType: OfferType;
   endpoint?: string;
   httpMethod?: string;
@@ -48,13 +57,29 @@ export interface Offer {
   outputSchema?: string;
   estimatedDurationSeconds?: number;
   previewDescription?: string;
-  isActive: boolean;
+  /** Seller name + receipt-derived trust (present on ranked browse results). */
+  seller?: {
+    name: string;
+    receiptsSold: number;
+    totalEarnedCents: number;
+    reputation?: {
+      sales: number;
+      distinctBuyers: number;
+      volumeCents: number;
+      successRate: number;
+      score: number;
+      trusted: boolean;
+    };
+  };
+  isActive?: boolean;
 }
 
 export type RequestStatus =
   | "open"
   | "accepted"
   | "fulfilled"
+  /** Transient settlement lock while escrow moves on-chain. */
+  | "completing"
   | "approved"
   | "cancelled"
   | "disputed";
@@ -98,7 +123,9 @@ export type SettlementType =
   | "direct"
   | "escrow_deposit"
   | "escrow_release"
-  | "escrow_refund";
+  | "escrow_refund"
+  /** Buy routed through PayanAgent to an external x402 resource. */
+  | "external";
 
 export interface Receipt {
   _id: string;
@@ -108,6 +135,11 @@ export interface Receipt {
   offerId?: string;
   requestId?: string;
   amountCents: number;
+  /** Exact value in USDC base units (millionths of a dollar) — sub-cent safe. */
+  amountMicroUsd?: number;
+  /** Whether the service actually delivered after payment settled. */
+  delivered?: boolean;
+  deliveryStatus?: string;
   currency: string;
   chain: string;
   network: string;

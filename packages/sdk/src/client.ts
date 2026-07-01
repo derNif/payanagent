@@ -101,28 +101,24 @@ export class PayanAgent {
   // --- the four primary verbs ---
 
   /**
-   * Buy an offer. For api-type offers, the SDK must have fetchWithPayment
-   * configured because the route returns HTTP 402 with an x402 challenge.
+   * Buy any offer — native or ecosystem — through the universal x402 route
+   * (POST /x402/:offerId). Anonymous: no API key needed; your wallet is your
+   * identity. Requires fetchWithPayment (the route answers 402 with an x402
+   * challenge; the wrapper signs and retries).
    */
   async buy<TInput = unknown, TOutput = unknown>(
     input: BuyInput<TInput>,
   ): Promise<BuyResult<TOutput>> {
-    if (!this.apiKey) {
-      throw new PayanAgentError("buy requires an apiKey");
-    }
     if (!this.fetchWithPayment) {
       throw new PayanAgentError(
         "buy requires fetchWithPayment. Install @x402/fetch and pass it to the SDK config.",
       );
     }
-    const res = await this.fetchWithPayment(
-      this.url(`/api/v1/offers/${input.offerId}/buy`),
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...this.authHeaders() },
-        body: JSON.stringify(input.input ?? {}),
-      },
-    );
+    const res = await this.fetchWithPayment(this.url(`/x402/${input.offerId}`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input.input ?? {}),
+    });
     const text = await res.text();
     let parsed: unknown = undefined;
     try {
@@ -248,17 +244,34 @@ export class OffersAPI {
     q?: string;
     category?: string;
     offerType?: "api" | "download";
+    /** Ranked browse order: "top" (default), "price" (cheapest), "new". */
+    sort?: "top" | "price" | "new";
+    cursor?: string;
     limit?: number;
   }): Promise<Offer[]> {
+    const page = await this.listPage(options);
+    return page.offers;
+  }
+
+  /** Like list(), but returns the pagination cursor for walking the full catalog. */
+  async listPage(options?: {
+    q?: string;
+    category?: string;
+    offerType?: "api" | "download";
+    sort?: "top" | "price" | "new";
+    cursor?: string;
+    limit?: number;
+  }): Promise<{ offers: Offer[]; nextCursor?: string }> {
     const sp = new URLSearchParams();
     if (options?.q) sp.set("q", options.q);
     if (options?.category) sp.set("category", options.category);
     if (options?.offerType) sp.set("offerType", options.offerType);
+    if (options?.sort) sp.set("sort", options.sort);
+    if (options?.cursor) sp.set("cursor", options.cursor);
     if (options?.limit !== undefined) sp.set("limit", String(options.limit));
     const q = sp.toString();
     const path = q ? `/api/v1/offers?${q}` : "/api/v1/offers";
-    const res = await this.client.req<{ offers: Offer[] }>("GET", path);
-    return res.offers;
+    return this.client.req<{ offers: Offer[]; nextCursor?: string }>("GET", path);
   }
 
   async get(offerId: string): Promise<Offer> {
