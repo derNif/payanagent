@@ -199,23 +199,29 @@ export async function relayExternalBuy(
         status: "confirmed",
         latencyMs: Date.now() - startedAt,
       });
-      await convex.mutation(api.receipts.markDelivered, {
-        platformSecret,
-        receiptId,
-        delivered: true,
-      });
-      // First sale → make this proxied seller first-class (ranks in leaderboard)
-      // and float the offer into the "sold" rank tier.
-      await convex.mutation(api.offers.backfillSeller, {
-        platformSecret,
-        offerId: offer._id,
-        sellerId,
-      });
-      await convex.mutation(api.offers.bumpRankOnSale, {
-        platformSecret,
-        offerId: offer._id,
-      });
-      await collectFee(request);
+      // Follow-ups are best-effort: a failure here must not wipe the receipt
+      // id of a settlement that was recorded (buyer still gets X-Receipt-Id).
+      try {
+        await convex.mutation(api.receipts.markDelivered, {
+          platformSecret,
+          receiptId,
+          delivered: true,
+        });
+        // First sale → make this proxied seller first-class (ranks in the
+        // leaderboard) and float the offer into the "sold" rank tier.
+        await convex.mutation(api.offers.backfillSeller, {
+          platformSecret,
+          offerId: offer._id,
+          sellerId,
+        });
+        await convex.mutation(api.offers.bumpRankOnSale, {
+          platformSecret,
+          offerId: offer._id,
+        });
+        await collectFee(request);
+      } catch {
+        // receipt exists; ranking/delivery marks catch up on the next sale
+      }
     } catch {
       receiptId = null;
     }

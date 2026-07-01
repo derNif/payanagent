@@ -82,6 +82,15 @@ export const getOrCreateByWallet = mutation({
       .first();
     if (existing) return existing._id;
 
+    // Ethereum addresses are case-insensitive but arrive in mixed casing
+    // (checksummed from signatures, source-cased from catalogs). Don't split
+    // one wallet's identity/reputation across two agents over casing.
+    const lower = args.walletAddress.toLowerCase();
+    const caseMatch = (await ctx.db.query("agents").take(2000)).find(
+      (a) => a.walletAddress.toLowerCase() === lower,
+    );
+    if (caseMatch) return caseMatch._id;
+
     const short = `${args.walletAddress.slice(0, 6)}…${args.walletAddress.slice(-4)}`;
     return await ctx.db.insert("agents", {
       name: `agent-${short}`,
@@ -167,6 +176,7 @@ export const deactivateTestAgents = mutation({
       "labs smoke tester",
       "smoke tester",
       "sepolia settlement",
+      "sec smoke",
       "audit agent a",
       "audit agent b",
       "linus audit",

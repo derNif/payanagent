@@ -321,20 +321,16 @@ export const listForDiscovery = query({
     const ecoLimit = Math.min(args.ecoLimit ?? 100, 300);
     const emptyRep = computeReputation([]);
 
-    const native = await ctx.db
+    // One ranked read: rankScore already encodes the right order globally
+    // (sold tier > native > source quality), so the top of by_rank is exactly
+    // "every native + the genuinely best externals" — not a recency window.
+    const ranked = await ctx.db
       .query("offers")
-      .withIndex("by_source", (q) => q.eq("source", "native").eq("isActive", true))
-      .take(300);
-
-    const extBatch = await ctx.db
-      .query("offers")
-      .withIndex("by_source", (q) => q.eq("source", "bazaar").eq("isActive", true))
+      .withIndex("by_rank", (q) => q.eq("isActive", true))
       .order("desc")
-      .take(1500);
-    const extTop = extBatch
-      .filter((o) => o.network === "eip155:8453" || o.network === "base")
-      .sort((a, b) => (b.qualityScore ?? 0) - (a.qualityScore ?? 0))
-      .slice(0, ecoLimit);
+      .take(300 + ecoLimit);
+    const native = ranked.filter((o) => o.source === "native");
+    const extTop = ranked.filter((o) => o.source !== "native").slice(0, ecoLimit);
 
     const all = [...native, ...extTop];
 
@@ -551,6 +547,7 @@ export const upsertExternalBulk = mutation({
           existing.priceCents === f.priceCents &&
           existing.amountRaw === f.amountRaw &&
           existing.payTo === f.payTo &&
+          existing.asset === f.asset &&
           existing.network === f.network &&
           (existing.inputSchema ?? null) === (f.inputSchema ?? null) &&
           (existing.outputSchema ?? null) === (f.outputSchema ?? null) &&

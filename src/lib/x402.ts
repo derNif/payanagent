@@ -146,6 +146,19 @@ export function verifyPaymentIntegrity(
     return { valid: false, error: `Network mismatch: expected ${expectedNetworkId}, got ${accepted.network}` };
   }
 
+  // asset = USDC on that chain. Without this, a payment denominated in any
+  // token with matching numbers would pass; don't rely on facilitator policy.
+  const expectedAsset = USDC_ADDRESSES[expectedNetworkId];
+  if (!accepted.asset) {
+    return { valid: false, error: "Payment is missing asset" };
+  }
+  if (
+    !expectedAsset ||
+    String(accepted.asset).toLowerCase() !== expectedAsset.toLowerCase()
+  ) {
+    return { valid: false, error: "Payment asset is not USDC on the expected network" };
+  }
+
   return { valid: true };
 }
 

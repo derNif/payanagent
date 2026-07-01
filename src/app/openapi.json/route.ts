@@ -60,7 +60,11 @@ export async function GET() {
             price: {
               mode: "fixed",
               currency: "USD",
-              amount: (o.priceCents / 100).toFixed(6),
+              // amountRaw (USDC base units) carries sub-cent prices that
+              // priceCents rounds to 0 — most of the proxied catalog.
+              amount: o.amountRaw
+                ? (Number(o.amountRaw) / 1e6).toFixed(6)
+                : (o.priceCents / 100).toFixed(6),
             },
             protocols: [{ x402: {} }],
           },
