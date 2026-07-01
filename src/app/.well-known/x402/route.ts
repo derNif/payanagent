@@ -18,17 +18,24 @@ export async function GET() {
     const offers = await convex.query(api.offers.listForDiscovery, { ecoLimit: 100 });
     resources = offers
       .filter((o) => !!o.sellerWallet)
-      .map((o) => ({
+      .map((o) => {
+        // A positive amountRaw is the real atomic price; native derives from
+        // priceCents. When neither is known, the price is only in the live 402 —
+        // flag it dynamic instead of publishing a false "0".
+        const known =
+          (o.amountRaw && o.amountRaw !== "0" && o.amountRaw !== "0.0"
+            ? o.amountRaw
+            : null) ?? (o.priceCents > 0 ? String(o.priceCents * 10000) : null);
+        return {
         resource: `${APP_URL}/x402/${o._id}`,
         type: "http",
         x402Version: 2,
         accepts: [
           {
             scheme: "exact",
-            // Ecosystem entries carry the seller's real atomic terms; native
-            // entries derive from priceCents on Base USDC.
             network: o.network ?? NETWORK_ID,
-            amount: o.amountRaw ?? String(o.priceCents * 10000),
+            amount: known ?? "0",
+            ...(known ? {} : { dynamicPrice: true }),
             asset: o.asset ?? USDC_BASE_MAINNET,
             payTo: o.sellerWallet,
           },
@@ -53,7 +60,8 @@ export async function GET() {
               }
             : undefined,
         },
-      }));
+      };
+      });
   } catch {
     // Serve an empty document rather than a 500 — the shape is the contract.
   }

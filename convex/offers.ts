@@ -344,9 +344,14 @@ export const listForDiscovery = query({
       (o.amountRaw != null && o.amountRaw !== "0" && o.amountRaw !== "0.0") ||
       o.priceCents > 0;
     const native = ranked.filter((o) => o.source === "native");
-    const extTop = ranked
-      .filter((o) => o.source !== "native" && hasKnownPrice(o))
-      .slice(0, ecoLimit);
+    const ext = ranked.filter((o) => o.source !== "native");
+    // Fill the showcase priced-first (a manifest reads best when it leads with
+    // real prices), then dynamic-priced offers — which stay included but are
+    // labeled honestly by the manifests rather than shown as "$0".
+    const extTop = [
+      ...ext.filter(hasKnownPrice),
+      ...ext.filter((o) => !hasKnownPrice(o)),
+    ].slice(0, ecoLimit);
 
     const all = [...native, ...extTop];
 
