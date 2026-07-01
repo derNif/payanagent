@@ -3,7 +3,7 @@ import { settlePayment, getNetworkId } from "@/lib/x402";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PayanAgent fee — the ONE place the platform fee lives, shared by every buy
-// route (native /x402/:offerId and aggregator /x402/ext/:id) so all offers work
+// route (the universal /x402/:offerId, native + relayed) so all offers work
 // the same and turning the fee on is a single switch.
 //
 // NON-CUSTODIAL by design: the fee is a SECOND, buyer-signed payment that goes

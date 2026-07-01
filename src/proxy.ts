@@ -4,7 +4,7 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, Payment-Signature, Payment-Required, X-Payment",
-  "Access-Control-Expose-Headers": "Payment-Required, X-Transaction-Id, X-Tx-Hash",
+  "Access-Control-Expose-Headers": "Payment-Required, X-Transaction-Id, X-Tx-Hash, X-Receipt-Id, X-Routed-Through",
   "Access-Control-Max-Age": "86400",
 };
 
