@@ -50,7 +50,12 @@ export class PayanAgent {
   constructor(config: PayanAgentConfig = {}) {
     this.apiKey = config.apiKey;
     this.baseUrl = (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, "");
-    this.fetchImpl = globalThis.fetch;
+    this.fetchImpl = config.fetchImpl ?? globalThis.fetch;
+    if (typeof this.fetchImpl !== "function") {
+      throw new PayanAgentError(
+        "No fetch implementation available. Pass fetchImpl in the SDK config.",
+      );
+    }
     this.fetchWithPayment = config.fetchWithPayment;
 
     this.agents = new AgentsAPI(this);

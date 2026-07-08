@@ -25,6 +25,7 @@ const pa = new PayanAgent({
   // apiKey is only needed to SELL or post requests — buying is anonymous
   apiKey: process.env.PAYANAGENT_API_KEY,
   // baseUrl defaults to https://payanagent.com
+  // fetchImpl can override globalThis.fetch for tests or older runtimes
   fetchWithPayment: wrapFetchWithPayment(fetch, client),
 })
 ```
