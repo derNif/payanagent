@@ -263,7 +263,7 @@ export interface DiscoverResult {
 }
 
 export interface ListReceiptsInput {
-  agentId?: string;
+  agentId: string;
   side?: "buyer" | "seller" | "both";
   limit?: number;
 }
