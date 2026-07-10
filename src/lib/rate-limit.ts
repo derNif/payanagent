@@ -1,7 +1,12 @@
 /**
- * Rate limiter for API routes. Uses Upstash Redis sliding window when
- * UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN are set; falls back to
- * an in-memory Map for local dev and OSS clones.
+ * In-app rate limiter — a per-instance second layer. The primary, globally-
+ * enforced ceiling on production is the Vercel Firewall rate-limit rule at the
+ * edge (dashboard/CLI, no app code); this catches bursts within a single
+ * serverless instance and rate-limits local dev.
+ *
+ * If distributed in-app limiting is ever needed, an Upstash Redis backend still
+ * plugs in when UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN are set; by
+ * default it uses an in-memory Map (no external service required).
  */
 
 export interface RateLimitConfig {
