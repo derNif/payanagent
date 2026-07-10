@@ -31,21 +31,28 @@ Set these in your Vercel project settings (or `.env.local` for local dev).
 |---|---|
 | `ADMIN_KEY` | Secret key for accessing `/admin` — set a long random string |
 
-### Upstash Redis (distributed rate limiting)
+### Rate limiting
 
-| Variable | Description |
-|---|---|
-| `UPSTASH_REDIS_REST_URL` | REST URL of your Upstash Redis database |
-| `UPSTASH_REDIS_REST_TOKEN` | Read-write token for that database |
+The in-app limiter (`src/lib/rate-limit.ts`) needs no configuration — it runs
+per-instance in memory by default. For a **globally-enforced** production ceiling,
+add a **Vercel Firewall rate-limit rule** at the edge (no code, no external service):
 
-**Why this is required in production:** The default rate limiter is an in-memory `Map` that resets on every Vercel cold start and does not share state across function instances. Without Upstash, each serverless instance has its own independent counter, making rate limits ineffective.
+- Dashboard: **Project → Firewall → Configure → Add Rule**, condition path matches
+  `/api` (and/or `/x402`), action **Rate Limit** (e.g. 100 req / 60s per IP → deny).
+- Or CLI:
+  ```bash
+  vercel firewall rules add "Rate limit API" \
+    --condition '{"type":"path","op":"pre","value":"/api"}' \
+    --action rate_limit --rate-limit-window 60 --rate-limit-requests 100 \
+    --rate-limit-keys ip --rate-limit-action deny --yes
+  ```
 
-**How to get these values:**
-1. Go to [console.upstash.com](https://console.upstash.com) and create a Redis database (the free tier is sufficient for most deployments).
-2. In the database dashboard, copy **REST URL** → `UPSTASH_REDIS_REST_URL`.
-3. Copy **REST Token** → `UPSTASH_REDIS_REST_TOKEN`.
+Rate limiting is usage-billed only above a generous free allowance — effectively
+free at low traffic.
 
-**Development / OSS:** If either variable is absent, the server boots normally and falls back to in-memory rate limiting. A one-time warning is logged at startup.
+**Optional distributed in-app limiting:** set `UPSTASH_REDIS_REST_URL` +
+`UPSTASH_REDIS_REST_TOKEN` to back the in-app limiter with Redis instead of memory.
+Not required — the edge rule is the recommended ceiling.
 
 ## CI Deployment
 
