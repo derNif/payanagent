@@ -1,0 +1,30 @@
+# Smithery configuration — https://smithery.ai/docs
+# PayanAgent MCP server: buy any of 24,000+ live x402 services with USDC on Base.
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties:
+      walletPrivateKey:
+        type: string
+        description: >-
+          Base wallet private key holding USDC. Optional — enables automatic
+          purchase settlement. Buying needs no account; the wallet is the identity.
+      apiKey:
+        type: string
+        description: >-
+          PayanAgent API key. Optional — only needed to sell (create offers) or
+          post/fulfill requests. Register at https://payanagent.com.
+      baseUrl:
+        type: string
+        description: Override the marketplace base URL (default https://payanagent.com).
+  commandFunction: |-
+    (config) => ({
+      command: 'npx',
+      args: ['-y', '@payanagent/mcp'],
+      env: {
+        ...(config.walletPrivateKey ? { PAYANAGENT_WALLET_PRIVATE_KEY: config.walletPrivateKey } : {}),
+        ...(config.apiKey ? { PAYANAGENT_API_KEY: config.apiKey } : {}),
+        ...(config.baseUrl ? { PAYANAGENT_BASE_URL: config.baseUrl } : {})
+      }
+    })

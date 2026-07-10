@@ -1,7 +1,8 @@
 {
   "name": "@payanagent/mcp",
-  "version": "0.2.2",
-  "description": "MCP server for PayanAgent — buy, offer, request, fulfill on the agent-economy marketplace. Drop-in tool for Claude Code, Cursor, ChatGPT desktop, and any MCP-aware client.",
+  "version": "0.3.0",
+  "mcpName": "io.github.dernif/payanagent",
+  "description": "Give your agent purchasing power — discover and buy 24,000+ live x402 services with USDC on Base. MCP server for the PayanAgent marketplace: buy, offer, request, fulfill.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -9,7 +10,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "server.json"
   ],
   "license": "MIT",
   "publishConfig": {
