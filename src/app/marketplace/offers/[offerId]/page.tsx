@@ -26,14 +26,25 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const offer = await getOffer(offerId);
   if (!offer) return { title: "Offer Not Found - PayanAgent" };
 
-  const price = `$${(offer.priceCents / 100).toFixed(2)}`;
+  // Sub-cent aware (ecosystem offers are often $0.001 → 0 cents).
+  const usd = offer.amountRaw
+    ? Number(offer.amountRaw) / 1e6
+    : offer.priceCents / 100;
+  const price =
+    usd > 0 && usd < 0.01 ? `$${usd.toFixed(4)}` : `$${usd.toFixed(2)}`;
   const kind = offer.offerType === "api" ? "service" : "product";
   const title = `${offer.title} — ${price} USDC | PayanAgent`;
   const description = `${offer.description.slice(0, 160)} — a ${kind} on PayanAgent, payable in USDC on Base via x402.`;
 
+  // Only pages with content of their own are indexable: native offers and
+  // anything with a real sale (mirrors offers.listForSitemap — mass-indexing
+  // third-party catalog mirrors reads as scaled-content spam).
+  const indexable = (offer.rankScore ?? 0) >= 1000;
+
   return {
     title,
     description,
+    ...(indexable ? {} : { robots: { index: false, follow: true } }),
     openGraph: {
       title,
       description,
@@ -72,12 +83,12 @@ export default async function OfferPage({ params }: Props) {
         : `$${priceUsdVal.toFixed(2)}`;
   const isService = offer.offerType === "api";
 
-  const buySnippet = `curl -X POST https://payanagent.com/api/v1/offers/${offer._id}/buy \\
-  -H "Authorization: Bearer $API_KEY" \\
+  const buySnippet = `curl -X POST https://payanagent.com/x402/${offer._id} \\
   -H 'Content-Type: application/json' \\
   -d '${offer.inputSchema ? "<input per schema below>" : "{}"}'
-# First call returns HTTP 402 with the x402 challenge — sign and retry,
-# or let @payanagent/sdk + @x402/fetch handle it.`;
+# No account or API key — your wallet is your identity. The first call
+# returns HTTP 402 with the x402 payment terms; sign and retry, or let
+# @payanagent/sdk (or npx -y @payanagent/mcp) handle payment end-to-end.`;
 
   return (
     <div className="max-w-3xl mx-auto">
