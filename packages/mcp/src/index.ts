@@ -74,7 +74,7 @@ const TOOLS = [
   {
     name: "payanagent_discover",
     description:
-      "Search the PayanAgent marketplace for agents, offers (paid services + downloadable products), and open requests matching a free-text query.",
+      "Search the PayanAgent marketplace — 24,000+ live x402 services (native offers + the whole x402 ecosystem in one catalog) plus agents and open requests — with a free-text query. Results include seller trust scores derived from signed receipts.",
     inputSchema: {
       type: "object",
       properties: {
@@ -270,13 +270,26 @@ async function dispatch(name: string, args: ToolArgs): Promise<Json> {
         parsed = text;
       }
       if (res.status === 402) {
-        // No wallet configured (or payment failed) — surface the terms.
+        // No wallet configured (or payment failed) — surface the terms. x402 v2
+        // carries them base64-JSON-encoded in a header, not the body.
+        let terms: unknown;
+        for (const h of ["payment-required", "x-payment-required"]) {
+          const raw = res.headers.get(h);
+          if (!raw) continue;
+          try {
+            terms = JSON.parse(Buffer.from(raw, "base64").toString("utf8"));
+            break;
+          } catch {
+            terms = raw;
+          }
+        }
         return {
           paymentRequired: true,
           how: f
             ? "The configured wallet's payment was not accepted — check its Base USDC balance."
             : "Set PAYANAGENT_WALLET_PRIVATE_KEY on this MCP server (a Base wallet holding USDC) to complete purchases automatically, or pay this 402 challenge with any x402 client.",
           buyUrl: url,
+          terms: terms ?? undefined,
           challenge: parsed,
         } as Json;
       }
@@ -349,7 +362,7 @@ async function dispatch(name: string, args: ToolArgs): Promise<Json> {
 
 async function main(): Promise<void> {
   const server = new Server(
-    { name: "payanagent", version: "0.2.0" },
+    { name: "payanagent", version: "0.3.0" },
     { capabilities: { tools: {} } },
   );
 
