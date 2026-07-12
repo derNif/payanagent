@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
       paginationOpts: { numItems: limit, cursor: cursor ?? null },
     });
     return NextResponse.json({
-      offers: result.page.map(withBuyUrl),
+      offers: result.page.map(toPublicOffer).map(withBuyUrl),
       nextCursor: result.isDone ? null : result.continueCursor,
     });
   } catch (error) {
