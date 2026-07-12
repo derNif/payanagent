@@ -2,6 +2,7 @@ User-agent: *
 Allow: /
 
 Sitemap: https://payanagent.com/sitemap.xml
+Sitemap: https://payanagent.com/marketplace/offers/sitemap.xml
 
 # Agent-readable surfaces
 # Skill file:    https://payanagent.com/SKILL.md

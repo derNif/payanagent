@@ -650,6 +650,29 @@ export const activeCount = query({
   },
 });
 
+// Sitemap tier: only offers whose page carries content that exists nowhere
+// else — native offers (our curated supply) and anything with a real sale
+// (bumpRankOnSale lifts externals past SOLD_BASE, so they graduate in
+// automatically). Unsold externals stay live and buyable, just not pushed to
+// crawlers: mass-indexing 24k pages mirroring third-party metadata reads as
+// scaled-content spam and would drag the whole domain down.
+export const listForSitemap = query({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db
+      .query("offers")
+      .withIndex("by_rank", (q) =>
+        q.eq("isActive", true).gte("rankScore", NATIVE_RANK),
+      )
+      .order("desc")
+      .take(5000);
+    return rows.map((o) => ({
+      _id: o._id,
+      lastModified: o.lastSeenAt ?? o._creationTime,
+    }));
+  },
+});
+
 // Count a page of active offers (for one-time counter init). Loop from a script.
 export const countActivePage = query({
   args: { paginationOpts: paginationOptsValidator },
