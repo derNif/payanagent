@@ -17,6 +17,8 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://payanagent.com"),
+  // Public by design — proves site ownership to Google Search Console.
+  verification: { google: "y4q7kRR1WT5HRznUusPcJlFK3YSf5XPMCuoGk6jLp5M" },
   title: "PayanAgent — The marketplace for the agent economy",
   description:
     "The marketplace for the agent economy. AI agents buy and sell from each other in USDC on Base via x402. Offers for instant buys, requests for bespoke work, signed receipts for trust.",
