@@ -9,21 +9,26 @@ import { ArrowRight, Copy, Check } from "lucide-react";
 import { AsciiWave } from "./ascii-wave";
 import { ReceiptsTicker } from "./receipts-ticker";
 
-const skillSnippet = `curl -s https://payanagent.com/SKILL.md`;
+// The two one-liners that convert: MCP first (purchasing power in one command),
+// SKILL.md for agents driven over raw HTTP.
+const snippets = [
+  { label: "Give your agent purchasing power:", cmd: "npx -y @payanagent/mcp" },
+  { label: "Or teach any agent over HTTP:", cmd: "curl -s https://payanagent.com/SKILL.md" },
+];
 
 export function HeroSection() {
   const [isVisible, setIsVisible] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const offerCount = useQuery(api.offers.activeCount, {});
 
   useEffect(() => {
     setIsVisible(true);
   }, []);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(skillSnippet);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = (idx: number) => {
+    navigator.clipboard.writeText(snippets[idx].cmd);
+    setCopiedIdx(idx);
+    setTimeout(() => setCopiedIdx(null), 2000);
   };
 
   return (
@@ -103,31 +108,33 @@ export function HeroSection() {
           </a>
         </div>
 
-        {/* Skill snippet — one action to give any agent access */}
+        {/* Install snippets — the two one-command paths into the marketplace */}
         <div
-          className={`flex justify-center mb-16 transition-all duration-700 delay-350 ${
+          className={`flex flex-col sm:flex-row items-stretch justify-center gap-4 mb-16 transition-all duration-700 delay-350 ${
             isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
           }`}
         >
-          <div>
-            <p className="text-center text-xs font-mono text-muted-foreground mb-3">
-              Teach any agent to use the marketplace:
-            </p>
-            <button
-              onClick={handleCopy}
-              className="group inline-flex items-center gap-3 px-4 sm:px-5 py-3 rounded-xl border border-border bg-card/80 hover:border-primary/50 transition-all cursor-pointer max-w-full"
-            >
-              <span className="text-primary font-mono text-sm shrink-0">$</span>
-              <code className="font-mono text-xs sm:text-sm text-muted-foreground truncate">
-                {skillSnippet}
-              </code>
-              {copied ? (
-                <Check className="w-4 h-4 text-primary shrink-0" />
-              ) : (
-                <Copy className="w-4 h-4 text-muted-foreground group-hover:text-foreground shrink-0 transition-colors" />
-              )}
-            </button>
-          </div>
+          {snippets.map((s, idx) => (
+            <div key={s.cmd} className="min-w-0">
+              <p className="text-center text-xs font-mono text-muted-foreground mb-3">
+                {s.label}
+              </p>
+              <button
+                onClick={() => handleCopy(idx)}
+                className="group inline-flex w-full items-center justify-center gap-3 px-4 sm:px-5 py-3 rounded-xl border border-border bg-card/80 hover:border-primary/50 transition-all cursor-pointer max-w-full"
+              >
+                <span className="text-primary font-mono text-sm shrink-0">$</span>
+                <code className="font-mono text-xs sm:text-sm text-muted-foreground truncate">
+                  {s.cmd}
+                </code>
+                {copiedIdx === idx ? (
+                  <Check className="w-4 h-4 text-primary shrink-0" />
+                ) : (
+                  <Copy className="w-4 h-4 text-muted-foreground group-hover:text-foreground shrink-0 transition-colors" />
+                )}
+              </button>
+            </div>
+          ))}
         </div>
 
         {/* Stats block — live receipts row + the 4 characteristics, one element */}

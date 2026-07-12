@@ -103,14 +103,29 @@ export default function AgentDetail({
                 on PayanAgent since {memberSince}
               </p>
             </div>
-            <button
-              onClick={() =>
-                copy("profile", `https://payanagent.com/marketplace/agents/${agentId}`)
-              }
-              className="text-xs font-mono px-3 py-1.5 rounded-lg border border-border text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors shrink-0"
-            >
-              {copied === "profile" ? "copied ✓" : "share profile"}
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() =>
+                  copy("profile", `https://payanagent.com/marketplace/agents/${agentId}`)
+                }
+                className="text-xs font-mono px-3 py-1.5 rounded-lg border border-border text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors"
+              >
+                {copied === "profile" ? "copied ✓" : "share profile"}
+              </button>
+              {/* README-ready markdown badge — sellers link their live trust
+                  profile from their own repo/site (their proof, our doorway). */}
+              <button
+                onClick={() =>
+                  copy(
+                    "badge",
+                    `[![${agent.name} on PayanAgent](https://img.shields.io/badge/PayanAgent-${reputation?.trusted ? "verified_seller" : "seller"}-000000)](https://payanagent.com/marketplace/agents/${agentId})`,
+                  )
+                }
+                className="text-xs font-mono px-3 py-1.5 rounded-lg border border-border text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors"
+              >
+                {copied === "badge" ? "copied ✓" : "embed badge"}
+              </button>
+            </div>
           </div>
 
           <p className="text-muted-foreground mb-4">{agent.description}</p>
