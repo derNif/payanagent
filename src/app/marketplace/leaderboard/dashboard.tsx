@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -72,8 +72,8 @@ export function LeaderboardDashboard() {
   return (
     <div>
       {/* Header — hero volume + headline stats, one block */}
-      <div className="bg-card border border-border rounded-xl card-shadow p-5 sm:p-6 mb-8 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
-        <div>
+      <div className="bg-card border border-border rounded-xl card-shadow p-5 sm:p-6 mb-8 flex flex-col lg:flex-row lg:items-end gap-6">
+        <div className="shrink-0">
           <div className="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-muted-foreground/60 mb-3">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-60" />
@@ -86,22 +86,24 @@ export function LeaderboardDashboard() {
               {usd(stats.totalVolumeCents)}
             </span>
             <span className="text-primary text-2xl mb-1">▲</span>
-            {settledTrend && settledTrend[settledTrend.length - 1] > 0 && (
-              <div className="hidden sm:block mb-0.5">
-                <Sparkline
-                  data={settledTrend}
-                  color="green"
-                  variant="gradient"
-                  bloom="low"
-                  className="w-40 h-12"
-                />
-                <p className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground/50 mt-1 text-right">
-                  last 14d
-                </p>
-              </div>
-            )}
           </div>
         </div>
+        {/* Settled trend — fills the space between the amount and the stats */}
+        {settledTrend && settledTrend[settledTrend.length - 1] > 0 && (
+          <div className="hidden sm:block flex-1 min-w-0 self-stretch lg:self-end lg:px-4">
+            <Sparkline
+              data={settledTrend}
+              color="mint"
+              variant="gradient"
+              bloom="low"
+              animate
+              className="w-full h-16"
+            />
+            <p className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground/50 mt-1 text-right">
+              last 14d
+            </p>
+          </div>
+        )}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 sm:gap-7 shrink-0">
           <Stat label="Settled 7d" value={usd(stats.volume7dCents)} sub={`${stats.receipts7d} receipts`} />
           <Stat label="Receipts" value={String(stats.totalReceipts)} sub="all-time" />
@@ -123,7 +125,7 @@ export function LeaderboardDashboard() {
               </div>
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <Link href={`/marketplace/agents/${top.sellerId}`} className="text-lg font-semibold text-foreground hover:text-primary inline-flex items-center gap-2.5">
-                  <DitherAvatar name={String(top.sellerId)} size={32} className="shrink-0" />
+                  <DitherAvatar name={String(top.sellerId)} hue={164} size={32} className="shrink-0" />
                   {top.name}
                   {top.trusted && <VerifiedBadge size={17} />}
                 </Link>
@@ -184,7 +186,7 @@ export function LeaderboardDashboard() {
                           </td>
                           <td className="px-4 py-2.5">
                             <Link href={`/marketplace/agents/${s.sellerId}`} className="hover:text-primary inline-flex items-center gap-2">
-                              <DitherAvatar name={String(s.sellerId)} size={18} className="shrink-0" />
+                              <DitherAvatar name={String(s.sellerId)} hue={164} size={18} className="shrink-0" />
                               <span className="font-medium">{s.name}</span>
                               {s.trusted && <VerifiedBadge size={14} />}
                               <span className="text-[10px] px-1 py-0.5 rounded bg-secondary text-muted-foreground/70 font-mono">{PROVIDER[s.providerType] ?? s.providerType}</span>
@@ -221,7 +223,7 @@ export function LeaderboardDashboard() {
                         </td>
                         <td className="px-4 py-2.5">
                           <Link href={`/marketplace/agents/${b.buyerId}`} className="hover:text-primary font-medium inline-flex items-center gap-2">
-                            <DitherAvatar name={String(b.buyerId)} size={18} className="shrink-0" />
+                            <DitherAvatar name={String(b.buyerId)} hue={164} size={18} className="shrink-0" />
                             {b.name}
                           </Link>
                         </td>
