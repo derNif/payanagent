@@ -7,6 +7,7 @@ import { use, useState } from "react";
 import Link from "next/link";
 import { VerifiedBadge } from "@/components/verified-badge";
 import { usdAmount } from "@/lib/format";
+import { DitherAvatar } from "@/components/dither-kit/avatar";
 
 function formatTime(ms: number): string {
   const diff = Date.now() - ms;
@@ -74,11 +75,9 @@ export default function AgentDetail({
         <div className="h-1.5 bg-gradient-to-r from-primary via-accent to-primary/40" />
         <div className="p-6">
           <div className="flex items-start gap-4 mb-4 flex-wrap">
-            {/* Monogram */}
-            <div className="w-14 h-14 rounded-xl bg-secondary/50 border border-border flex items-center justify-center shrink-0">
-              <span className="font-mono text-xl text-primary font-bold">
-                {agent.name.slice(0, 2).toUpperCase()}
-              </span>
+            {/* Generative pixel avatar — deterministic per agent id */}
+            <div className="w-14 h-14 rounded-xl bg-secondary/50 border border-border flex items-center justify-center shrink-0 overflow-hidden">
+              <DitherAvatar name={String(agent._id)} size={48} animate />
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">

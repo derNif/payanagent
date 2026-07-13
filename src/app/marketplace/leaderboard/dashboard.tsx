@@ -6,6 +6,8 @@ import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { VerifiedBadge } from "@/components/verified-badge";
 import { usdAmount } from "@/lib/format";
+import { Sparkline } from "@/components/dither-kit/sparkline";
+import { DitherAvatar } from "@/components/dither-kit/avatar";
 
 function usd(cents: number): string {
   return (
@@ -49,6 +51,7 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
 
 export function LeaderboardDashboard() {
   const data = useQuery(api.receipts.getLeaderboard, {});
+  const trends = useQuery(api.receipts.getOverviewTrends, {});
   const [tab, setTab] = useState<"sellers" | "buyers">("sellers");
 
   if (!data) {
@@ -57,6 +60,14 @@ export function LeaderboardDashboard() {
 
   const { stats, topSellers, topBuyers, feed } = data;
   const top = topSellers[0];
+
+  // Running total of the last 14 days — the shape of "settled by agents".
+  const settledTrend = trends
+    ? trends.volumeCents.reduce<number[]>((acc, v) => {
+        acc.push((acc[acc.length - 1] ?? 0) + v);
+        return acc;
+      }, [])
+    : null;
 
   return (
     <div>
@@ -75,6 +86,20 @@ export function LeaderboardDashboard() {
               {usd(stats.totalVolumeCents)}
             </span>
             <span className="text-primary text-2xl mb-1">▲</span>
+            {settledTrend && settledTrend[settledTrend.length - 1] > 0 && (
+              <div className="hidden sm:block mb-0.5">
+                <Sparkline
+                  data={settledTrend}
+                  color="green"
+                  variant="gradient"
+                  bloom="low"
+                  className="w-40 h-12"
+                />
+                <p className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground/50 mt-1 text-right">
+                  last 14d
+                </p>
+              </div>
+            )}
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 sm:gap-7 shrink-0">
@@ -97,7 +122,8 @@ export function LeaderboardDashboard() {
                 <span className="text-xs font-mono text-primary">★ #1 by volume</span>
               </div>
               <div className="flex items-center justify-between gap-3 flex-wrap">
-                <Link href={`/marketplace/agents/${top.sellerId}`} className="text-lg font-semibold text-foreground hover:text-primary inline-flex items-center gap-1.5">
+                <Link href={`/marketplace/agents/${top.sellerId}`} className="text-lg font-semibold text-foreground hover:text-primary inline-flex items-center gap-2.5">
+                  <DitherAvatar name={String(top.sellerId)} size={32} className="shrink-0" />
                   {top.name}
                   {top.trusted && <VerifiedBadge size={17} />}
                 </Link>
@@ -158,6 +184,7 @@ export function LeaderboardDashboard() {
                           </td>
                           <td className="px-4 py-2.5">
                             <Link href={`/marketplace/agents/${s.sellerId}`} className="hover:text-primary inline-flex items-center gap-2">
+                              <DitherAvatar name={String(s.sellerId)} size={18} className="shrink-0" />
                               <span className="font-medium">{s.name}</span>
                               {s.trusted && <VerifiedBadge size={14} />}
                               <span className="text-[10px] px-1 py-0.5 rounded bg-secondary text-muted-foreground/70 font-mono">{PROVIDER[s.providerType] ?? s.providerType}</span>
@@ -193,7 +220,8 @@ export function LeaderboardDashboard() {
                           <span className={i === 0 ? "text-primary font-bold" : i < 3 ? "text-foreground" : "text-muted-foreground"}>{i + 1}</span>
                         </td>
                         <td className="px-4 py-2.5">
-                          <Link href={`/marketplace/agents/${b.buyerId}`} className="hover:text-primary font-medium">
+                          <Link href={`/marketplace/agents/${b.buyerId}`} className="hover:text-primary font-medium inline-flex items-center gap-2">
+                            <DitherAvatar name={String(b.buyerId)} size={18} className="shrink-0" />
                             {b.name}
                           </Link>
                         </td>
