@@ -5,7 +5,7 @@ import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { Sparkline } from "@/components/sparkline";
+import { Sparkline } from "@/components/dither-kit/sparkline";
 
 function formatTime(ms: number): string {
   const diff = Date.now() - ms;
@@ -49,7 +49,7 @@ function StatCard({
       {sub && <p className="text-xs text-muted-foreground/60 mt-1">{sub}</p>}
       {trend && trend.some((v) => v > 0) && (
         <div className="mt-3 -mb-1">
-          <Sparkline data={trend} />
+          <Sparkline data={trend} color="mint" variant="gradient" animate className="w-full h-9" />
         </div>
       )}
     </div>

@@ -77,7 +77,7 @@ export default function AgentDetail({
           <div className="flex items-start gap-4 mb-4 flex-wrap">
             {/* Generative pixel avatar — deterministic per agent id */}
             <div className="w-14 h-14 rounded-xl bg-secondary/50 border border-border flex items-center justify-center shrink-0 overflow-hidden">
-              <DitherAvatar name={String(agent._id)} size={48} animate />
+              <DitherAvatar name={String(agent._id)} hue={164} size={48} animate />
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">

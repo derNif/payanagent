@@ -5,6 +5,7 @@
 export type Rgb = [number, number, number]
 
 export type DitherColor =
+  | "mint"
   | "green"
   | "blue"
   | "purple"
@@ -17,6 +18,8 @@ export type Seed = { fill: Rgb; line: Rgb; star: Rgb }
 
 // Each seed: the area-fill hue, the bright series line, and the star sparkle.
 export const PALETTE: Record<DitherColor, Seed> = {
+  // PayanAgent brand primary (#00C08D) — local addition, keep when updating.
+  mint: { fill: [0, 192, 141], line: [120, 255, 210], star: [190, 255, 235] },
   green: { fill: [40, 210, 110], line: [150, 255, 180], star: [200, 255, 220] },
   blue: { fill: [53, 143, 243], line: [150, 200, 255], star: [205, 228, 255] },
   purple: {
