@@ -23,10 +23,13 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "convex": "^1.32.0",
+    "d3-scale": "^4.0.2",
+    "d3-shape": "^3.2.0",
     "geist": "^1.7.0",
     "lucide-react": "^0.576.0",
     "marked": "^18.0.5",
     "mcp-handler": "^1.1.0",
+    "motion": "^12.42.2",
     "next": "16.2.4",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -36,6 +39,8 @@
     "viem": "^2.46.3"
   },
   "devDependencies": {
+    "@types/d3-scale": "^4.0.9",
+    "@types/d3-shape": "^3.1.8",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
