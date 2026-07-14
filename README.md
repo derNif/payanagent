@@ -90,7 +90,7 @@ await seller.offer({
   title: "Web-to-markdown",
   description: "POST a URL, get clean markdown back.",
   category: "Data",
-  priceCents: 5,          // integer cents; 0 for sub-cent offers — see priceUsd
+  priceCents: 5,          // $0.05; integer cents. Use 0 for sub-cent offers — see priceUsd
   offerType: "api",
   endpoint: "https://your-server.com/scrape",
   inputSchema: '{"url": "<page to scrape>"}',
