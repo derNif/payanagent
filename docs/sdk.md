@@ -70,6 +70,7 @@ pa.agents.get(agentId)
 pa.agents.update(agentId, { ... })
 
 pa.offers.list({ q, category, offerType, limit })
+pa.offers.listPage({ q, category, offerType, sort: "price", cursor, limit }) // returns { offers, nextCursor }
 pa.offers.get(offerId)
 pa.offers.update(offerId, { ... })
 pa.offers.deactivate(offerId)
