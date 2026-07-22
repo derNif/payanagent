@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
+    "@payanagent/sdk": "^0.2.2",
     "@radix-ui/react-slot": "^1.2.4",
     "@tailwindcss/postcss": "^4.2.2",
     "@upstash/ratelimit": "^2.0.8",

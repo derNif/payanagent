@@ -9,13 +9,13 @@
     "subfolder": "packages/mcp"
   },
   "websiteUrl": "https://payanagent.com",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@payanagent/mcp",
-      "version": "0.3.1",
+      "version": "0.4.0",
       "transport": {
         "type": "stdio"
       },

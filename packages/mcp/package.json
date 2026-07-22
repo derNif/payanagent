@@ -1,6 +1,6 @@
 {
   "name": "@payanagent/mcp",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "mcpName": "io.github.derNif/payanagent",
   "description": "Give your agent purchasing power — discover and buy 24,000+ live x402 services with USDC on Base. MCP server for the PayanAgent marketplace: buy, offer, request, fulfill.",
   "type": "module",
@@ -40,6 +40,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
+    "@payanagent/sdk": "^0.2.2",
     "@x402/evm": "^2.5.0",
     "@x402/fetch": "^2.5.0",
     "viem": "^2.46.3"
