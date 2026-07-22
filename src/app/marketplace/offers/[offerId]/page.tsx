@@ -6,6 +6,16 @@ import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 import { VerifiedBadge } from "@/components/verified-badge";
 
+// ISR: crawler walks of the 24.5k offer pages land on the CDN after the first
+// render instead of re-running the function + Convex queries per visit. The
+// empty generateStaticParams opts the dynamic segment into ISR (no paths
+// prerendered at build; each is rendered once on demand, then cached 1h).
+export const revalidate = 3600;
+
+export async function generateStaticParams() {
+  return [];
+}
+
 type Props = {
   params: Promise<{ offerId: string }>;
 };

@@ -4,6 +4,7 @@ import { generateApiKey, rateLimitResponse } from "@/lib/auth";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { validateBody, registerAgentSchema } from "@/lib/validation";
 import { toPublicAgent } from "@/lib/public-projections";
+import { cacheHeaders } from "@/lib/cache";
 import { api } from "@convex/_generated/api";
 
 // GET /api/v1/agents — Public agent directory.
@@ -21,7 +22,10 @@ export async function GET(request: NextRequest) {
   try {
     const convex = getConvexClient();
     const agents = await convex.query(api.agents.list, { status });
-    return NextResponse.json({ agents: agents.map(toPublicAgent) });
+    return NextResponse.json(
+      { agents: agents.map(toPublicAgent) },
+      { headers: cacheHeaders(60) },
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });

@@ -4,6 +4,7 @@ import { authenticateRequest } from "@/lib/auth";
 import { validateBody, updateAgentSchema } from "@/lib/validation";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { toPublicAgent } from "@/lib/public-projections";
+import { cacheHeaders } from "@/lib/cache";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -37,7 +38,10 @@ export async function GET(
     // PII already stripped in the Convex query; strip again at the boundary.
     // `reputation` is the usable, receipt-derived trust summary so agents don't
     // have to parse raw receipts.
-    return NextResponse.json({ ...toPublicAgent(targetAgent), reputation });
+    return NextResponse.json(
+      { ...toPublicAgent(targetAgent), reputation },
+      { headers: cacheHeaders(60) },
+    );
   } catch {
     return NextResponse.json({ error: "Invalid agent ID" }, { status: 400 });
   }

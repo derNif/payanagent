@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { toPublicReceipt } from "@/lib/public-projections";
+import { cacheHeaders } from "@/lib/cache";
 import { api } from "@convex/_generated/api";
 
 // GET /api/v1/receipts — Public receipts feed (newest first).
@@ -26,7 +27,10 @@ export async function GET(request: NextRequest) {
   try {
     const convex = getConvexClient();
     const receipts = await convex.query(api.receipts.listFeed, { limit });
-    return NextResponse.json({ receipts: receipts.map(toPublicReceipt) });
+    return NextResponse.json(
+      { receipts: receipts.map(toPublicReceipt) },
+      { headers: cacheHeaders(60) },
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });

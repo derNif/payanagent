@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { toPublicReceipt } from "@/lib/public-projections";
+import { cacheHeaders } from "@/lib/cache";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -33,7 +34,10 @@ export async function GET(
     if (!receipt) {
       return NextResponse.json({ error: "Receipt not found" }, { status: 404 });
     }
-    return NextResponse.json({ receipt: toPublicReceipt(receipt) });
+    return NextResponse.json(
+      { receipt: toPublicReceipt(receipt) },
+      { headers: cacheHeaders(60) },
+    );
   } catch {
     return NextResponse.json({ error: "Invalid receipt ID" }, { status: 400 });
   }

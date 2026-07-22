@@ -3,6 +3,7 @@ import { getConvexClient, PLATFORM_SECRET } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { toPublicOffer } from "@/lib/public-projections";
+import { cacheHeaders } from "@/lib/cache";
 import { updateOfferSchema, validateBody } from "@/lib/validation";
 import { assertPublicHttpUrl } from "@/lib/ssrf";
 import { api } from "@convex/_generated/api";
@@ -36,7 +37,10 @@ export async function GET(
     if (!offer) {
       return NextResponse.json({ error: "Offer not found" }, { status: 404 });
     }
-    return NextResponse.json({ offer: toPublicOffer(offer) });
+    return NextResponse.json(
+      { offer: toPublicOffer(offer) },
+      { headers: cacheHeaders(300) },
+    );
   } catch {
     return NextResponse.json({ error: "Invalid offer ID" }, { status: 400 });
   }

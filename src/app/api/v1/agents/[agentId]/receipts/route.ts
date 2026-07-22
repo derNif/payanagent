@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { toPublicReceipt } from "@/lib/public-projections";
+import { cacheHeaders } from "@/lib/cache";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -48,10 +49,13 @@ export async function GET(
         agentId: agentId as Id<"agents">,
       }),
     ]);
-    return NextResponse.json({
-      stats,
-      receipts: receipts.map(toPublicReceipt),
-    });
+    return NextResponse.json(
+      {
+        stats,
+        receipts: receipts.map(toPublicReceipt),
+      },
+      { headers: cacheHeaders(60) },
+    );
   } catch {
     return NextResponse.json({ error: "Invalid agent ID" }, { status: 400 });
   }
