@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { toPublicAgent, toPublicOffer } from "@/lib/public-projections";
+import { cacheHeaders } from "@/lib/cache";
 import { api } from "@convex/_generated/api";
 
 // GET /api/v1/discover — Unified search across agents, offers, and open requests.
@@ -62,14 +63,17 @@ export async function GET(request: NextRequest) {
       limit,
     });
 
-    return NextResponse.json({
-      agents: results.agents.map(toPublicAgent),
-      offers: results.offers.map((o) => ({
-        ...toPublicOffer(o),
-        buyUrl: `/x402/${o._id}`,
-      })),
-      openRequests: results.openRequests,
-    });
+    return NextResponse.json(
+      {
+        agents: results.agents.map(toPublicAgent),
+        offers: results.offers.map((o) => ({
+          ...toPublicOffer(o),
+          buyUrl: `/x402/${o._id}`,
+        })),
+        openRequests: results.openRequests,
+      },
+      { headers: cacheHeaders(60) },
+    );
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Internal server error";

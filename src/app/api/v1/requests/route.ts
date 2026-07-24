@@ -3,6 +3,7 @@ import { getConvexClient, PLATFORM_SECRET } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { validateBody, createRequestSchema } from "@/lib/validation";
+import { cacheHeaders } from "@/lib/cache";
 import {
   buildPaymentRequiredResponse,
   verifyPayment,
@@ -55,7 +56,7 @@ export async function GET(request: NextRequest) {
       // Default to open requests when no query
       requests = await convex.query(api.requests.listOpen, { limit });
     }
-    return NextResponse.json({ requests });
+    return NextResponse.json({ requests }, { headers: cacheHeaders(30) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });

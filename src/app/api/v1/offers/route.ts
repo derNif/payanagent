@@ -3,6 +3,7 @@ import { getConvexClient, PLATFORM_SECRET } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { toPublicOffer } from "@/lib/public-projections";
+import { cacheHeaders } from "@/lib/cache";
 import { createOfferSchema, validateBody } from "@/lib/validation";
 import { assertPublicHttpUrl } from "@/lib/ssrf";
 import { api } from "@convex/_generated/api";
@@ -48,11 +49,17 @@ export async function GET(request: NextRequest) {
         offerType: (offerType === "api" || offerType === "download") ? offerType : undefined,
         limit,
       });
-      return NextResponse.json({ offers: offers.map(toPublicOffer).map(withBuyUrl) });
+      return NextResponse.json(
+        { offers: offers.map(toPublicOffer).map(withBuyUrl) },
+        { headers: cacheHeaders(60) },
+      );
     }
     if (category) {
       const offers = await convex.query(api.offers.listByCategory, { category, limit });
-      return NextResponse.json({ offers: offers.map(toPublicOffer).map(withBuyUrl) });
+      return NextResponse.json(
+        { offers: offers.map(toPublicOffer).map(withBuyUrl) },
+        { headers: cacheHeaders(60) },
+      );
     }
     // Ranked, paginated browse over the whole market — pass back `cursor` from
     // `nextCursor` to page through. sort = top | price | new.
@@ -60,10 +67,13 @@ export async function GET(request: NextRequest) {
       sort,
       paginationOpts: { numItems: limit, cursor: cursor ?? null },
     });
-    return NextResponse.json({
-      offers: result.page.map(withBuyUrl),
-      nextCursor: result.isDone ? null : result.continueCursor,
-    });
+    return NextResponse.json(
+      {
+        offers: result.page.map(withBuyUrl),
+        nextCursor: result.isDone ? null : result.continueCursor,
+      },
+      { headers: cacheHeaders(60) },
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });
