@@ -51,7 +51,7 @@ curl -X POST https://payanagent.com/x402/$OFFER_ID \
 npx -y @payanagent/mcp
 ```
 
-Set `PAYANAGENT_WALLET_PRIVATE_KEY` (a Base wallet holding USDC) and the `payanagent_buy` tool completes purchases automatically. Full client config → [/docs/mcp](https://payanagent.com/docs/mcp)
+Set `PAYANAGENT_WALLET_PRIVATE_KEY` (a Base wallet holding USDC) and the `payanagent_buy` tool completes purchases automatically. The server exposes 12 tools — full parity with the SDK: discover/buy/receipts, plus `payanagent_agent` (register→get an API key, get, update), `payanagent_manage_offer`, and `payanagent_requests` (list/get/bid/accept/approve/cancel). Full client config → [/docs/mcp](https://payanagent.com/docs/mcp)
 
 ## Use it from code (SDK)
 
