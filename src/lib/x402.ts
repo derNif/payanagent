@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { createWalletClient, createPublicClient, http, parseAbi } from "viem";
+import { createPublicClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { base, baseSepolia } from "viem/chains";
 
 const PLATFORM_WALLET = process.env.PLATFORM_WALLET_ADDRESS!;
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://payanagent.com";
 const NETWORK = process.env.X402_NETWORK || "base";
 // x402.org/facilitator is testnet only; xpay supports Base mainnet
 const FACILITATOR_URL = process.env.X402_FACILITATOR_URL ||
@@ -264,18 +265,16 @@ export async function settlePayment(paymentSignatureHeader: string, paymentRequi
   }
 }
 
-// Chain config for viem
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const VIEM_CHAINS: Record<string, any> = {
-  base,
-  "base-sepolia": baseSepolia,
-};
-
-const ERC20_TRANSFER_ABI = parseAbi([
-  "function transfer(address to, uint256 amount) returns (bool)",
-]);
-
-// Release escrowed USDC from platform wallet to provider on-chain
+// Release escrowed USDC from the platform wallet to a recipient — GASLESS.
+//
+// The platform signs an ERC-3009 `transferWithAuthorization` and the facilitator
+// submits it on-chain and pays the gas. This is the same rail escrow *deposits*
+// already ride, just in reverse (platform -> recipient), so the platform wallet
+// never needs an ETH balance. Previously this was a direct viem `transfer`,
+// which meant every payout/refund was blocked unless the wallet held ETH.
+//
+// Used for all three escrow money paths: provider payout and surplus refund on
+// approve, and buyer refund on cancel.
 export async function releaseEscrow(
   toAddress: string,
   amountCents: number
@@ -287,40 +286,70 @@ export async function releaseEscrow(
   if (!/^0x[a-fA-F0-9]{64}$/.test(privateKey)) {
     return { success: false, error: "Invalid private key format" };
   }
+  // Fail closed on a malformed recipient or amount: this signs a real transfer.
+  if (!/^0x[a-fA-F0-9]{40}$/.test(toAddress)) {
+    return { success: false, error: "Invalid recipient address" };
+  }
+  if (!Number.isInteger(amountCents) || amountCents <= 0) {
+    return { success: false, error: "Invalid release amount" };
+  }
 
   try {
     const networkId = CHAIN_IDS[NETWORK] || CHAIN_IDS["base"];
-    const usdcAddress = USDC_ADDRESSES[networkId] as `0x${string}`;
-    const chain = VIEM_CHAINS[NETWORK] || base;
-    const account = privateKeyToAccount(privateKey as `0x${string}`);
-    const amountBaseUnits = BigInt(amountCents) * BigInt(10000);
+    const asset = USDC_ADDRESSES[networkId];
+    const domain = USDC_DOMAINS[networkId] || { name: "USDC", version: "2" };
 
-    const walletClient = createWalletClient({
-      account,
-      chain,
-      transport: http(),
-    });
+    // Lazy-loaded: keeps the signing stack out of every route's cold start.
+    const [{ x402Client }, { registerExactEvmScheme }, { toClientEvmSigner }] =
+      await Promise.all([
+        import("@x402/fetch"),
+        import("@x402/evm/exact/client"),
+        import("@x402/evm"),
+      ]);
 
+    // The scheme needs contract reads (token domain/allowance checks) alongside
+    // signing. This public client is read-only RPC — it never sends a tx, so no
+    // gas is involved anywhere in this path.
     const publicClient = createPublicClient({
-      chain,
+      chain: NETWORK === "base-sepolia" ? baseSepolia : base,
       transport: http(),
     });
+    const account = privateKeyToAccount(privateKey as `0x${string}`);
+    const signer = toClientEvmSigner(account, publicClient);
 
-    const hash = await walletClient.writeContract({
-      address: usdcAddress,
-      abi: ERC20_TRANSFER_ABI,
-      functionName: "transfer",
-      args: [toAddress as `0x${string}`, amountBaseUnits],
-      chain,
-    } as Parameters<typeof walletClient.writeContract>[0]);
+    const client = new x402Client();
+    registerExactEvmScheme(client, { signer });
 
-    // Wait for confirmation
-    const receipt = await publicClient.waitForTransactionReceipt({ hash });
-
-    return {
-      success: receipt.status === "success",
-      txHash: hash,
+    // Payment terms for our own outbound payment: platform wallet -> recipient.
+    const paymentRequired = {
+      x402Version: 2,
+      resource: {
+        url: `${APP_URL}/escrow/release`,
+        description: `Escrow release of ${amountCents} cents to ${toAddress}`,
+        mimeType: "application/json",
+      },
+      accepts: [
+        {
+          scheme: "exact",
+          network: networkId,
+          amount: centsToUsdcBaseUnits(amountCents),
+          payTo: toAddress,
+          asset,
+          maxTimeoutSeconds: 60,
+          extra: { name: domain.name, version: domain.version },
+        },
+      ],
     };
+
+    // createPaymentPayload embeds the selected requirements as `accepted`, which
+    // is exactly what settlePayment() reads — so the existing, already-proven
+    // facilitator path is reused verbatim rather than duplicated here.
+    const paymentPayload = await client.createPaymentPayload(
+      paymentRequired as unknown as Parameters<typeof client.createPaymentPayload>[0],
+    );
+    const signatureHeader = Buffer.from(JSON.stringify(paymentPayload)).toString("base64");
+
+    return await settlePayment(signatureHeader, "");
   } catch (error) {
     return {
       success: false,
