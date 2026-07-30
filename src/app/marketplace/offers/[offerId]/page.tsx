@@ -9,8 +9,10 @@ import { VerifiedBadge } from "@/components/verified-badge";
 // ISR: crawler walks of the 24.5k offer pages land on the CDN after the first
 // render instead of re-running the function + Convex queries per visit. The
 // empty generateStaticParams opts the dynamic segment into ISR (no paths
-// prerendered at build; each is rendered once on demand, then cached 1h).
-export const revalidate = 3600;
+// prerendered at build; each is rendered once on demand, then cached 6h).
+// 6h because prod logs show indexers re-walking the catalog every ~27 min — a
+// TTL shorter than the poll interval means almost every poll is a cache MISS.
+export const revalidate = 21600;
 
 export async function generateStaticParams() {
   return [];

@@ -51,14 +51,14 @@ export async function GET(request: NextRequest) {
       });
       return NextResponse.json(
         { offers: offers.map(toPublicOffer).map(withBuyUrl) },
-        { headers: cacheHeaders(60) },
+        { headers: cacheHeaders(300) },
       );
     }
     if (category) {
       const offers = await convex.query(api.offers.listByCategory, { category, limit });
       return NextResponse.json(
         { offers: offers.map(toPublicOffer).map(withBuyUrl) },
-        { headers: cacheHeaders(60) },
+        { headers: cacheHeaders(300) },
       );
     }
     // Ranked, paginated browse over the whole market — pass back `cursor` from
@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
         offers: result.page.map(withBuyUrl),
         nextCursor: result.isDone ? null : result.continueCursor,
       },
-      { headers: cacheHeaders(60) },
+      { headers: cacheHeaders(300) },
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal server error";

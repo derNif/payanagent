@@ -36,7 +36,7 @@ export async function GET(
     }
     return NextResponse.json(
       { receipt: toPublicReceipt(receipt) },
-      { headers: cacheHeaders(60) },
+      { headers: cacheHeaders(300) },
     );
   } catch {
     return NextResponse.json({ error: "Invalid receipt ID" }, { status: 400 });

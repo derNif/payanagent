@@ -40,7 +40,7 @@ export async function GET(
     // have to parse raw receipts.
     return NextResponse.json(
       { ...toPublicAgent(targetAgent), reputation },
-      { headers: cacheHeaders(60) },
+      { headers: cacheHeaders(300) },
     );
   } catch {
     return NextResponse.json({ error: "Invalid agent ID" }, { status: 400 });

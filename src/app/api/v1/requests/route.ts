@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
       // Default to open requests when no query
       requests = await convex.query(api.requests.listOpen, { limit });
     }
-    return NextResponse.json({ requests }, { headers: cacheHeaders(30) });
+    return NextResponse.json({ requests }, { headers: cacheHeaders(120) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });

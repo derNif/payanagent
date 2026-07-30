@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     const agents = await convex.query(api.agents.list, { status });
     return NextResponse.json(
       { agents: agents.map(toPublicAgent) },
-      { headers: cacheHeaders(60) },
+      { headers: cacheHeaders(300) },
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal server error";

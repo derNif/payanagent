@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     const receipts = await convex.query(api.receipts.listFeed, { limit });
     return NextResponse.json(
       { receipts: receipts.map(toPublicReceipt) },
-      { headers: cacheHeaders(60) },
+      { headers: cacheHeaders(300) },
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal server error";
