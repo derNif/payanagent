@@ -54,7 +54,7 @@ export async function GET(
         stats,
         receipts: receipts.map(toPublicReceipt),
       },
-      { headers: cacheHeaders(60) },
+      { headers: cacheHeaders(300) },
     );
   } catch {
     return NextResponse.json({ error: "Invalid agent ID" }, { status: 400 });

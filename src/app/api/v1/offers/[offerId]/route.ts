@@ -39,7 +39,7 @@ export async function GET(
     }
     return NextResponse.json(
       { offer: toPublicOffer(offer) },
-      { headers: cacheHeaders(300) },
+      { headers: cacheHeaders(3600) },
     );
   } catch {
     return NextResponse.json({ error: "Invalid offer ID" }, { status: 400 });

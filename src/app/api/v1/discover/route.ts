@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
         })),
         openRequests: results.openRequests,
       },
-      { headers: cacheHeaders(60) },
+      { headers: cacheHeaders(300) },
     );
   } catch (error) {
     const message =
