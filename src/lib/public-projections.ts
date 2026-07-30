@@ -59,6 +59,8 @@ export function toPublicOffer<T extends object>(offer: T) {
   // proxied offer is indistinguishable from a native one to customers.
   void externalUrl;
   void source;
+  // Delivery-quality fields (paidAttempts / deliveryRate / quality) ride through
+  // `rest` untouched — they're public on purpose so buyers can judge supply.
   const amountRaw = (rest as { amountRaw?: string }).amountRaw;
   const priceCents = (rest as { priceCents?: number }).priceCents ?? 0;
   return {

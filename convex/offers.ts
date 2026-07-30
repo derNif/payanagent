@@ -2,7 +2,13 @@ import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import { mutation, query, QueryCtx, MutationCtx } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
-import { computeReputation } from "./receipts";
+import {
+  computeReputation,
+  loadIndependentBuyers,
+  loadOfferDelivery,
+  loadReceiptSignals,
+  OfferDelivery,
+} from "./receipts";
 
 // Ranking tiers for the default "top" browse:
 //   sold/proven  → SOLD_BASE + reputation score (settled offers float to top)
@@ -29,27 +35,68 @@ const PLATFORM_INTERNAL_KEY = process.env.PLATFORM_INTERNAL_KEY ?? "";
 export type PublicOffer = Omit<
   Doc<"offers">,
   "endpoint" | "fileUrl" | "internalHandler" | "externalUrl" | "source"
->;
+> &
+  // Delivery track record, when we've computed it for this read. Buyers get to
+  // judge the supply themselves instead of trusting our filter.
+  Partial<Pick<OfferDelivery, "paidAttempts" | "deliveryRate" | "quality">>;
 // Strip operator-private fields. `externalUrl`/`source` are stripped too so a
 // proxied external offer is indistinguishable from a native one to customers —
 // to a buyer it's just an offer (we're the intermediary; that's our business).
-function publicOffer(o: Doc<"offers">): PublicOffer {
+function publicOffer(o: Doc<"offers">, delivery?: OfferDelivery): PublicOffer {
   const { endpoint, fileUrl, internalHandler, externalUrl, source, ...rest } = o;
   void endpoint;
   void fileUrl;
   void internalHandler;
   void externalUrl;
   void source;
-  return rest;
+  if (!delivery) return rest;
+  return {
+    ...rest,
+    paidAttempts: delivery.paidAttempts,
+    deliveryRate: delivery.deliveryRate,
+    quality: delivery.quality,
+  };
+}
+
+// Offers we have no delivery evidence for are "unproven", never penalised —
+// every offer starts here.
+function qualityOf(
+  o: Doc<"offers">,
+  delivery: Map<string, OfferDelivery>,
+): OfferDelivery["quality"] {
+  return delivery.get(String(o._id))?.quality ?? "unproven";
+}
+
+// The delivery cursor. An offer that has taken money three or more times and
+// delivered nothing is dead supply (dead host, incompatible endpoint) — showing
+// it costs buyers real USDC for nothing, so it drops out of discovery. Offers
+// that deliver sometimes stay visible but sink below working ones.
+//
+// Deliberately NON-DESTRUCTIVE: nothing is written and nothing is deactivated,
+// so an offer whose endpoint comes back to life re-enters discovery on its own
+// as soon as it delivers again.
+function applyDeliveryCursor(
+  offers: Doc<"offers">[],
+  delivery: Map<string, OfferDelivery>,
+): Doc<"offers">[] {
+  const kept = offers.filter((o) => qualityOf(o, delivery) !== "broken");
+  // Stable partition: everything keeps its incoming rank, unreliable goes last.
+  return [
+    ...kept.filter((o) => qualityOf(o, delivery) !== "unreliable"),
+    ...kept.filter((o) => qualityOf(o, delivery) === "unreliable"),
+  ];
 }
 
 // Enrich a page of offers with seller name + receipt-derived reputation. Offers
 // without a sellerId yet (an unsold proxied offer) fall back to their inline
 // sellerName + empty reputation. Shared by the marketplace browse/search.
 async function enrichOffers(ctx: QueryCtx, offers: Doc<"offers">[]) {
+  // One scan serves both signals for the whole page (never per seller/offer).
+  const { independentBuyers, offerDelivery } = await loadReceiptSignals(ctx);
+  const visible = applyDeliveryCursor(offers, offerDelivery);
   const emptyRep = computeReputation([]);
   const sellerIds = [
-    ...new Set(offers.filter((o) => o.sellerId).map((o) => String(o.sellerId))),
+    ...new Set(visible.filter((o) => o.sellerId).map((o) => String(o.sellerId))),
   ];
   const sellers = new Map<
     string,
@@ -67,7 +114,7 @@ async function enrichOffers(ctx: QueryCtx, offers: Doc<"offers">[]) {
       .query("receipts")
       .withIndex("by_sellerId", (q) => q.eq("sellerId", sellerId))
       .take(500);
-    const reputation = computeReputation(sold);
+    const reputation = computeReputation(sold, independentBuyers);
     sellers.set(id, {
       name: agent?.name ?? "Unknown agent",
       receiptsSold: reputation.sales,
@@ -75,7 +122,7 @@ async function enrichOffers(ctx: QueryCtx, offers: Doc<"offers">[]) {
       reputation,
     });
   }
-  return offers.map((o) => ({
+  return visible.map((o) => ({
     _id: o._id,
     _creationTime: o._creationTime,
     title: o.title,
@@ -90,6 +137,10 @@ async function enrichOffers(ctx: QueryCtx, offers: Doc<"offers">[]) {
     inputSchema: o.inputSchema,
     outputSchema: o.outputSchema,
     previewDescription: o.previewDescription,
+    // Surfaced so buyers can judge supply for themselves, not just trust the cursor.
+    paidAttempts: offerDelivery.get(String(o._id))?.paidAttempts ?? 0,
+    deliveryRate: offerDelivery.get(String(o._id))?.deliveryRate ?? 1,
+    quality: qualityOf(o, offerDelivery),
     seller: (o.sellerId && sellers.get(String(o.sellerId))) || {
       name: o.sellerName ?? "Provider",
       receiptsSold: 0,
@@ -191,7 +242,11 @@ export const getById = query({
   args: { offerId: v.id("offers") },
   handler: async (ctx, args): Promise<PublicOffer | null> => {
     const offer = await ctx.db.get(args.offerId);
-    return offer ? publicOffer(offer) : null;
+    // Direct fetch always resolves (permalinks must not 404 because supply went
+    // bad) — the delivery record rides along so the page can say so.
+    return offer
+      ? publicOffer(offer, await loadOfferDelivery(ctx, args.offerId))
+      : null;
   },
 });
 
@@ -214,22 +269,23 @@ export const listActive = query({
   },
   handler: async (ctx, args): Promise<PublicOffer[]> => {
     const limit = Math.min(args.limit ?? 100, 500);
-    if (args.offerType) {
-      const rows = await ctx.db
-        .query("offers")
-        .withIndex("by_offerType", (q) =>
-          q.eq("offerType", args.offerType!).eq("isActive", true),
-        )
-        .order("desc")
-        .take(limit);
-      return rows.map(publicOffer);
-    }
-    const rows = await ctx.db
-      .query("offers")
-      .filter((q) => q.eq(q.field("isActive"), true))
-      .order("desc")
-      .take(limit);
-    return rows.map(publicOffer);
+    const { offerDelivery } = await loadReceiptSignals(ctx);
+    const rows = args.offerType
+      ? await ctx.db
+          .query("offers")
+          .withIndex("by_offerType", (q) =>
+            q.eq("offerType", args.offerType!).eq("isActive", true),
+          )
+          .order("desc")
+          .take(limit)
+      : await ctx.db
+          .query("offers")
+          .filter((q) => q.eq(q.field("isActive"), true))
+          .order("desc")
+          .take(limit);
+    return applyDeliveryCursor(rows, offerDelivery).map((o) =>
+      publicOffer(o, offerDelivery.get(String(o._id))),
+    );
   },
 });
 
@@ -243,9 +299,9 @@ export const listActiveWithSellers = query({
   },
   handler: async (ctx, args) => {
     const limit = Math.min(args.limit ?? 100, 500);
-    let offers: Doc<"offers">[];
+    let rows: Doc<"offers">[];
     if (args.offerType) {
-      offers = await ctx.db
+      rows = await ctx.db
         .query("offers")
         .withIndex("by_offerType", (q) =>
           q.eq("offerType", args.offerType!).eq("isActive", true),
@@ -253,12 +309,15 @@ export const listActiveWithSellers = query({
         .order("desc")
         .take(limit);
     } else {
-      offers = await ctx.db
+      rows = await ctx.db
         .query("offers")
         .filter((q) => q.eq(q.field("isActive"), true))
         .order("desc")
         .take(limit);
     }
+
+    const { independentBuyers, offerDelivery } = await loadReceiptSignals(ctx);
+    const offers = applyDeliveryCursor(rows, offerDelivery);
 
     // Resolve each registered seller once (offers without a sellerId yet — an
     // unsold proxied offer — use their inline sellerName + empty reputation).
@@ -282,7 +341,7 @@ export const listActiveWithSellers = query({
         .query("receipts")
         .withIndex("by_sellerId", (q) => q.eq("sellerId", sellerId))
         .take(500);
-      const reputation = computeReputation(sold);
+      const reputation = computeReputation(sold, independentBuyers);
       sellers.set(id, {
         name: agent?.name ?? "Unknown agent",
         receiptsSold: reputation.sales,
@@ -305,6 +364,9 @@ export const listActiveWithSellers = query({
       outputSchema: o.outputSchema,
       estimatedDurationSeconds: o.estimatedDurationSeconds,
       previewDescription: o.previewDescription,
+      paidAttempts: offerDelivery.get(String(o._id))?.paidAttempts ?? 0,
+      deliveryRate: offerDelivery.get(String(o._id))?.deliveryRate ?? 1,
+      quality: qualityOf(o, offerDelivery),
       seller: (o.sellerId && sellers.get(String(o.sellerId))) || {
         name: o.sellerName ?? "Provider",
         receiptsSold: 0,
@@ -335,11 +397,15 @@ export const listForDiscovery = query({
     // list amountRaw "0" (price declared dynamically at the 402), and a manifest
     // can't honestly advertise those as free. They stay fully buyable via
     // /x402/:id and appear in the main market — just not in the priced showcase.
-    const ranked = await ctx.db
-      .query("offers")
-      .withIndex("by_rank", (q) => q.eq("isActive", true))
-      .order("desc")
-      .take(300 + ecoLimit * 6);
+    const { independentBuyers, offerDelivery } = await loadReceiptSignals(ctx);
+    const ranked = applyDeliveryCursor(
+      await ctx.db
+        .query("offers")
+        .withIndex("by_rank", (q) => q.eq("isActive", true))
+        .order("desc")
+        .take(300 + ecoLimit * 6),
+      offerDelivery,
+    );
     const hasKnownPrice = (o: Doc<"offers">) =>
       (o.amountRaw != null && o.amountRaw !== "0" && o.amountRaw !== "0.0") ||
       o.priceCents > 0;
@@ -373,7 +439,7 @@ export const listForDiscovery = query({
       sellers.set(id, {
         wallet: seller?.walletAddress ?? null,
         name: seller?.name ?? "Unknown agent",
-        reputation: computeReputation(sold),
+        reputation: computeReputation(sold, independentBuyers),
       });
     }
 
@@ -391,6 +457,9 @@ export const listForDiscovery = query({
         sellerWallet: s?.wallet ?? o.payTo ?? null,
         sellerName: s?.name ?? o.sellerName ?? "Provider",
         reputation: s?.reputation ?? emptyRep,
+        paidAttempts: offerDelivery.get(String(o._id))?.paidAttempts ?? 0,
+        deliveryRate: offerDelivery.get(String(o._id))?.deliveryRate ?? 1,
+        quality: qualityOf(o, offerDelivery),
         // Exact x402 payment terms (undefined for native → caller derives).
         amountRaw: o.amountRaw,
         asset: o.asset,
@@ -411,7 +480,7 @@ export const listBySeller = query({
         .query("offers")
         .filter((q) => q.eq(q.field("sellerId"), args.sellerId))
         .collect();
-      return rows.map(publicOffer);
+      return rows.map((o) => publicOffer(o));
     }
     const rows = await ctx.db
       .query("offers")
@@ -419,7 +488,9 @@ export const listBySeller = query({
         q.eq("sellerId", args.sellerId).eq("isActive", true),
       )
       .collect();
-    return rows.map(publicOffer);
+    // A seller's own listing page shows everything they sell, delivery cursor or
+    // not — hiding their broken offer from them would just hide the problem.
+    return rows.map((o) => publicOffer(o));
   },
 });
 
@@ -430,13 +501,16 @@ export const listByCategory = query({
   },
   handler: async (ctx, args): Promise<PublicOffer[]> => {
     const limit = Math.min(args.limit ?? 50, 200);
+    const { offerDelivery } = await loadReceiptSignals(ctx);
     const rows = await ctx.db
       .query("offers")
       .withIndex("by_category", (q) =>
         q.eq("category", args.category).eq("isActive", true),
       )
       .take(limit);
-    return rows.map(publicOffer);
+    return applyDeliveryCursor(rows, offerDelivery).map((o) =>
+      publicOffer(o, offerDelivery.get(String(o._id))),
+    );
   },
 });
 
@@ -449,6 +523,7 @@ export const search = query({
   },
   handler: async (ctx, args): Promise<PublicOffer[]> => {
     const limit = Math.min(args.limit ?? 50, 200);
+    const { offerDelivery } = await loadReceiptSignals(ctx);
     const rows = await ctx.db
       .query("offers")
       .withSearchIndex("search_offers", (q) => {
@@ -458,7 +533,9 @@ export const search = query({
         return s;
       })
       .take(limit);
-    return rows.map(publicOffer);
+    return applyDeliveryCursor(rows, offerDelivery).map((o) =>
+      publicOffer(o, offerDelivery.get(String(o._id))),
+    );
   },
 });
 
@@ -711,7 +788,7 @@ export const bumpRankOnSale = mutation({
       .query("receipts")
       .withIndex("by_sellerId", (q) => q.eq("sellerId", offer.sellerId!))
       .take(500);
-    const rep = computeReputation(sold);
+    const rep = computeReputation(sold, await loadIndependentBuyers(ctx));
     await ctx.db.patch(args.offerId, { rankScore: SOLD_BASE + rep.score });
   },
 });
@@ -780,6 +857,8 @@ export const backfillRank = mutation({
   args: { platformSecret: v.string(), cursor: v.optional(v.string()) },
   handler: async (ctx, args) => {
     requireSecret(args.platformSecret);
+    // Loaded once for the whole page — never per offer.
+    const independentBuyers = await loadIndependentBuyers(ctx);
     const page = await ctx.db
       .query("offers")
       .paginate({ numItems: 500, cursor: args.cursor ?? null });
@@ -794,7 +873,7 @@ export const backfillRank = mutation({
           .query("receipts")
           .withIndex("by_sellerId", (q) => q.eq("sellerId", o.sellerId!))
           .take(500);
-        const rep = computeReputation(sold);
+        const rep = computeReputation(sold, independentBuyers);
         if (rep.sales > 0) rank = SOLD_BASE + rep.score;
       }
       if (o.rankScore !== rank) {
