@@ -57,6 +57,15 @@ export interface Offer {
   outputSchema?: string;
   estimatedDurationSeconds?: number;
   previewDescription?: string;
+  /** Paid buys of this offer that we have a delivery outcome for. */
+  paidAttempts?: number;
+  /** Share of paid buys where the offer actually delivered (0–1). */
+  deliveryRate?: number;
+  /**
+   * Delivery track record. `broken` offers are hidden from discovery (they can
+   * still be fetched by id); `unreliable` ones are ranked last.
+   */
+  quality?: "unproven" | "ok" | "unreliable" | "broken";
   /** Seller name + receipt-derived trust (present on ranked browse results). */
   seller?: {
     name: string;
@@ -65,6 +74,8 @@ export interface Offer {
     reputation?: {
       sales: number;
       distinctBuyers: number;
+      /** Buyers that have also bought elsewhere — what the badge actually rides on. */
+      independentBuyers?: number;
       volumeCents: number;
       successRate: number;
       score: number;

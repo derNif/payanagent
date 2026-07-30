@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, QueryCtx } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
 
 // Receipts — the compounding atom of PayanAgent.
@@ -265,9 +265,17 @@ export function isEconomicSettlement(r: Doc<"receipts">): boolean {
 
 // Objective, wash-resistant reputation derived from a seller's receipts. Pure
 // helper so offer/discovery queries can reuse it without N extra queries.
-// Success rate is weighted by buyer DIVERSITY (one wallet can't manufacture
-// trust) and every fake buy costs real USDC. Transparent components only.
-export function computeReputation(sellerReceipts: Doc<"receipts">[]) {
+// Success rate is weighted by buyer diversity — but only INDEPENDENT buyers
+// count (see loadIndependentBuyers), because raw buyer count is trivially
+// forged by funding a ring of wallets. Transparent components only.
+//
+// `independentBuyerIds` is the platform-wide set of buyers that have proven
+// independence. Omit it and the function behaves exactly as before (raw count),
+// which keeps pure/legacy callers working.
+export function computeReputation(
+  sellerReceipts: Doc<"receipts">[],
+  independentBuyerIds?: Set<string>,
+) {
   const confirmed = sellerReceipts.filter(
     (r) => r.status === "confirmed" && isEconomicSettlement(r),
   );
@@ -276,6 +284,7 @@ export function computeReputation(sellerReceipts: Doc<"receipts">[]) {
     return {
       sales: 0,
       distinctBuyers: 0,
+      independentBuyers: 0,
       volumeCents: 0,
       volumeMicroUsd: 0,
       successRate: 1,
@@ -285,24 +294,159 @@ export function computeReputation(sellerReceipts: Doc<"receipts">[]) {
       firstSaleAt: null as number | null,
     };
   }
-  const distinctBuyers = new Set(confirmed.map((r) => String(r.buyerId))).size;
+  const buyerIds = new Set(confirmed.map((r) => String(r.buyerId)));
+  const distinctBuyers = buyerIds.size;
+  const independentBuyers = independentBuyerIds
+    ? [...buyerIds].filter((b) => independentBuyerIds.has(b)).length
+    : distinctBuyers;
   const volumeMicroUsd = confirmed.reduce((s, r) => s + receiptMicroUsd(r), 0);
   // Legacy receipts (delivered undefined, pre-feature) count as delivered.
   const deliveredOk = confirmed.filter((r) => r.delivered !== false).length;
   const successRate = deliveredOk / sales;
-  const confidence = Math.min(1, distinctBuyers / 5);
+  // Confidence and the badge ride on the independent count so a self-funded
+  // buyer ring adds volume but no trust.
+  const confidence = Math.min(1, independentBuyers / 5);
   return {
     sales,
     distinctBuyers,
+    independentBuyers,
     volumeCents: Math.round(volumeMicroUsd / 10000),
     volumeMicroUsd,
     successRate: Math.round(successRate * 100) / 100,
     score: Math.round(successRate * 100 * (0.5 + 0.5 * confidence)),
-    trusted: distinctBuyers >= 3 && successRate >= 0.9 && sales >= 5,
+    trusted: independentBuyers >= 3 && successRate >= 0.9 && sales >= 5,
     lastActiveAt: confirmed.reduce((m, r) => Math.max(m, r.emittedAt), 0),
     firstSaleAt: confirmed.reduce((m, r) => Math.min(m, r.emittedAt), confirmed[0].emittedAt),
   };
 }
+
+// --- receipt-graph signals (independence + per-offer delivery) ---
+
+// How far back the graph scans. One bounded read serves every batch caller.
+const SIGNAL_WINDOW = 3000;
+
+async function recentEconomicReceipts(ctx: QueryCtx): Promise<Doc<"receipts">[]> {
+  const recent = await ctx.db
+    .query("receipts")
+    .withIndex("by_emittedAt")
+    .order("desc")
+    .take(SIGNAL_WINDOW);
+  return recent.filter((r) => r.status === "confirmed" && isEconomicSettlement(r));
+}
+
+// A buyer is INDEPENDENT once it has settled with at least two distinct sellers.
+// Why: the cheapest attack on a receipt-derived badge is a seller funding a ring
+// of wallets that each buy from it once — the USDC returns to the attacker and
+// the facilitator pays the gas, so "distinct buyers" costs nothing to fake. A
+// wallet that has only ever paid one seller is indistinguishable from that
+// seller's own money, so it confers no trust. Spending at a second, unrelated
+// seller is the cheapest evidence of a buyer that exists for its own reasons.
+function independentBuyersFrom(receipts: Doc<"receipts">[]): Set<string> {
+  const sellersByBuyer = new Map<string, Set<string>>();
+  for (const r of receipts) {
+    const b = String(r.buyerId);
+    const set = sellersByBuyer.get(b) ?? new Set<string>();
+    set.add(String(r.sellerId));
+    sellersByBuyer.set(b, set);
+  }
+  const independent = new Set<string>();
+  for (const [buyer, sellers] of sellersByBuyer) {
+    if (sellers.size >= 2) independent.add(buyer);
+  }
+  return independent;
+}
+
+export async function loadIndependentBuyers(ctx: QueryCtx): Promise<Set<string>> {
+  return independentBuyersFrom(await recentEconomicReceipts(ctx));
+}
+
+export type OfferDelivery = {
+  paidAttempts: number;
+  delivered: number;
+  deliveryRate: number;
+  quality: "unproven" | "ok" | "unreliable" | "broken";
+};
+
+// Delivery track record for ONE offer. Payment settling says nothing about the
+// endpoint actually answering — an offer that took money N times and delivered
+// nothing is broken supply, not inventory.
+export function computeOfferDelivery(offerReceipts: Doc<"receipts">[]): OfferDelivery {
+  const paid = offerReceipts.filter(
+    (r) => r.status === "confirmed" && isEconomicSettlement(r),
+  );
+  // Legacy receipts (delivered undefined, pre-feature) count as delivered.
+  const delivered = paid.filter((r) => r.delivered !== false).length;
+  return classifyDelivery(paid.length, delivered);
+}
+
+function classifyDelivery(paidAttempts: number, delivered: number): OfferDelivery {
+  const deliveryRate = paidAttempts ? delivered / paidAttempts : 1;
+  // Thresholds are deliberately forgiving: we only act on evidence strong enough
+  // that a healthy offer wouldn't trip it by chance.
+  const quality: OfferDelivery["quality"] =
+    paidAttempts < 3
+      ? "unproven"
+      : delivered === 0
+        ? "broken"
+        : paidAttempts >= 4 && deliveryRate < 0.5
+          ? "unreliable"
+          : "ok";
+  return {
+    paidAttempts,
+    delivered,
+    deliveryRate: Math.round(deliveryRate * 100) / 100,
+    quality,
+  };
+}
+
+function offerDeliveryFrom(receipts: Doc<"receipts">[]): Map<string, OfferDelivery> {
+  const acc = new Map<string, { paid: number; delivered: number }>();
+  for (const r of receipts) {
+    if (!r.offerId) continue;
+    const k = String(r.offerId);
+    const cur = acc.get(k) ?? { paid: 0, delivered: 0 };
+    cur.paid += 1;
+    if (r.delivered !== false) cur.delivered += 1;
+    acc.set(k, cur);
+  }
+  const out = new Map<string, OfferDelivery>();
+  for (const [k, v] of acc) out.set(k, classifyDelivery(v.paid, v.delivered));
+  return out;
+}
+
+// Both receipt-graph signals from a SINGLE bounded scan. Batch handlers
+// (discovery/browse/search over many offers) must use this instead of querying
+// per seller or per offer, which would blow the query's read budget.
+export async function loadReceiptSignals(ctx: QueryCtx): Promise<{
+  independentBuyers: Set<string>;
+  offerDelivery: Map<string, OfferDelivery>;
+}> {
+  const receipts = await recentEconomicReceipts(ctx);
+  return {
+    independentBuyers: independentBuyersFrom(receipts),
+    offerDelivery: offerDeliveryFrom(receipts),
+  };
+}
+
+// Single-offer delivery stats (permalinks / direct fetch) — indexed read, so
+// it stays cheap even for offers with a long history.
+export async function loadOfferDelivery(
+  ctx: QueryCtx,
+  offerId: Id<"offers">,
+): Promise<OfferDelivery> {
+  const receipts = await ctx.db
+    .query("receipts")
+    .withIndex("by_offerId", (q) => q.eq("offerId", offerId))
+    .take(500);
+  return computeOfferDelivery(receipts);
+}
+
+export const getOfferDelivery = query({
+  args: { offerId: v.id("offers") },
+  handler: async (ctx, args): Promise<OfferDelivery> => {
+    return await loadOfferDelivery(ctx, args.offerId);
+  },
+});
 
 // Instantly-usable reputation for a seller so agents don't parse raw receipts.
 export const getReputation = query({
@@ -312,7 +456,7 @@ export const getReputation = query({
       .query("receipts")
       .withIndex("by_sellerId", (q) => q.eq("sellerId", args.agentId))
       .take(1000);
-    return computeReputation(sold);
+    return computeReputation(sold, await loadIndependentBuyers(ctx));
   },
 });
 
@@ -334,6 +478,10 @@ export const getLeaderboard = query({
     const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
     const last7d = sales.filter((r) => r.emittedAt >= weekAgo);
 
+    // Buyer independence, derived from the page of receipts we already hold —
+    // no second scan. Same rule as loadIndependentBuyers: >= 2 distinct sellers.
+    const independent = independentBuyersFrom(sales);
+
     // Aggregate per seller.
     type Acc = { sellerId: Id<"agents">; volumeMicroUsd: number; sales: number; buyers: Set<string>; delivered: number };
     const bySeller = new Map<string, Acc>();
@@ -349,16 +497,18 @@ export const getLeaderboard = query({
     const ranked = [...bySeller.values()]
       .map((s) => {
         const distinctBuyers = s.buyers.size;
+        const independentBuyers = [...s.buyers].filter((b) => independent.has(b)).length;
         const successRate = s.sales ? s.delivered / s.sales : 1;
-        const confidence = Math.min(1, distinctBuyers / 5);
+        const confidence = Math.min(1, independentBuyers / 5);
         return {
           sellerId: s.sellerId,
           volumeCents: Math.round(s.volumeMicroUsd / 10000),
           sales: s.sales,
           distinctBuyers,
+          independentBuyers,
           successRate: Math.round(successRate * 100) / 100,
           score: Math.round(successRate * 100 * (0.5 + 0.5 * confidence)),
-          trusted: distinctBuyers >= 3 && successRate >= 0.9 && s.sales >= 5,
+          trusted: independentBuyers >= 3 && successRate >= 0.9 && s.sales >= 5,
         };
       })
       .sort((a, b) => b.volumeCents - a.volumeCents)
