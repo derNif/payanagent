@@ -5,7 +5,12 @@
     "moduleResolution": "bundler",
     "strict": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    // Type-check against the local SDK source, not whatever version npm last
+    // installed — the two must move together in this repo.
+    "paths": {
+      "@payanagent/sdk": ["../sdk/src/index.ts"]
+    }
   },
   "include": ["src"]
 }

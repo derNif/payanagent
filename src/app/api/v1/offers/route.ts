@@ -6,6 +6,7 @@ import { toPublicOffer } from "@/lib/public-projections";
 import { cacheHeaders } from "@/lib/cache";
 import { createOfferSchema, validateBody } from "@/lib/validation";
 import { assertPublicHttpUrl } from "@/lib/ssrf";
+import { probeX402Resource } from "@/lib/external-verify";
 import { api } from "@convex/_generated/api";
 
 // GET /api/v1/offers — Public list/search.
@@ -102,8 +103,75 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  const convex = getConvexClient();
+
+  // Relay mode (issue #95): the seller's API is already x402-gated, so
+  // PayanAgent must NOT settle a second payment — buys are relayed to the
+  // resource's own 402 (relayExternalBuy). Registration verifies the challenge
+  // server-side and binds it to the caller: the resource's payTo must be the
+  // registering agent's wallet, which is also what makes claiming an
+  // already-ingested catalog URL legitimate.
+  if (data.externalUrl) {
+    if (!agent.walletAddress) {
+      return NextResponse.json(
+        { error: "Relay offers require the agent to have a walletAddress" },
+        { status: 400 },
+      );
+    }
+    let terms;
+    try {
+      terms = await probeX402Resource(data.externalUrl, data.httpMethod ?? "GET");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "verification failed";
+      return NextResponse.json(
+        { error: `externalUrl verification failed: ${message}` },
+        { status: 400 },
+      );
+    }
+    if (terms.payTo.toLowerCase() !== agent.walletAddress.toLowerCase()) {
+      return NextResponse.json(
+        {
+          error: `externalUrl pays ${terms.payTo}, but this agent's wallet is ${agent.walletAddress}. Register from the agent that owns the receiving wallet.`,
+        },
+        { status: 403 },
+      );
+    }
+    try {
+      const offerId = await convex.mutation(api.offers.registerExternal, {
+        platformSecret: PLATFORM_SECRET,
+        sellerId: agent._id,
+        externalUrl: data.externalUrl,
+        title: data.title,
+        description: data.description,
+        category: data.category,
+        tags: data.tags ?? [],
+        priceCents: Math.round(Number(terms.amountRaw) / 10000),
+        httpMethod: data.httpMethod,
+        inputSchema: data.inputSchema,
+        outputSchema: data.outputSchema,
+        estimatedDurationSeconds: data.estimatedDurationSeconds,
+        previewDescription: data.previewDescription,
+        payTo: terms.payTo,
+        asset: terms.asset,
+        network: terms.network,
+        amountRaw: terms.amountRaw,
+      });
+      return NextResponse.json(
+        {
+          offerId,
+          mode: "relay",
+          buyUrl: `/x402/${offerId}`,
+          verified: terms,
+        },
+        { status: 201 },
+      );
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Failed to register offer";
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+  }
+
   try {
-    const convex = getConvexClient();
     const offerId = await convex.mutation(api.offers.create, {
       platformSecret: PLATFORM_SECRET,
       sellerId: agent._id,
@@ -111,7 +179,9 @@ export async function POST(request: NextRequest) {
       description: data.description,
       category: data.category,
       tags: data.tags ?? [],
-      priceCents: data.priceCents,
+      // The externalUrl branch returned above, so priceCents is present here
+      // (enforced by createOfferSchema).
+      priceCents: data.priceCents!,
       offerType: data.offerType,
       endpoint: data.endpoint,
       httpMethod: data.httpMethod,

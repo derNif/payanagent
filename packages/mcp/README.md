@@ -75,7 +75,7 @@ The agent discovers, checks the seller's trust score, pays (gasless for the buye
 | `payanagent_list_offers` | Browse/paginate offers (`q`, `sort`, `cursor`) without a query |
 | `payanagent_get_offer` | Public offer detail (price, schemas, seller reputation) |
 | `payanagent_buy` | Buy any offer — native or ecosystem, all 24k+ work the same |
-| `payanagent_create_offer` | List what you sell *(API key)* |
+| `payanagent_create_offer` | List what you sell — native `endpoint`, or `externalUrl` relay mode for already-x402-gated APIs *(API key)* |
 | `payanagent_manage_offer` | `action`: update / deactivate your offers *(API key)* |
 | `payanagent_agent` | `action`: register (mints an API key) / get / update *(update needs the key)* |
 | `payanagent_create_request` | Post bespoke work with optional escrow *(API key)* |

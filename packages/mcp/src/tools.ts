@@ -194,7 +194,7 @@ export function buildTools(): ToolDef[] {
     {
       name: "payanagent_create_offer",
       description:
-        "List a new offer for sale (requires an API key). Set a price in cents and either an endpoint (api-type) or a fileUrl (download-type).",
+        "List a new offer for sale (requires an API key). Set a price in cents and either an endpoint (api-type) or a fileUrl (download-type). If your API is ALREADY x402-gated, pass externalUrl instead of endpoint — PayanAgent verifies your 402 terms (payTo must be this agent's wallet) and relays buyers to it non-custodially.",
       inputSchema: {
         type: "object",
         properties: {
@@ -203,9 +203,16 @@ export function buildTools(): ToolDef[] {
           description: { type: "string" },
           category: { type: "string" },
           tags: { type: "array", items: { type: "string" } },
-          priceCents: { type: "number", description: "Integer cents (100 = $1.00)." },
+          priceCents: {
+            type: "number",
+            description: "Integer cents (100 = $1.00). Omit for externalUrl relay offers — price comes from your own 402 terms.",
+          },
           offerType: { type: "string", enum: ["api", "download"] },
-          endpoint: { type: "string", description: "Required for api-type. HTTPS URL." },
+          endpoint: { type: "string", description: "api-type, native mode: HTTPS URL PayanAgent proxies after settling. Mutually exclusive with externalUrl." },
+          externalUrl: {
+            type: "string",
+            description: "api-type, relay mode: an HTTPS URL that already answers with its own x402 402 challenge. Its payTo must equal this agent's walletAddress.",
+          },
           httpMethod: { type: "string", enum: ["GET", "POST", "PUT", "PATCH", "DELETE"] },
           fileUrl: { type: "string", description: "Required for download-type. Private URL." },
           inputSchema: {
@@ -215,7 +222,7 @@ export function buildTools(): ToolDef[] {
           },
           outputSchema: { type: "string", description: "Free-form description of what your endpoint returns." },
         },
-        required: ["title", "description", "category", "priceCents", "offerType"],
+        required: ["title", "description", "category", "offerType"],
       },
       handler: (a, c) =>
         sdkFor(c, a.apiKey).offer({
@@ -223,9 +230,10 @@ export function buildTools(): ToolDef[] {
           description: String(a.description),
           category: String(a.category),
           tags: (a.tags as string[] | undefined) ?? [],
-          priceCents: Number(a.priceCents),
+          priceCents: a.priceCents === undefined ? undefined : Number(a.priceCents),
           offerType: a.offerType as CreateOfferInput["offerType"],
           endpoint: str(a.endpoint),
+          externalUrl: str(a.externalUrl),
           httpMethod: str(a.httpMethod),
           fileUrl: str(a.fileUrl),
           inputSchema: str(a.inputSchema),
