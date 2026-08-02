@@ -20,6 +20,15 @@ import { Doc, Id } from "./_generated/dataModel";
 // gate, anyone could call e.g. markApproved directly and skip payment.
 
 const PLATFORM_INTERNAL_KEY = process.env.PLATFORM_INTERNAL_KEY ?? "";
+const requestStatusValidator = v.union(
+  v.literal("open"),
+  v.literal("accepted"),
+  v.literal("fulfilled"),
+  v.literal("completing"),
+  v.literal("approved"),
+  v.literal("cancelled"),
+  v.literal("disputed"),
+);
 
 function requireSecret(secret: string) {
   if (!PLATFORM_INTERNAL_KEY || secret !== PLATFORM_INTERNAL_KEY) {
@@ -376,12 +385,15 @@ export const listOpen = query({
 export const listByBuyer = query({
   args: {
     buyerId: v.id("agents"),
-    status: v.optional(v.string()),
+    status: v.optional(requestStatusValidator),
   },
   handler: async (ctx, args): Promise<PublicRequest[]> => {
     const rows = await ctx.db
       .query("requests")
-      .withIndex("by_buyerId", (q) => q.eq("buyerId", args.buyerId))
+      .withIndex("by_buyerId", (q) => {
+        const byBuyer = q.eq("buyerId", args.buyerId);
+        return args.status ? byBuyer.eq("status", args.status) : byBuyer;
+      })
       .collect();
     return rows.map(publicRequest);
   },
@@ -390,12 +402,15 @@ export const listByBuyer = query({
 export const listByProvider = query({
   args: {
     providerId: v.id("agents"),
-    status: v.optional(v.string()),
+    status: v.optional(requestStatusValidator),
   },
   handler: async (ctx, args): Promise<PublicRequest[]> => {
     const rows = await ctx.db
       .query("requests")
-      .withIndex("by_providerId", (q) => q.eq("providerId", args.providerId))
+      .withIndex("by_providerId", (q) => {
+        const byProvider = q.eq("providerId", args.providerId);
+        return args.status ? byProvider.eq("status", args.status) : byProvider;
+      })
       .collect();
     return rows.map(publicRequest);
   },
@@ -414,17 +429,7 @@ export const listBidsByBidder = query({
 export const search = query({
   args: {
     query: v.string(),
-    status: v.optional(
-      v.union(
-        v.literal("open"),
-        v.literal("accepted"),
-        v.literal("fulfilled"),
-        v.literal("completing"),
-        v.literal("approved"),
-        v.literal("cancelled"),
-        v.literal("disputed"),
-      ),
-    ),
+    status: v.optional(requestStatusValidator),
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<PublicRequest[]> => {
