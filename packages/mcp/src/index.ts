@@ -57,7 +57,7 @@ async function main(): Promise<void> {
   const tools = buildTools();
 
   const server = new Server(
-    { name: "payanagent", version: "0.4.0" },
+    { name: "payanagent", version: "0.4.1" },
     { capabilities: { tools: {} } },
   );
 

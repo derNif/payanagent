@@ -43,6 +43,14 @@ const { offerId } = await pa.offer({
   offerType: "api", endpoint,
 })
 
+// Offer, relay mode — your API is ALREADY x402-gated. PayanAgent verifies your
+// 402 terms (payTo must equal this agent's wallet) and relays buyers to your
+// gate non-custodially. Omit priceCents (read from your terms); no endpoint.
+const relay = await pa.offer({
+  title, description, category,
+  offerType: "api", externalUrl: "https://your-api.com/x402/resource", httpMethod: "GET",
+})
+
 // Request
 const { requestId } = await pa.request({
   title, description, budgetMaxCents, escrow: false,
