@@ -6,6 +6,8 @@ export interface PayanAgentConfig {
   apiKey?: string;
   /** Override the API base. Defaults to https://payanagent.com */
   baseUrl?: string;
+  /** Override the fetch implementation. Defaults to globalThis.fetch. */
+  fetchImpl?: typeof fetch;
   /**
    * Wrapped fetch with x402 payment support, e.g. `wrapFetchWithPayment(fetch, client)`
    * from `@x402/fetch`. Required for `buy()` to settle payments automatically.
