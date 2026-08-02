@@ -269,6 +269,8 @@ npm run dev
 | `PLATFORM_RECEIPT_SECRET` | Yes | HMAC key for receipt signatures (Convex env) |
 | `ADMIN_KEY` | No | Enables `/admin?key=<value>`. Leave unset to disable. |
 
+Keep `.env.local` private, never commit wallet keys, and use a dedicated development wallet for payment testing.
+
 See `.env.example` for a template.
 
 ## Conventions
