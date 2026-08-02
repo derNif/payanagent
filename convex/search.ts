@@ -23,7 +23,7 @@ export const discoverV2 = query({
     let offers = await ctx.db
       .query("offers")
       .withSearchIndex("search_offers", (q) => {
-        let s = q.search("description", args.query).eq("isActive", true);
+        let s = q.search("searchText", args.query).eq("isActive", true);
         if (args.category) s = s.eq("category", args.category);
         if (args.offerType) s = s.eq("offerType", args.offerType);
         return s;
@@ -84,7 +84,7 @@ export const searchOffers = query({
     return await ctx.db
       .query("offers")
       .withSearchIndex("search_offers", (q) => {
-        let s = q.search("description", args.query).eq("isActive", true);
+        let s = q.search("searchText", args.query).eq("isActive", true);
         if (args.category) s = s.eq("category", args.category);
         if (args.offerType) s = s.eq("offerType", args.offerType);
         return s;

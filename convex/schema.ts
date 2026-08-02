@@ -104,6 +104,12 @@ export default defineSchema({
     sourceLastUpdated: v.optional(v.string()),
     lastSeenAt: v.optional(v.number()),
 
+    // Denormalized "title description tags" blob — Convex search indexes exactly
+    // one field, and indexing only `description` made exact-title queries miss
+    // (issue #96). Maintained on every create/update/ingest; backfilled by
+    // offers.backfillSearchText.
+    searchText: v.optional(v.string()),
+
     // Default browse ranking. Native offers get a boost; proxied offers use the
     // source quality score; bumped by reputation on sale. Indexed so the market
     // can paginate in ranked order instead of by raw recency.
@@ -121,7 +127,7 @@ export default defineSchema({
     .index("by_active", ["isActive"])
     .index("by_price", ["isActive", "priceCents"])
     .searchIndex("search_offers", {
-      searchField: "description",
+      searchField: "searchText",
       filterFields: ["category", "isActive", "offerType"],
     }),
 

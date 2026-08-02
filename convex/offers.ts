@@ -29,12 +29,18 @@ async function bumpCounter(ctx: MutationCtx, key: string, delta: number) {
 
 const PLATFORM_INTERNAL_KEY = process.env.PLATFORM_INTERNAL_KEY ?? "";
 
+// The one field `search_offers` indexes (Convex search indexes a single field).
+// Must be recomputed whenever title/description/tags change.
+function searchTextOf(f: { title: string; description: string; tags: string[] }): string {
+  return [f.title, f.description, f.tags.join(" ")].join(" ");
+}
+
 // Any exported query is reachable unauthenticated via the public Convex URL, so
 // public reads must never return the seller's raw `endpoint` (may embed creds),
 // the paid `fileUrl` deliverable, or the operator-private `internalHandler`.
 export type PublicOffer = Omit<
   Doc<"offers">,
-  "endpoint" | "fileUrl" | "internalHandler" | "externalUrl" | "source"
+  "endpoint" | "fileUrl" | "internalHandler" | "externalUrl" | "source" | "searchText"
 > &
   // Delivery track record, when we've computed it for this read. Buyers get to
   // judge the supply themselves instead of trusting our filter.
@@ -43,12 +49,13 @@ export type PublicOffer = Omit<
 // proxied external offer is indistinguishable from a native one to customers —
 // to a buyer it's just an offer (we're the intermediary; that's our business).
 function publicOffer(o: Doc<"offers">, delivery?: OfferDelivery): PublicOffer {
-  const { endpoint, fileUrl, internalHandler, externalUrl, source, ...rest } = o;
+  const { endpoint, fileUrl, internalHandler, externalUrl, source, searchText, ...rest } = o;
   void endpoint;
   void fileUrl;
   void internalHandler;
   void externalUrl;
   void source;
+  void searchText;
   if (!delivery) return rest;
   return {
     ...rest,
@@ -190,6 +197,7 @@ export const create = mutation({
     }
     const id = await ctx.db.insert("offers", {
       ...fields,
+      searchText: searchTextOf(fields),
       source: "native",
       rankScore: NATIVE_RANK,
       isActive: true,
@@ -222,7 +230,12 @@ export const update = mutation({
     requireSecret(platformSecret);
     const offer = await ctx.db.get(offerId);
     if (!offer) throw new Error("Offer not found");
-    await ctx.db.patch(offerId, patch);
+    const searchable =
+      patch.title !== undefined || patch.description !== undefined || patch.tags !== undefined;
+    await ctx.db.patch(
+      offerId,
+      searchable ? { ...patch, searchText: searchTextOf({ ...offer, ...patch }) } : patch,
+    );
   },
 });
 
@@ -527,7 +540,7 @@ export const search = query({
     const rows = await ctx.db
       .query("offers")
       .withSearchIndex("search_offers", (q) => {
-        let s = q.search("description", args.query).eq("isActive", true);
+        let s = q.search("searchText", args.query).eq("isActive", true);
         if (args.category) s = s.eq("category", args.category);
         if (args.offerType) s = s.eq("offerType", args.offerType);
         return s;
@@ -582,7 +595,7 @@ export const searchPage = query({
     const rows = await ctx.db
       .query("offers")
       .withSearchIndex("search_offers", (q) =>
-        q.search("description", args.query).eq("isActive", true),
+        q.search("searchText", args.query).eq("isActive", true),
       )
       .take(limit);
     return enrichOffers(ctx, rows);
@@ -651,7 +664,9 @@ export const upsertExternalBulk = mutation({
           (existing.outputSchema ?? null) === (f.outputSchema ?? null) &&
           (existing.qualityScore ?? null) === (f.qualityScore ?? null) &&
           (existing.sellerName ?? null) === (f.sellerName ?? null) &&
-          JSON.stringify(existing.tags) === JSON.stringify(f.tags);
+          JSON.stringify(existing.tags) === JSON.stringify(f.tags) &&
+          // Rows the backfill hasn't reached yet self-heal on the next refresh.
+          existing.searchText !== undefined;
         if (same) {
           unchanged++;
           continue;
@@ -659,6 +674,7 @@ export const upsertExternalBulk = mutation({
         const wasInactive = !existing.isActive;
         await ctx.db.patch(existing._id, {
           ...f,
+          searchText: searchTextOf(f),
           source: "bazaar",
           offerType: "api" as const,
           // Preserve the "sold" rank tier; otherwise rank by source quality.
@@ -674,6 +690,7 @@ export const upsertExternalBulk = mutation({
       } else {
         await ctx.db.insert("offers", {
           ...f,
+          searchText: searchTextOf(f),
           source: "bazaar",
           offerType: "api" as const,
           rankScore: f.qualityScore ?? 0,
@@ -712,6 +729,36 @@ export const sweepStaleExternal = mutation({
     }
     if (swept > 0) await bumpCounter(ctx, "activeOffers", -swept);
     return { swept };
+  },
+});
+
+// One-shot migration for issue #96: stamp searchText on rows created before the
+// field existed. Batched — call repeatedly with the returned continueCursor
+// until isDone. Rows already stamped are skipped, so re-runs are free.
+export const backfillSearchText = mutation({
+  args: {
+    platformSecret: v.string(),
+    cursor: v.optional(v.string()),
+    numItems: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    requireSecret(args.platformSecret);
+    const page = await ctx.db.query("offers").paginate({
+      numItems: Math.min(args.numItems ?? 500, 1000),
+      cursor: args.cursor ?? null,
+    });
+    let patched = 0;
+    for (const o of page.page) {
+      if (o.searchText !== undefined) continue;
+      await ctx.db.patch(o._id, { searchText: searchTextOf(o) });
+      patched++;
+    }
+    return {
+      patched,
+      scanned: page.page.length,
+      isDone: page.isDone,
+      continueCursor: page.continueCursor,
+    };
   },
 });
 
