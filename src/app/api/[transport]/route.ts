@@ -64,7 +64,7 @@ const handler = createMcpHandler(
       }
     });
   },
-  { serverInfo: { name: "payanagent", version: "0.4.0" } },
+  { serverInfo: { name: "payanagent", version: "0.4.1" } },
   { basePath: "/api", maxDuration: 60, verboseLogs: false },
 );
 

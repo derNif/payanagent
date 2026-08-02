@@ -20,7 +20,8 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "@convex/*": ["./convex/*"]
+      "@convex/*": ["./convex/*"],
+      "@payanagent/sdk": ["./packages/sdk/src/index.ts"]
     }
   },
   "include": [

@@ -35,9 +35,15 @@ export const createOfferSchema = z.object({
   description: z.string().min(1).max(2000),
   category: z.string().min(1).max(100),
   tags: tags.optional(),
-  priceCents: z.number().int().min(1).max(10_000_000),
+  // Optional only for relay offers — their price is read from the resource's
+  // own verified 402 terms, never from the request.
+  priceCents: z.number().int().min(1).max(10_000_000).optional(),
   offerType: z.enum(["api", "download"]),
   endpoint: z.string().url().optional(),
+  // Relay mode: an API that is ALREADY x402-gated. PayanAgent verifies the 402
+  // challenge server-side and relays buyers to it non-custodially instead of
+  // settling + proxying like `endpoint` does.
+  externalUrl: z.string().url().optional(),
   httpMethod: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]).optional(),
   inputSchema: z.string().optional(),
   outputSchema: z.string().optional(),
@@ -46,8 +52,28 @@ export const createOfferSchema = z.object({
   previewDescription: z.string().max(1000).optional(),
 })
   .refine(
-    (data) => data.offerType !== "api" || !!data.endpoint,
-    { message: "API offers require an endpoint URL", path: ["endpoint"] },
+    (data) => data.offerType !== "api" || !!data.endpoint || !!data.externalUrl,
+    {
+      message:
+        "API offers require an endpoint URL (PayanAgent settles + proxies) or an externalUrl (already x402-gated; relayed)",
+      path: ["endpoint"],
+    },
+  )
+  .refine(
+    (data) => !(data.endpoint && data.externalUrl),
+    { message: "Provide endpoint or externalUrl, not both", path: ["externalUrl"] },
+  )
+  .refine(
+    (data) => data.offerType === "api" || !data.externalUrl,
+    { message: "externalUrl is only valid for API offers", path: ["externalUrl"] },
+  )
+  .refine(
+    (data) => !!data.externalUrl || data.priceCents !== undefined,
+    {
+      message:
+        "priceCents is required (relay offers with externalUrl derive price from the verified 402 terms instead)",
+      path: ["priceCents"],
+    },
   )
   .refine(
     (data) => data.offerType !== "download" || !!data.fileUrl,

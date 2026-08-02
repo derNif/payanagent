@@ -207,6 +207,73 @@ export const create = mutation({
   },
 });
 
+// Seller-registered RELAY offer (issue #95): the resource is already x402-gated
+// elsewhere, so buys relay its own 402 instead of PayanAgent settling. The API
+// route has already verified the live 402 challenge and that its payTo is the
+// seller's wallet — that proof of ownership is also why re-registering an URL
+// the bazaar ingest already carries CLAIMS it (sellerId + metadata + terms are
+// taken over; receipts history stays). Idempotent: re-POSTing the same URL
+// re-probes and refreshes the stored terms.
+export const registerExternal = mutation({
+  args: {
+    platformSecret: v.string(),
+    sellerId: v.id("agents"),
+    externalUrl: v.string(),
+    title: v.string(),
+    description: v.string(),
+    category: v.string(),
+    tags: v.array(v.string()),
+    priceCents: v.number(),
+    httpMethod: v.optional(v.string()),
+    inputSchema: v.optional(v.string()),
+    outputSchema: v.optional(v.string()),
+    estimatedDurationSeconds: v.optional(v.number()),
+    previewDescription: v.optional(v.string()),
+    payTo: v.string(),
+    asset: v.string(),
+    network: v.string(),
+    amountRaw: v.string(),
+  },
+  handler: async (ctx, args): Promise<Id<"offers">> => {
+    const { platformSecret, ...fields } = args;
+    requireSecret(platformSecret);
+    const existing = await ctx.db
+      .query("offers")
+      .withIndex("by_externalUrl", (q) => q.eq("externalUrl", fields.externalUrl))
+      .first();
+    if (existing) {
+      if (existing.sellerId && existing.sellerId !== fields.sellerId) {
+        throw new Error("This externalUrl is already registered to another seller");
+      }
+      const wasInactive = !existing.isActive;
+      await ctx.db.patch(existing._id, {
+        ...fields,
+        searchText: searchTextOf(fields),
+        source: "seller",
+        offerType: "api" as const,
+        // Preserve the "sold" rank tier; otherwise rank like native supply.
+        rankScore:
+          existing.rankScore != null && existing.rankScore >= SOLD_BASE
+            ? existing.rankScore
+            : NATIVE_RANK,
+        isActive: true,
+      });
+      if (wasInactive) await bumpCounter(ctx, "activeOffers", 1);
+      return existing._id;
+    }
+    const id = await ctx.db.insert("offers", {
+      ...fields,
+      searchText: searchTextOf(fields),
+      source: "seller",
+      offerType: "api" as const,
+      rankScore: NATIVE_RANK,
+      isActive: true,
+    });
+    await bumpCounter(ctx, "activeOffers", 1);
+    return id;
+  },
+});
+
 export const update = mutation({
   args: {
     platformSecret: v.string(),
@@ -648,6 +715,13 @@ export const upsertExternalBulk = mutation({
         .withIndex("by_externalUrl", (q) => q.eq("externalUrl", f.externalUrl))
         .first();
       if (existing) {
+        // Seller-claimed relay offers are owned by their seller — the daily
+        // bazaar refresh must never stomp their metadata or reclaim them.
+        // (sweepStaleExternal only targets source "bazaar", so no sweep risk.)
+        if (existing.source === "seller") {
+          unchanged++;
+          continue;
+        }
         // Skip the write entirely when nothing meaningful changed — the daily
         // refresh otherwise re-patches all ~24.8k rows for no reason.
         const same =

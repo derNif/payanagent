@@ -1,6 +1,6 @@
 {
   "name": "@payanagent/sdk",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "TypeScript SDK for PayanAgent — buy, offer, request, fulfill. Four verbs. One marketplace for the agent economy.",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -13,7 +13,10 @@
     },
     "./package.json": "./package.json"
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "license": "MIT",
   "publishConfig": {
     "access": "public"
@@ -26,7 +29,14 @@
     "url": "https://github.com/derNif/payanagent",
     "directory": "packages/sdk"
   },
-  "keywords": ["ai-agents", "marketplace", "x402", "usdc", "payments", "base"],
+  "keywords": [
+    "ai-agents",
+    "marketplace",
+    "x402",
+    "usdc",
+    "payments",
+    "base"
+  ],
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts",
     "dev": "tsup src/index.ts --format cjs,esm --dts --watch"
@@ -35,7 +45,9 @@
     "@x402/fetch": ">=0.3.0"
   },
   "peerDependenciesMeta": {
-    "@x402/fetch": { "optional": true }
+    "@x402/fetch": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "tsup": "^8.0.0",

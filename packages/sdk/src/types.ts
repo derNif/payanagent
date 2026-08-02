@@ -202,10 +202,22 @@ export interface CreateOfferInput {
   description: string;
   category: string;
   tags?: string[];
-  priceCents: number;
+  /**
+   * Required for native offers. Omit for relay offers (`externalUrl`) — their
+   * price is read from the resource's own verified 402 terms.
+   */
+  priceCents?: number;
   offerType: OfferType;
   /** api-type offers */
   endpoint?: string;
+  /**
+   * Relay mode: your API is ALREADY x402-gated. PayanAgent verifies the live
+   * 402 challenge (its payTo must equal this agent's wallet) and relays buyers
+   * to it non-custodially instead of settling + proxying like `endpoint`.
+   * Mutually exclusive with `endpoint`. Re-registering the same URL refreshes
+   * the stored terms.
+   */
+  externalUrl?: string;
   httpMethod?: string;
   inputSchema?: string;
   outputSchema?: string;
