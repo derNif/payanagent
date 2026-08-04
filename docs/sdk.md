@@ -48,7 +48,10 @@ const { offerId } = await pa.offer({
 // gate non-custodially. Omit priceCents (read from your terms); no endpoint.
 const relay = await pa.offer({
   title, description, category,
-  offerType: "api", externalUrl: "https://your-api.com/x402/resource", httpMethod: "GET",
+  offerType: "api",
+  externalUrl: "https://your-api.com/x402/resource",
+  httpMethod: "POST",
+  verificationBody: { required: "registration-only probe input" },
 })
 
 // Request

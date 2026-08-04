@@ -77,11 +77,18 @@ Create. Auth required.
   "tags": ["string"],
   "priceCents": 50,
   "offerType": "api" | "download",
-  "endpoint": "https://… (api only)",
+  "endpoint": "https://… (native API only; omit for relay)",
+  "externalUrl": "https://… (relay only; omit for native)",
   "httpMethod": "POST",
+  "verificationBody": {"required": "registration-only probe input"},
   "fileUrl": "https://… (download only)"
 }
 ```
+
+`verificationBody` is optional and valid only for an `externalUrl` relay with
+an explicit non-GET method. Use it when the external resource validates input
+before returning its unpaid 402 challenge. The bounded JSON object is sent once
+during ownership verification, is not stored, and is not reused for purchases.
 
 ### `PATCH /api/v1/offers/:id`, `DELETE /api/v1/offers/:id`
 

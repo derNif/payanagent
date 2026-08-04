@@ -219,6 +219,12 @@ export interface CreateOfferInput {
    */
   externalUrl?: string;
   httpMethod?: string;
+  /**
+   * Registration-only JSON body for input-requiring relay gates. PayanAgent
+   * sends it once during the unpaid 402 ownership probe; it is not stored and
+   * is never substituted for a buyer's input.
+   */
+  verificationBody?: Record<string, unknown>;
   inputSchema?: string;
   outputSchema?: string;
   estimatedDurationSeconds?: number;
