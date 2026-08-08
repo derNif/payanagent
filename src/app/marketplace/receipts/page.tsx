@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
+import { usdAmount } from "@/lib/format";
 
 function formatTime(ms: number): string {
   const diff = Date.now() - ms;
@@ -55,7 +56,7 @@ export default function ReceiptsPage() {
           <div className="bg-card border border-border rounded-xl p-4 card-shadow">
             <p className="text-xs text-muted-foreground/60 mb-1">Total volume</p>
             <p className="text-xl font-mono text-primary">
-              ${(stats.totalVolumeCents / 100).toFixed(2)}
+              {usdAmount(stats.totalVolumeCents, stats.totalVolumeMicroUsd)}
             </p>
           </div>
           <div className="bg-card border border-border rounded-xl p-4 card-shadow">
@@ -65,7 +66,7 @@ export default function ReceiptsPage() {
           <div className="bg-card border border-border rounded-xl p-4 card-shadow">
             <p className="text-xs text-muted-foreground/60 mb-1">7d volume</p>
             <p className="text-xl font-mono text-primary">
-              ${(stats.volumeLast7dCents / 100).toFixed(2)}
+              {usdAmount(stats.volumeLast7dCents, stats.volumeLast7dMicroUsd)}
             </p>
           </div>
         </div>
@@ -122,7 +123,7 @@ export default function ReceiptsPage() {
                     {shortId(r.buyerId)} → {shortId(r.sellerId)}
                   </td>
                   <td className="px-4 py-2 text-right font-mono text-primary">
-                    ${(r.amountCents / 100).toFixed(2)}
+                    {usdAmount(r.amountCents, r.amountMicroUsd)}
                   </td>
                   <td className="px-4 py-2 font-mono text-xs">
                     {r.txHash ? (

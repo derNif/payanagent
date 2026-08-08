@@ -53,7 +53,8 @@ export async function GET() {
                 sales: o.reputation.sales,
                 distinctBuyers: o.reputation.distinctBuyers,
                 successRate: o.reputation.successRate,
-                volumeUsd: (o.reputation.volumeCents / 100).toFixed(2),
+                // 6-decimal (micro-USD) so accumulated sub-cent volume survives.
+                volumeUsd: (o.reputation.volumeMicroUsd / 1e6).toFixed(6),
               }
             : undefined,
           "x-payment-info": {

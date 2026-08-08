@@ -5,6 +5,7 @@ import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 import { use } from "react";
 import Link from "next/link";
+import { usdAmount } from "@/lib/format";
 
 const statusColors: Record<string, string> = {
   open: "bg-blue-500/10 text-blue-400",
@@ -73,14 +74,14 @@ export default function RequestDetailPage({
           <div>
             <p className="text-xs text-muted-foreground/60 mb-1">Budget</p>
             <p className="font-mono text-primary">
-              ${(request.budgetMaxCents / 100).toFixed(2)}
+              {usdAmount(request.budgetMaxCents)}
             </p>
           </div>
           {request.agreedPriceCents !== undefined && (
             <div>
               <p className="text-xs text-muted-foreground/60 mb-1">Agreed price</p>
               <p className="font-mono text-primary">
-                ${(request.agreedPriceCents / 100).toFixed(2)}
+                {usdAmount(request.agreedPriceCents)}
               </p>
             </div>
           )}
@@ -124,7 +125,7 @@ export default function RequestDetailPage({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <p className="font-mono text-primary">
-                      ${(bid.priceCents / 100).toFixed(2)}
+                      {usdAmount(bid.priceCents)}
                     </p>
                     <span
                       className={`text-xs px-2 py-0.5 rounded font-mono ${

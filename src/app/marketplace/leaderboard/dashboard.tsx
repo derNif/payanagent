@@ -9,16 +9,6 @@ import { usdAmount } from "@/lib/format";
 import { Sparkline } from "@/components/dither-kit/sparkline";
 import { DitherAvatar } from "@/components/dither-kit/avatar";
 
-function usd(cents: number): string {
-  return (
-    "$" +
-    (cents / 100).toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })
-  );
-}
-
 function ago(ms: number): string {
   const d = Date.now() - ms;
   if (d < 60_000) return `${Math.max(1, Math.floor(d / 1000))}s`;
@@ -63,7 +53,7 @@ export function LeaderboardDashboard() {
 
   // Running total of the last 14 days — the shape of "settled by agents".
   const settledTrend = trends
-    ? trends.volumeCents.reduce<number[]>((acc, v) => {
+    ? (trends.volumeMicroUsd ?? trends.volumeCents).reduce<number[]>((acc, v) => {
         acc.push((acc[acc.length - 1] ?? 0) + v);
         return acc;
       }, [])
@@ -83,7 +73,7 @@ export function LeaderboardDashboard() {
           </div>
           <div className="flex items-end gap-3">
             <span className="text-5xl sm:text-6xl font-mono font-bold text-gradient leading-none">
-              {usd(stats.totalVolumeCents)}
+              {usdAmount(stats.totalVolumeCents, stats.totalVolumeMicroUsd)}
             </span>
             <span className="text-primary text-2xl mb-1">▲</span>
           </div>
@@ -105,7 +95,7 @@ export function LeaderboardDashboard() {
           </div>
         )}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 sm:gap-7 shrink-0">
-          <Stat label="Settled 7d" value={usd(stats.volume7dCents)} sub={`${stats.receipts7d} receipts`} />
+          <Stat label="Settled 7d" value={usdAmount(stats.volume7dCents, stats.volume7dMicroUsd)} sub={`${stats.receipts7d} receipts`} />
           <Stat label="Receipts" value={String(stats.totalReceipts)} sub="all-time" />
           <Stat label="Sellers" value={String(stats.distinctSellers)} />
           <Stat label="Buyers" value={String(stats.distinctBuyers)} />
@@ -129,7 +119,7 @@ export function LeaderboardDashboard() {
                   {top.name}
                   {top.trusted && <VerifiedBadge size={17} />}
                 </Link>
-                <span className="text-2xl font-mono text-gradient">{usd(top.volumeCents)}</span>
+                <span className="text-2xl font-mono text-gradient">{usdAmount(top.volumeCents, top.volumeMicroUsd)}</span>
               </div>
               <div className="mt-2 flex gap-4 text-xs font-mono text-muted-foreground/70">
                 <span>trust score {top.score}</span>
@@ -195,7 +185,7 @@ export function LeaderboardDashboard() {
                           <td className="px-4 py-2.5 text-right font-mono text-foreground/90">{s.score}</td>
                           <td className="px-4 py-2.5 text-right font-mono text-muted-foreground">{Math.round(s.successRate * 100)}%</td>
                           <td className="px-4 py-2.5 text-right font-mono text-muted-foreground">{s.distinctBuyers}</td>
-                          <td className="px-4 py-2.5 text-right font-mono text-primary">{usd(s.volumeCents)}</td>
+                          <td className="px-4 py-2.5 text-right font-mono text-primary">{usdAmount(s.volumeCents, s.volumeMicroUsd)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -228,7 +218,7 @@ export function LeaderboardDashboard() {
                           </Link>
                         </td>
                         <td className="px-4 py-2.5 text-right font-mono text-muted-foreground">{b.buys}</td>
-                        <td className="px-4 py-2.5 text-right font-mono text-foreground/90">{usd(b.spentCents)}</td>
+                        <td className="px-4 py-2.5 text-right font-mono text-foreground/90">{usdAmount(b.spentCents, b.spentMicroUsd)}</td>
                       </tr>
                     ))}
                   </tbody>

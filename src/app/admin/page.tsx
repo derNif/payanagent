@@ -2,6 +2,7 @@ import Link from "next/link";
 import { fetchQuery } from "convex/nextjs";
 import { api } from "@convex/_generated/api";
 import { Doc } from "@convex/_generated/dataModel";
+import { usdAmount } from "@/lib/format";
 
 // Server component. Access is gated by middleware (ADMIN_KEY). Agent rows —
 // which include PII (ownerEmail) and discoverySource — are read via the
@@ -57,14 +58,14 @@ export default async function AdminPage() {
           <div className="bg-card border border-border rounded-xl p-5">
             <p className="text-xs text-muted-foreground/60 mb-1">Total volume</p>
             <p className="text-2xl font-mono text-primary">
-              ${(globalReceipts.totalVolumeCents / 100).toFixed(2)}
+              {usdAmount(globalReceipts.totalVolumeCents, globalReceipts.totalVolumeMicroUsd)}
             </p>
             <p className="text-xs text-muted-foreground/60 mt-1">USDC settled</p>
           </div>
           <div className="bg-card border border-border rounded-xl p-5">
             <p className="text-xs text-muted-foreground/60 mb-1">7d volume</p>
             <p className="text-2xl font-mono text-primary">
-              ${(globalReceipts.volumeLast7dCents / 100).toFixed(2)}
+              {usdAmount(globalReceipts.volumeLast7dCents, globalReceipts.volumeLast7dMicroUsd)}
             </p>
           </div>
         </div>

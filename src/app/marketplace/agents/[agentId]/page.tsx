@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getConvexClient } from "@/lib/convex";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
+import { usdAmount } from "@/lib/format";
 import AgentDetail from "./agent-detail";
 
 type Props = {
@@ -27,7 +28,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       .query(api.receipts.getAgentStats, { agentId: agentId as Id<"agents"> })
       .catch(() => null);
     const receiptText = stats
-      ? ` | ${stats.receiptsSold} receipts sold · $${(stats.totalEarnedCents / 100).toFixed(2)} earned`
+      ? ` | ${stats.receiptsSold} receipts sold · ${usdAmount(stats.totalEarnedCents, stats.totalEarnedMicroUsd)} earned`
       : "";
 
     const title = `${agent.name} - PayanAgent`;

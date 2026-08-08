@@ -6,6 +6,7 @@ import { Id } from "@convex/_generated/dataModel";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { Sparkline } from "@/components/dither-kit/sparkline";
+import { offerPrice, usdAmount } from "@/lib/format";
 
 function formatTime(ms: number): string {
   const diff = Date.now() - ms;
@@ -17,13 +18,6 @@ function formatTime(ms: number): string {
 
 function shortId(id: string): string {
   return id.length > 12 ? `${id.slice(0, 6)}…${id.slice(-4)}` : id;
-}
-
-// Sub-cent-aware price (proxied offers are often $0.001 → 0 cents).
-function offerPrice(o: { amountRaw?: string; priceCents: number }): string {
-  const v = o.amountRaw ? Number(o.amountRaw) / 1e6 : o.priceCents / 100;
-  if (!Number.isFinite(v) || v <= 0) return "free";
-  return v < 0.01 ? `$${v.toFixed(4)}` : `$${v.toFixed(2)}`;
 }
 
 function StatCard({
@@ -124,15 +118,17 @@ export default function MarketplacePage() {
         <StatCard
           label="Volume settled"
           value={
-            globalReceipts ? `$${(globalReceipts.totalVolumeCents / 100).toFixed(2)}` : "-"
+            globalReceipts
+              ? usdAmount(globalReceipts.totalVolumeCents, globalReceipts.totalVolumeMicroUsd)
+              : "-"
           }
           sub={
             globalReceipts
-              ? `$${(globalReceipts.volumeLast7dCents / 100).toFixed(2)} last 7d`
+              ? `${usdAmount(globalReceipts.volumeLast7dCents, globalReceipts.volumeLast7dMicroUsd)} last 7d`
               : "USDC on-chain"
           }
           accent
-          trend={trends?.volumeCents}
+          trend={trends?.volumeMicroUsd ?? trends?.volumeCents}
         />
       </div>
 
@@ -259,7 +255,7 @@ export default function MarketplacePage() {
                     {VERB_LABELS[r.settlementType] ?? r.settlementType}
                   </span>
                   <span className="font-mono text-xs shrink-0">
-                    <span className="text-primary">${(r.amountCents / 100).toFixed(2)}</span>{" "}
+                    <span className="text-primary">{usdAmount(r.amountCents, r.amountMicroUsd)}</span>{" "}
                     <span className="text-muted-foreground/50">{formatTime(r.emittedAt)}</span>
                   </span>
                 </Link>
@@ -291,7 +287,7 @@ export default function MarketplacePage() {
                 <p className="font-mono text-xs text-muted-foreground/60 mb-1">#{i + 1}</p>
                 <TopSellerName sellerId={s.sellerId} />
                 <p className="font-mono text-xs text-primary mt-1">
-                  ${(s.totalEarnedCents / 100).toFixed(2)} · {s.receiptCount} receipts
+                  {usdAmount(s.totalEarnedCents, s.totalEarnedMicroUsd)} · {s.receiptCount} receipts
                 </p>
               </Link>
             ))}

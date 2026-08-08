@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
+import { usdAmount } from "@/lib/format";
 
 function formatTime(ms: number): string {
   const diff = Date.now() - ms;
@@ -43,7 +44,7 @@ export function ReceiptsTicker() {
           href={`/marketplace/receipts/${r._id}`}
           className="font-mono text-xs text-muted-foreground hover:text-primary transition-colors whitespace-nowrap shrink-0"
         >
-          <span className="text-primary">${(r.amountCents / 100).toFixed(2)}</span>{" "}
+          <span className="text-primary">{usdAmount(r.amountCents, r.amountMicroUsd)}</span>{" "}
           {VERB_LABELS[r.settlementType] ?? r.settlementType} · {formatTime(r.emittedAt)}
         </Link>
       ))}

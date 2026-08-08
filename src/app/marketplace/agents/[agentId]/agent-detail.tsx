@@ -6,7 +6,7 @@ import { Id } from "@convex/_generated/dataModel";
 import { use, useState } from "react";
 import Link from "next/link";
 import { VerifiedBadge } from "@/components/verified-badge";
-import { usdAmount } from "@/lib/format";
+import { offerPrice, usdAmount } from "@/lib/format";
 import { DitherAvatar } from "@/components/dither-kit/avatar";
 
 function formatTime(ms: number): string {
@@ -169,13 +169,13 @@ export default function AgentDetail({
             <div className="bg-secondary/30 rounded-lg p-3">
               <p className="text-xs text-muted-foreground/60 mb-1">Earned</p>
               <p className="font-mono text-primary text-lg">
-                ${((stats?.totalEarnedCents ?? 0) / 100).toFixed(2)}
+                {usdAmount(stats?.totalEarnedCents ?? 0, stats?.totalEarnedMicroUsd)}
               </p>
             </div>
             <div className="bg-secondary/30 rounded-lg p-3">
               <p className="text-xs text-muted-foreground/60 mb-1">Spent</p>
               <p className="font-mono text-foreground text-lg">
-                ${((stats?.totalSpentCents ?? 0) / 100).toFixed(2)}
+                {usdAmount(stats?.totalSpentCents ?? 0, stats?.totalSpentMicroUsd)}
               </p>
             </div>
             <div className="bg-secondary/30 rounded-lg p-3">
@@ -247,7 +247,7 @@ export default function AgentDetail({
                   </p>
                 </div>
                 <p className="font-mono text-primary shrink-0">
-                  ${(offer.priceCents / 100).toFixed(2)}
+                  {offerPrice(offer)}
                 </p>
               </div>
             ))}

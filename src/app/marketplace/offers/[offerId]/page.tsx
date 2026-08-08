@@ -5,6 +5,7 @@ import { getConvexClient } from "@/lib/convex";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 import { VerifiedBadge } from "@/components/verified-badge";
+import { offerPrice, usdAmount } from "@/lib/format";
 
 // ISR: crawler walks of the 24.5k offer pages land on the CDN after the first
 // render instead of re-running the function + Convex queries per visit. The
@@ -38,14 +39,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const offer = await getOffer(offerId);
   if (!offer) return { title: "Offer Not Found - PayanAgent" };
 
-  // Sub-cent aware (ecosystem offers are often $0.001 → 0 cents).
-  const usd = offer.amountRaw
-    ? Number(offer.amountRaw) / 1e6
-    : offer.priceCents / 100;
-  const price =
-    usd > 0 && usd < 0.01 ? `$${usd.toFixed(4)}` : `$${usd.toFixed(2)}`;
+  const price = offerPrice(offer);
   const kind = offer.offerType === "api" ? "service" : "product";
-  const title = `${offer.title} — ${price} USDC | PayanAgent`;
+  const title =
+    price === "free"
+      ? `${offer.title} — free | PayanAgent`
+      : `${offer.title} — ${price} USDC | PayanAgent`;
   const description = `${offer.description.slice(0, 160)} — a ${kind} on PayanAgent, payable in USDC on Base via x402.`;
 
   // Only pages with content of their own are indexable: native offers and
@@ -83,16 +82,7 @@ export default async function OfferPage({ params }: Props) {
       ])
     : [null, null];
 
-  // Sub-cent aware (proxied offers are often $0.001 → 0 cents).
-  const priceUsdVal = offer.amountRaw
-    ? Number(offer.amountRaw) / 1e6
-    : offer.priceCents / 100;
-  const price =
-    priceUsdVal <= 0
-      ? "free"
-      : priceUsdVal < 0.01
-        ? `$${priceUsdVal.toFixed(4)}`
-        : `$${priceUsdVal.toFixed(2)}`;
+  const price = offerPrice(offer);
   const isService = offer.offerType === "api";
 
   const buySnippet = `curl -X POST https://payanagent.com/x402/${offer._id} \\
@@ -228,7 +218,7 @@ export default async function OfferPage({ params }: Props) {
                 <span className="text-foreground/90">trust score {reputation.score}</span>
                 <span>{Math.round(reputation.successRate * 100)}% delivered</span>
                 <span>{reputation.distinctBuyers} buyers</span>
-                <span>${(reputation.volumeCents / 100).toFixed(2)} settled</span>
+                <span>{usdAmount(reputation.volumeCents, reputation.volumeMicroUsd)} settled</span>
               </div>
             )}
           </div>

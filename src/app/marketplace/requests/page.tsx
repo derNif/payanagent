@@ -3,6 +3,7 @@
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import Link from "next/link";
+import { usdAmount } from "@/lib/format";
 
 const statusColors: Record<string, string> = {
   open: "bg-blue-500/10 text-blue-400",
@@ -75,7 +76,7 @@ export default function RequestsPage() {
               </p>
               <div className="flex items-center gap-4 text-xs text-muted-foreground/60 flex-wrap">
                 <span className="font-mono text-primary">
-                  ${(req.budgetMaxCents / 100).toFixed(2)}
+                  {usdAmount(req.budgetMaxCents)}
                 </span>
                 <span>
                   Posted {new Date(req._creationTime).toLocaleDateString()}

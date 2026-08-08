@@ -7,6 +7,7 @@ import { useQuery, usePaginatedQuery } from "convex/react";
 import { Search } from "lucide-react";
 import { api } from "@convex/_generated/api";
 import { VerifiedBadge } from "@/components/verified-badge";
+import { usd } from "@/lib/format";
 
 type SortKey = "top" | "price" | "new";
 
@@ -18,8 +19,7 @@ const SORTS: [SortKey, string][] = [
 
 function fmtUsd(v: number): string {
   if (!Number.isFinite(v) || v <= 0) return "free";
-  if (v < 0.01) return `$${v.toFixed(4)}`;
-  return `$${v.toFixed(2)}`;
+  return usd(v);
 }
 
 type EnrichedOffer = {

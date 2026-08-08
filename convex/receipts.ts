@@ -503,6 +503,7 @@ export const getLeaderboard = query({
         return {
           sellerId: s.sellerId,
           volumeCents: Math.round(s.volumeMicroUsd / 10000),
+          volumeMicroUsd: s.volumeMicroUsd,
           sales: s.sales,
           distinctBuyers,
           independentBuyers,
@@ -511,7 +512,7 @@ export const getLeaderboard = query({
           trusted: independentBuyers >= 3 && successRate >= 0.9 && s.sales >= 5,
         };
       })
-      .sort((a, b) => b.volumeCents - a.volumeCents)
+      .sort((a, b) => b.volumeMicroUsd - a.volumeMicroUsd)
       .slice(0, 50);
 
     // Resolve names (sellers + feed parties), cached.
@@ -548,6 +549,7 @@ export const getLeaderboard = query({
       topBuyers.push({
         buyerId: b.buyerId,
         spentCents: Math.round(b.spentMicroUsd / 10000),
+        spentMicroUsd: b.spentMicroUsd,
         buys: b.buys,
         name: info?.name ?? "Unknown",
         providerType: info?.providerType ?? "agent",
@@ -569,17 +571,17 @@ export const getLeaderboard = query({
       });
     }
 
+    const totalVolumeMicroUsd = sales.reduce((s, r) => s + receiptMicroUsd(r), 0);
+    const volume7dMicroUsd = last7d.reduce((s, r) => s + receiptMicroUsd(r), 0);
     return {
       stats: {
-        totalVolumeCents: Math.round(
-          sales.reduce((s, r) => s + receiptMicroUsd(r), 0) / 10000,
-        ),
+        totalVolumeCents: Math.round(totalVolumeMicroUsd / 10000),
+        totalVolumeMicroUsd,
         totalReceipts: sales.length,
         distinctSellers: bySeller.size,
         distinctBuyers: new Set(sales.map((r) => String(r.buyerId))).size,
-        volume7dCents: Math.round(
-          last7d.reduce((s, r) => s + receiptMicroUsd(r), 0) / 10000,
-        ),
+        volume7dCents: Math.round(volume7dMicroUsd / 10000),
+        volume7dMicroUsd,
         receipts7d: last7d.length,
       },
       topSellers,
@@ -596,7 +598,9 @@ export const getAgentStats = query({
     args,
   ): Promise<{
     totalEarnedCents: number;
+    totalEarnedMicroUsd: number;
     totalSpentCents: number;
+    totalSpentMicroUsd: number;
     receiptsSold: number;
     receiptsBought: number;
   }> => {
@@ -614,13 +618,19 @@ export const getAgentStats = query({
     const buyerConfirmed = asBuyer.filter(
       (r) => r.status === "confirmed" && isEconomicSettlement(r),
     );
+    const totalEarnedMicroUsd = sellerConfirmed.reduce(
+      (s, r) => s + receiptMicroUsd(r),
+      0,
+    );
+    const totalSpentMicroUsd = buyerConfirmed.reduce(
+      (s, r) => s + receiptMicroUsd(r),
+      0,
+    );
     return {
-      totalEarnedCents: Math.round(
-        sellerConfirmed.reduce((s, r) => s + receiptMicroUsd(r), 0) / 10000,
-      ),
-      totalSpentCents: Math.round(
-        buyerConfirmed.reduce((s, r) => s + receiptMicroUsd(r), 0) / 10000,
-      ),
+      totalEarnedCents: Math.round(totalEarnedMicroUsd / 10000),
+      totalEarnedMicroUsd,
+      totalSpentCents: Math.round(totalSpentMicroUsd / 10000),
+      totalSpentMicroUsd,
       receiptsSold: sellerConfirmed.length,
       receiptsBought: buyerConfirmed.length,
     };
@@ -670,6 +680,9 @@ export const getOverviewTrends = query({
       offers,
       receipts,
       volumeCents: volMicro.map((v) => Math.round(v / 10000)),
+      // Exact series for sparklines — days of purely sub-cent volume round to a
+      // flat 0 line in volumeCents.
+      volumeMicroUsd: volMicro,
     };
   },
 });
@@ -681,8 +694,10 @@ export const getGlobalStats = query({
   ): Promise<{
     totalReceipts: number;
     totalVolumeCents: number;
+    totalVolumeMicroUsd: number;
     receiptsLast7d: number;
     volumeLast7dCents: number;
+    volumeLast7dMicroUsd: number;
   }> => {
     const recent = await ctx.db
       .query("receipts")
@@ -695,15 +710,21 @@ export const getGlobalStats = query({
     const now = Date.now();
     const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
     const last7d = confirmed.filter((r) => r.emittedAt >= oneWeekAgo);
+    const totalVolumeMicroUsd = confirmed.reduce(
+      (s, r) => s + receiptMicroUsd(r),
+      0,
+    );
+    const volumeLast7dMicroUsd = last7d.reduce(
+      (s, r) => s + receiptMicroUsd(r),
+      0,
+    );
     return {
       totalReceipts: confirmed.length,
-      totalVolumeCents: Math.round(
-        confirmed.reduce((s, r) => s + receiptMicroUsd(r), 0) / 10000,
-      ),
+      totalVolumeCents: Math.round(totalVolumeMicroUsd / 10000),
+      totalVolumeMicroUsd,
       receiptsLast7d: last7d.length,
-      volumeLast7dCents: Math.round(
-        last7d.reduce((s, r) => s + receiptMicroUsd(r), 0) / 10000,
-      ),
+      volumeLast7dCents: Math.round(volumeLast7dMicroUsd / 10000),
+      volumeLast7dMicroUsd,
     };
   },
 });
@@ -716,6 +737,7 @@ export const topSellers = query({
   ): Promise<Array<{
     sellerId: Id<"agents">;
     totalEarnedCents: number;
+    totalEarnedMicroUsd: number;
     receiptCount: number;
   }>> => {
     const limit = Math.min(args.limit ?? 50, 200);
@@ -729,23 +751,28 @@ export const topSellers = query({
     );
     const bySeller = new Map<
       string,
-      { sellerId: Id<"agents">; totalEarnedCents: number; receiptCount: number }
+      {
+        sellerId: Id<"agents">;
+        totalEarnedCents: number;
+        totalEarnedMicroUsd: number;
+        receiptCount: number;
+      }
     >();
-    const microBySeller = new Map<string, number>();
     for (const r of confirmed) {
       const key = String(r.sellerId);
       const cur = bySeller.get(key) ?? {
         sellerId: r.sellerId,
         totalEarnedCents: 0,
+        totalEarnedMicroUsd: 0,
         receiptCount: 0,
       };
-      microBySeller.set(key, (microBySeller.get(key) ?? 0) + receiptMicroUsd(r));
-      cur.totalEarnedCents = Math.round((microBySeller.get(key) ?? 0) / 10000);
+      cur.totalEarnedMicroUsd += receiptMicroUsd(r);
+      cur.totalEarnedCents = Math.round(cur.totalEarnedMicroUsd / 10000);
       cur.receiptCount += 1;
       bySeller.set(key, cur);
     }
     return [...bySeller.values()]
-      .sort((a, b) => b.totalEarnedCents - a.totalEarnedCents)
+      .sort((a, b) => b.totalEarnedMicroUsd - a.totalEarnedMicroUsd)
       .slice(0, limit);
   },
 });
