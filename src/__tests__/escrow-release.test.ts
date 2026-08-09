@@ -196,4 +196,77 @@ describe("payoutEscrow crash-safety", () => {
     assert.ok(finalizes.every((c) => c.args.status !== "confirmed"));
     assert.equal(finalizes[finalizes.length - 1].args.txHash, "0xslow");
   });
+
+  it("passes a stable per-payout idempotency key to releaseEscrow", async () => {
+    const { payoutEscrow } = await loadModule();
+    const convex = makeConvexStub();
+    const keys: (string | undefined)[] = [];
+
+    await payoutEscrow({
+      ...baseArgs(convex),
+      deps: {
+        releaseEscrow: async (_to, _amount, key) => {
+          keys.push(key);
+          return { success: true, txHash: "0xdead" };
+        },
+        confirmTx: async () => "confirmed" as const,
+      },
+    });
+    // Retry of the same payout: SAME key → same ERC-3009 nonce.
+    await payoutEscrow({
+      ...baseArgs(convex),
+      deps: {
+        releaseEscrow: async (_to, _amount, key) => {
+          keys.push(key);
+          return { success: true, txHash: "0xdead" };
+        },
+        confirmTx: async () => "confirmed" as const,
+      },
+    });
+
+    assert.deepEqual(keys, ["request_1:escrow_release", "request_1:escrow_release"]);
+  });
+
+  it("nonce already used on-chain: receipt stays pending, retries stay blocked", async () => {
+    const { payoutEscrow } = await loadModule();
+    const convex = makeConvexStub();
+
+    const result = await payoutEscrow({
+      ...baseArgs(convex),
+      deps: {
+        releaseEscrow: async () => ({
+          success: false,
+          alreadyUsed: true,
+          error: "authorization nonce already used on-chain",
+        }),
+        confirmTx: async () => {
+          throw new Error("must not be called");
+        },
+      },
+    });
+
+    assert.equal(result.ok, false);
+    // Crucially the receipt is NOT marked failed — a failed receipt would let
+    // the route's idempotency check wave a retry through while the first
+    // transfer already moved funds.
+    const finalizes = convex.calls.filter((c) => c.name === "finalizeSettlement");
+    assert.equal(finalizes.length, 0);
+  });
+});
+
+describe("escrowAuthorizationNonce", () => {
+  it("is deterministic per key and distinct across keys", async () => {
+    const { escrowAuthorizationNonce } = (await import(
+      rootUrl("src/lib/x402.ts")
+    )) as typeof import("../lib/x402");
+    const a1 = escrowAuthorizationNonce("request_1:escrow_release");
+    const a2 = escrowAuthorizationNonce("request_1:escrow_release");
+    const b = escrowAuthorizationNonce("request_1:escrow_refund");
+    const c = escrowAuthorizationNonce("request_2:escrow_release");
+    assert.equal(a1, a2);
+    assert.match(a1, /^0x[0-9a-f]{64}$/);
+    assert.notEqual(a1, b);
+    assert.notEqual(a1, c);
+    assert.notEqual(b, c);
+  });
 });

@@ -81,9 +81,23 @@ export async function payoutEscrow({
       status,
     });
 
-  // 2. The transfer.
-  const release = await doRelease(toAddress, amountCents);
+  // 2. The transfer. The idempotency key pins the ERC-3009 nonce to this
+  //    payout, so even if the facilitator's answer is lost (timeout after
+  //    submission) a retry re-signs the SAME authorization and the token
+  //    contract guarantees at most one attempt ever moves funds.
+  const release = await doRelease(toAddress, amountCents, `${requestId}:${settlementType}`);
   if (!release.success || !release.txHash) {
+    if (release.alreadyUsed) {
+      // A previous attempt's transfer landed on-chain but its receipt wasn't
+      // finalized. Funds moved exactly once — keep the receipt pending so the
+      // idempotency check blocks further retries while an operator (or a
+      // reconciler) locates the tx and confirms it.
+      logError(`${scope}:already-used`, "nonce already used on-chain; needs reconciliation", {
+        receiptId,
+        requestId,
+      });
+      return { ok: false, error: release.error || "authorization already used" };
+    }
     // Clean failure: no tx was accepted. Mark failed so the idempotency check
     // lets a retry through. If even this write fails, the receipt stays
     // pending and BLOCKS retries — the safe direction (funds can't double-pay;

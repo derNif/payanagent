@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createPublicClient, http } from "viem";
+import { createPublicClient, getAddress, http, keccak256, parseAbi, toBytes } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { base, baseSepolia } from "viem/chains";
 import { errorMessage, logError } from "@/lib/errors";
@@ -314,6 +314,31 @@ export async function settlePayment(paymentSignatureHeader: string, paymentRequi
   }
 }
 
+// ERC-3009 nonce derived from a stable payout identity. Two signatures with
+// the same nonce can never BOTH transfer: the token contract marks the nonce
+// used on first execution and reverts the second. That makes a retry of the
+// same payout replay-safe at the source of truth (the chain), even when the
+// facilitator's answer to the first attempt was lost.
+export function escrowAuthorizationNonce(idempotencyKey: string): `0x${string}` {
+  return keccak256(toBytes(`payanagent:escrow:${idempotencyKey}`));
+}
+
+// EIP-712 typed-data shape for ERC-3009 transferWithAuthorization.
+const EIP3009_TYPES = {
+  TransferWithAuthorization: [
+    { name: "from", type: "address" },
+    { name: "to", type: "address" },
+    { name: "value", type: "uint256" },
+    { name: "validAfter", type: "uint256" },
+    { name: "validBefore", type: "uint256" },
+    { name: "nonce", type: "bytes32" },
+  ],
+} as const;
+
+const AUTHORIZATION_STATE_ABI = parseAbi([
+  "function authorizationState(address authorizer, bytes32 nonce) view returns (bool)",
+]);
+
 // Release escrowed USDC from the platform wallet to a recipient — GASLESS.
 //
 // The platform signs an ERC-3009 `transferWithAuthorization` and the facilitator
@@ -324,10 +349,17 @@ export async function settlePayment(paymentSignatureHeader: string, paymentRequi
 //
 // Used for all three escrow money paths: provider payout and surplus refund on
 // approve, and buyer refund on cancel.
+//
+// `idempotencyKey` (stable per payout, e.g. `${requestId}:${settlementType}`)
+// pins the authorization nonce, so a retry re-signs the SAME nonce and the
+// token contract guarantees at most one of the attempts moves funds. When the
+// nonce is found already used on-chain, `alreadyUsed: true` is returned so the
+// caller keeps its receipt pending for reconciliation instead of retrying.
 export async function releaseEscrow(
   toAddress: string,
-  amountCents: number
-): Promise<{ success: boolean; txHash?: string; error?: string }> {
+  amountCents: number,
+  idempotencyKey?: string,
+): Promise<{ success: boolean; txHash?: string; error?: string; alreadyUsed?: boolean }> {
   const privateKey = process.env.PLATFORM_WALLET_PRIVATE_KEY;
   if (!privateKey) {
     return { success: false, error: "PLATFORM_WALLET_PRIVATE_KEY not configured" };
@@ -347,55 +379,106 @@ export async function releaseEscrow(
     const networkId = CHAIN_IDS[NETWORK] || CHAIN_IDS["base"];
     const asset = USDC_ADDRESSES[networkId];
     const domain = USDC_DOMAINS[networkId] || { name: "USDC", version: "2" };
+    const chain = NETWORK === "base-sepolia" ? baseSepolia : base;
 
-    // Lazy-loaded: keeps the signing stack out of every route's cold start.
-    const [{ x402Client }, { registerExactEvmScheme }, { toClientEvmSigner }] =
-      await Promise.all([
-        import("@x402/fetch"),
-        import("@x402/evm/exact/client"),
-        import("@x402/evm"),
-      ]);
-
-    // The scheme needs contract reads (token domain/allowance checks) alongside
-    // signing. This public client is read-only RPC — it never sends a tx, so no
-    // gas is involved anywhere in this path.
-    const publicClient = createPublicClient({
-      chain: NETWORK === "base-sepolia" ? baseSepolia : base,
-      transport: http(),
-    });
+    const publicClient = createPublicClient({ chain, transport: http() });
     const account = privateKeyToAccount(privateKey as `0x${string}`);
-    const signer = toClientEvmSigner(account, publicClient);
-
-    const client = new x402Client();
-    registerExactEvmScheme(client, { signer });
 
     // Payment terms for our own outbound payment: platform wallet -> recipient.
-    const paymentRequired = {
-      x402Version: 2,
-      resource: {
-        url: `${APP_URL}/escrow/release`,
-        description: `Escrow release of ${amountCents} cents to ${toAddress}`,
-        mimeType: "application/json",
-      },
-      accepts: [
-        {
-          scheme: "exact",
-          network: networkId,
-          amount: centsToUsdcBaseUnits(amountCents),
-          payTo: toAddress,
-          asset,
-          maxTimeoutSeconds: 60,
-          extra: { name: domain.name, version: domain.version },
-        },
-      ],
+    const resource = {
+      url: `${APP_URL}/escrow/release`,
+      description: `Escrow release of ${amountCents} cents to ${toAddress}`,
+      mimeType: "application/json",
+    };
+    const requirements = {
+      scheme: "exact",
+      network: networkId,
+      amount: centsToUsdcBaseUnits(amountCents),
+      payTo: toAddress,
+      asset,
+      maxTimeoutSeconds: 60,
+      extra: { name: domain.name, version: domain.version },
     };
 
-    // createPaymentPayload embeds the selected requirements as `accepted`, which
-    // is exactly what settlePayment() reads — so the existing, already-proven
-    // facilitator path is reused verbatim rather than duplicated here.
-    const paymentPayload = await client.createPaymentPayload(
-      paymentRequired as unknown as Parameters<typeof client.createPaymentPayload>[0],
-    );
+    let paymentPayload: unknown;
+
+    if (idempotencyKey) {
+      // Deterministic-nonce path: sign the ERC-3009 authorization directly so
+      // the nonce is pinned to the payout identity. The chain enforces
+      // single-use nonces, so no matter how many times this payout is retried
+      // at most one authorization can ever transfer funds.
+      const nonce = escrowAuthorizationNonce(idempotencyKey);
+
+      // If a previous attempt's tx already landed (e.g. the facilitator call
+      // timed out after submission), do NOT sign or submit anything.
+      const used = await publicClient.readContract({
+        address: getAddress(asset),
+        abi: AUTHORIZATION_STATE_ABI,
+        functionName: "authorizationState",
+        args: [account.address, nonce],
+      });
+      if (used) {
+        return {
+          success: false,
+          alreadyUsed: true,
+          error: "authorization nonce already used on-chain (a previous attempt transferred)",
+        };
+      }
+
+      const now = Math.floor(Date.now() / 1000);
+      const authorization = {
+        from: account.address,
+        to: getAddress(toAddress),
+        value: requirements.amount,
+        validAfter: String(now - 600),
+        validBefore: String(now + requirements.maxTimeoutSeconds),
+        nonce,
+      };
+      const signature = await account.signTypedData({
+        domain: {
+          name: domain.name,
+          version: domain.version,
+          chainId: chain.id,
+          verifyingContract: getAddress(asset),
+        },
+        types: EIP3009_TYPES,
+        primaryType: "TransferWithAuthorization",
+        message: {
+          from: authorization.from,
+          to: authorization.to,
+          value: BigInt(authorization.value),
+          validAfter: BigInt(authorization.validAfter),
+          validBefore: BigInt(authorization.validBefore),
+          nonce,
+        },
+      });
+      // Same shape x402Client.createPaymentPayload produces: `accepted` is what
+      // settlePayment() forwards to the facilitator as the requirements.
+      paymentPayload = {
+        x402Version: 2,
+        payload: { authorization, signature },
+        resource,
+        accepted: requirements,
+      };
+    } else {
+      // Library path (random nonce) — kept for callers without a stable payout
+      // identity. Lazy-loaded: keeps the signing stack out of every route's
+      // cold start.
+      const [{ x402Client }, { registerExactEvmScheme }, { toClientEvmSigner }] =
+        await Promise.all([
+          import("@x402/fetch"),
+          import("@x402/evm/exact/client"),
+          import("@x402/evm"),
+        ]);
+      const signer = toClientEvmSigner(account, publicClient);
+      const client = new x402Client();
+      registerExactEvmScheme(client, { signer });
+      const paymentRequired = { x402Version: 2, resource, accepts: [requirements] };
+      paymentPayload = await client.createPaymentPayload(
+        paymentRequired as unknown as Parameters<typeof client.createPaymentPayload>[0],
+      );
+    }
+
     const signatureHeader = Buffer.from(JSON.stringify(paymentPayload)).toString("base64");
 
     return await settlePayment(signatureHeader, "");
