@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
 import { api } from "@convex/_generated/api";
+import { logError } from "@/lib/errors";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://payanagent.com";
 const NETWORK_ID = "eip155:8453";
@@ -63,8 +64,9 @@ export async function GET() {
         },
       };
       });
-  } catch {
+  } catch (err) {
     // Serve an empty document rather than a 500 — the shape is the contract.
+    logError("well-known.x402:list-discovery", err);
   }
 
   return NextResponse.json(

@@ -12,6 +12,7 @@ import { deliverOffer, readOfferInput } from "@/lib/deliver-offer";
 import { attachFeeAdvert, collectFee } from "@/lib/x402-fee";
 import { relayExternalBuy } from "@/lib/relay-buy";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
+import { errorMessage, logError, lookupErrorResponse, swallow } from "@/lib/errors";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -40,8 +41,10 @@ async function handle(
       offerId: offerId as Id<"offers">,
       platformSecret,
     });
-  } catch {
-    return jsonError("Invalid offer ID", 400);
+  } catch (err) {
+    return lookupErrorResponse("x402.buy:get-offer", err, "Invalid offer ID", {
+      offerId,
+    });
   }
   if (!offer || !offer.isActive) {
     return jsonError("Offer not found or inactive", 404);
@@ -112,7 +115,7 @@ async function handle(
     return jsonError("Cannot buy your own offer", 400);
   }
 
-  const body = await readOfferInput(request, offer.inputSchema);
+  const body = await readOfferInput(request, offer.inputSchema, "x402.buy");
   if (body.error) return body.error;
 
   const settlement = await settleSignedPayment({
@@ -123,23 +126,36 @@ async function handle(
   });
   if (!settlement.ok) return settlement.response;
 
-  // Identify (or auto-create) the buyer's wallet account.
-  const buyerId: Id<"agents"> = await convex.mutation(
-    api.agents.getOrCreateByWallet,
-    { platformSecret, walletAddress: buyerWallet, chain: getNetwork() },
-  );
-
-  const receiptId = await recordSettlementReceipt(convex, {
-    platformSecret,
-    buyerId,
-    sellerId: offer.sellerId,
-    offerId: offer._id,
-    amountCents: offer.priceCents,
-    amountMicroUsd: offer.priceCents * 10000,
-    txHash: settlement.txHash,
-    settlementType: "direct",
-    latencyMs: Date.now() - startedAt,
-  });
+  // The money has moved. Bookkeeping failures from here on are logged and
+  // tolerated — throwing would hand the buyer a 500 and withhold the content
+  // they just paid for. The log line carries the tx hash so an unrecorded
+  // settlement can be reconciled from the chain.
+  let receiptId: Id<"receipts"> | null = null;
+  try {
+    // Identify (or auto-create) the buyer's wallet account.
+    const buyerId: Id<"agents"> = await convex.mutation(
+      api.agents.getOrCreateByWallet,
+      { platformSecret, walletAddress: buyerWallet, chain: getNetwork() },
+    );
+    receiptId = await recordSettlementReceipt(convex, {
+      platformSecret,
+      buyerId,
+      sellerId: offer.sellerId,
+      offerId: offer._id,
+      amountCents: offer.priceCents,
+      amountMicroUsd: offer.priceCents * 10000,
+      txHash: settlement.txHash,
+      settlementType: "direct",
+      latencyMs: Date.now() - startedAt,
+    });
+  } catch (err) {
+    logError("x402.buy:record-settlement", err, {
+      offerId,
+      buyerWallet,
+      txHash: settlement.txHash || "",
+      amountCents: offer.priceCents,
+    });
+  }
 
   // Collect the optional, buyer-signed PayanAgent fee leg → platform wallet
   // (non-custodial; no-op when the fee is off or absent). Same mechanism as
@@ -147,10 +163,9 @@ async function handle(
   await collectFee(request);
 
   // Float this offer into the "sold" rank tier (proven offers rank top).
-  await convex.mutation(api.offers.bumpRankOnSale, {
-    platformSecret,
-    offerId: offer._id,
-  });
+  await convex
+    .mutation(api.offers.bumpRankOnSale, { platformSecret, offerId: offer._id })
+    .catch(swallow("x402.buy:bump-rank", { offerId, receiptId }));
 
   return deliverOffer({
     convex,
@@ -160,6 +175,7 @@ async function handle(
     rawBody: body.rawBody,
     receiptId,
     txHash: settlement.txHash,
+    logScope: "x402.buy",
   });
 }
 

@@ -34,12 +34,13 @@ export async function POST(request: NextRequest) {
 
   const convex = getConvexClient();
 
+  // The label is optional, so a missing or unparseable body is not an error —
+  // but it must not be read through an `any`, which would hide a shape change.
   let label: string | undefined;
-  try {
-    const body = await request.json().catch(() => ({}));
-    label = typeof body.label === "string" ? body.label : undefined;
-  } catch {
-    // ignore parse errors
+  const body: unknown = await request.json().catch(() => null);
+  if (body && typeof body === "object" && "label" in body) {
+    const raw = (body as { label?: unknown }).label;
+    if (typeof raw === "string") label = raw;
   }
 
   const { key, hash, prefix } = generateApiKey();

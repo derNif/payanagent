@@ -4,6 +4,7 @@ import { enforceIpRateLimit, jsonError } from "@/lib/api-http";
 import { RATE_LIMITS } from "@/lib/rate-limit";
 import { toPublicReceipt } from "@/lib/public-projections";
 import { cacheHeaders } from "@/lib/cache";
+import { lookupErrorResponse } from "@/lib/errors";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -32,7 +33,12 @@ export async function GET(
       { receipt: toPublicReceipt(receipt) },
       { headers: cacheHeaders(300) },
     );
-  } catch {
-    return jsonError("Invalid receipt ID", 400);
+  } catch (err) {
+    return lookupErrorResponse(
+      "receipts.get:get-receipt",
+      err,
+      "Invalid receipt ID",
+      { receiptId },
+    );
   }
 }

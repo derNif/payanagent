@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { logError } from "@/lib/errors";
 
 export const alt = "PayanAgent — the marketplace for the agent economy";
 export const size = { width: 1200, height: 630 };
@@ -22,9 +23,13 @@ async function loadFont(weight: "Regular" | "Bold"): Promise<ArrayBuffer | null>
     const res = await fetch(
       `https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-${weight}.ttf`,
     );
-    if (!res.ok) return null;
+    if (!res.ok) {
+      logError("og:load-font", `HTTP ${res.status}`, { weight });
+      return null;
+    }
     return await res.arrayBuffer();
-  } catch {
+  } catch (err) {
+    logError("og:load-font", err, { weight });
     return null;
   }
 }

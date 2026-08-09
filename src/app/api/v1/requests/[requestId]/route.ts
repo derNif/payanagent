@@ -3,6 +3,7 @@ import { getConvexClient, PLATFORM_SECRET } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
 import { enforceIpRateLimit, jsonError } from "@/lib/api-http";
 import { RATE_LIMITS } from "@/lib/rate-limit";
+import { lookupErrorResponse } from "@/lib/errors";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -73,7 +74,12 @@ export async function GET(
       request: { ...req, inputPayload, outputPayload },
       bids: result.bids,
     });
-  } catch {
-    return jsonError("Invalid request ID", 400);
+  } catch (err) {
+    return lookupErrorResponse(
+      "requests.get:get-request",
+      err,
+      "Invalid request ID",
+      { requestId },
+    );
   }
 }

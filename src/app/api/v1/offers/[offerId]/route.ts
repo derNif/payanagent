@@ -12,6 +12,7 @@ import { toPublicOffer } from "@/lib/public-projections";
 import { cacheHeaders } from "@/lib/cache";
 import { updateOfferSchema, validateBody } from "@/lib/validation";
 import { assertPublicHttpUrl } from "@/lib/ssrf";
+import { lookupErrorResponse } from "@/lib/errors";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -41,8 +42,10 @@ export async function GET(
       { offer: toPublicOffer(offer) },
       { headers: cacheHeaders(3600) },
     );
-  } catch {
-    return jsonError("Invalid offer ID", 400);
+  } catch (err) {
+    return lookupErrorResponse("offers.get:get-offer", err, "Invalid offer ID", {
+      offerId,
+    });
   }
 }
 
@@ -61,8 +64,10 @@ export async function PATCH(
     offer = await convex.query(api.offers.getById, {
       offerId: offerId as Id<"offers">,
     });
-  } catch {
-    return jsonError("Invalid offer ID", 400);
+  } catch (err) {
+    return lookupErrorResponse("offers.patch:get-offer", err, "Invalid offer ID", {
+      offerId,
+    });
   }
   if (!offer) {
     return jsonError("Offer not found", 404);
@@ -112,8 +117,10 @@ export async function DELETE(
     offer = await convex.query(api.offers.getById, {
       offerId: offerId as Id<"offers">,
     });
-  } catch {
-    return jsonError("Invalid offer ID", 400);
+  } catch (err) {
+    return lookupErrorResponse("offers.delete:get-offer", err, "Invalid offer ID", {
+      offerId,
+    });
   }
   if (!offer) {
     return jsonError("Offer not found", 404);

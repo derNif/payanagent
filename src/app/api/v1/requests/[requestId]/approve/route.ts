@@ -5,6 +5,12 @@ import { jsonError } from "@/lib/api-http";
 import { buildPaymentRequiredResponse, releaseEscrow } from "@/lib/x402";
 import { getPaymentSignature, settleSignedPayment } from "@/lib/x402-settle";
 import { recordSettlementReceipt } from "@/lib/settlement";
+import {
+  isUpstreamUnavailable,
+  logError,
+  lookupErrorResponse,
+  upstreamUnavailableResponse,
+} from "@/lib/errors";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -34,8 +40,13 @@ export async function POST(
     req = await convex.query(api.requests.getById, {
       requestId: requestId as Id<"requests">,
     });
-  } catch {
-    return jsonError("Invalid request ID", 400);
+  } catch (err) {
+    return lookupErrorResponse(
+      "requests.approve:get-request",
+      err,
+      "Invalid request ID",
+      { requestId },
+    );
   }
   if (!req) {
     return jsonError("Request not found", 404);
@@ -92,7 +103,13 @@ export async function POST(
         requestId: req._id,
         allowedFrom: ["fulfilled", "completing"],
       });
-    } catch {
+    } catch (err) {
+      // A transport failure took no lock — saying "already being settled" would
+      // describe a claim that never happened.
+      logError("requests.approve:claim-settlement-direct", err, {
+        requestId: req._id,
+      });
+      if (isUpstreamUnavailable(err)) return upstreamUnavailableResponse();
       return jsonError("Request is already being settled", 409);
     }
     // If a prior attempt already recorded a settlement, finalize idempotently.
@@ -165,7 +182,11 @@ export async function POST(
       requestId: req._id,
       allowedFrom: ["fulfilled", "completing"],
     });
-  } catch {
+  } catch (err) {
+    logError("requests.approve:claim-settlement-escrow", err, {
+      requestId: req._id,
+    });
+    if (isUpstreamUnavailable(err)) return upstreamUnavailableResponse();
     return jsonError("Request is already being settled", 409);
   }
 

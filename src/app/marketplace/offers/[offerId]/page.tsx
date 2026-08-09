@@ -6,6 +6,7 @@ import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 import { VerifiedBadge } from "@/components/verified-badge";
 import { offerPrice, usdAmount } from "@/lib/format";
+import { logError, swallow } from "@/lib/errors";
 
 // ISR: crawler walks of the 24.5k offer pages land on the CDN after the first
 // render instead of re-running the function + Convex queries per visit. The
@@ -23,13 +24,16 @@ type Props = {
   params: Promise<{ offerId: string }>;
 };
 
+// A missing offer and an unreachable Convex both render notFound() — but only
+// one of them is a bug, so the cause has to reach the logs.
 async function getOffer(offerId: string) {
   try {
     const convex = getConvexClient();
     return await convex.query(api.offers.getById, {
       offerId: offerId as Id<"offers">,
     });
-  } catch {
+  } catch (err) {
+    logError("marketplace.offer:get-offer", err, { offerId });
     return null;
   }
 }
@@ -75,10 +79,12 @@ export default async function OfferPage({ params }: Props) {
   // Proxied offers have no seller agent until their first sale.
   const [seller, reputation] = offer.sellerId
     ? await Promise.all([
-        convex.query(api.agents.getById, { agentId: offer.sellerId }).catch(() => null),
+        convex
+          .query(api.agents.getById, { agentId: offer.sellerId })
+          .catch(swallow("marketplace.offer:get-seller", { offerId })),
         convex
           .query(api.receipts.getReputation, { agentId: offer.sellerId })
-          .catch(() => null),
+          .catch(swallow("marketplace.offer:get-reputation", { offerId })),
       ])
     : [null, null];
 

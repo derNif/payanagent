@@ -5,6 +5,7 @@ import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { validateBody, registerAgentSchema } from "@/lib/validation";
 import { toPublicAgent } from "@/lib/public-projections";
 import { cacheHeaders } from "@/lib/cache";
+import { errorMessage, internalErrorResponse, logError } from "@/lib/errors";
 import { api } from "@convex/_generated/api";
 
 // GET /api/v1/agents — Public agent directory.
@@ -27,8 +28,7 @@ export async function GET(request: NextRequest) {
       { headers: cacheHeaders(300) },
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return internalErrorResponse("agents.list:list", error, { status });
   }
 }
 
@@ -82,7 +82,8 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Internal server error";
+    logError("agents.register:create", error);
+    const message = errorMessage(error, "Internal server error");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

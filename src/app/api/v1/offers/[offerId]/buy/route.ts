@@ -6,6 +6,7 @@ import { buildPaymentRequiredResponse } from "@/lib/x402";
 import { getPaymentSignature, settleSignedPayment } from "@/lib/x402-settle";
 import { recordSettlementReceipt } from "@/lib/settlement";
 import { deliverOffer, readOfferInput } from "@/lib/deliver-offer";
+import { logError, lookupErrorResponse } from "@/lib/errors";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -35,8 +36,10 @@ export async function POST(
       offerId: offerId as Id<"offers">,
       platformSecret,
     });
-  } catch {
-    return jsonError("Invalid offer ID", 400);
+  } catch (err) {
+    return lookupErrorResponse("offers.buy:get-offer", err, "Invalid offer ID", {
+      offerId,
+    });
   }
   if (!offer || !offer.isActive) {
     return jsonError("Offer not found or inactive", 404);
@@ -73,7 +76,7 @@ export async function POST(
     );
   }
 
-  const body = await readOfferInput(request, offer.inputSchema);
+  const body = await readOfferInput(request, offer.inputSchema, "offers.buy");
   if (body.error) return body.error;
 
   const settlement = await settleSignedPayment({
@@ -84,17 +87,31 @@ export async function POST(
   });
   if (!settlement.ok) return settlement.response;
 
-  const receiptId = await recordSettlementReceipt(convex, {
-    platformSecret,
-    buyerId: agent._id,
-    sellerId,
-    offerId: offer._id,
-    amountCents: offer.priceCents,
-    amountMicroUsd: offer.priceCents * 10000,
-    txHash: settlement.txHash,
-    settlementType: "direct",
-    latencyMs: Date.now() - startedAt,
-  });
+  // Emit receipt. The money has moved, so a bookkeeping failure from here on is
+  // logged and tolerated — throwing would hand the buyer a 500 and withhold the
+  // content they paid for. The log line carries the tx hash so an unrecorded
+  // settlement can be reconciled from the chain.
+  let receiptId: Id<"receipts"> | null = null;
+  try {
+    receiptId = await recordSettlementReceipt(convex, {
+      platformSecret,
+      buyerId: agent._id,
+      sellerId,
+      offerId: offer._id,
+      amountCents: offer.priceCents,
+      amountMicroUsd: offer.priceCents * 10000,
+      txHash: settlement.txHash,
+      settlementType: "direct",
+      latencyMs: Date.now() - startedAt,
+    });
+  } catch (err) {
+    logError("offers.buy:record-settlement", err, {
+      offerId,
+      buyerId: agent._id,
+      txHash: settlement.txHash || "",
+      amountCents: offer.priceCents,
+    });
+  }
 
   return deliverOffer({
     convex,
@@ -104,5 +121,6 @@ export async function POST(
     rawBody: body.rawBody,
     receiptId,
     txHash: settlement.txHash,
+    logScope: "offers.buy",
   });
 }

@@ -37,7 +37,10 @@ export function useGitHubStars(): number | null {
           setStars(d.stargazers_count);
         }
       })
-      .catch(() => {});
+      .catch((err: unknown) => {
+        // Star count is decoration — the button still renders without it.
+        console.error("[github-button] star fetch failed", err);
+      });
   }, []);
 
   return stars;

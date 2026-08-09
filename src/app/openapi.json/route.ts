@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
 import { api } from "@convex/_generated/api";
+import { logError } from "@/lib/errors";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://payanagent.com";
 // Optional public contact (role address) — enables origin-ownership verification
@@ -95,8 +96,10 @@ export async function GET() {
         },
       };
     }
-  } catch {
-    // Serve a valid empty contract rather than 500.
+  } catch (err) {
+    // Serve a valid empty contract rather than 500 — but an empty contract is
+    // indistinguishable from "no offers" to clients, so log why.
+    logError("openapi:list-offers", err);
   }
 
   const info: Record<string, unknown> = {

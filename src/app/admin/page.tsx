@@ -6,6 +6,7 @@ import { api } from "@convex/_generated/api";
 import { Doc } from "@convex/_generated/dataModel";
 import { usdAmount } from "@/lib/format";
 import { isAdminKeyValid } from "@/lib/admin-auth";
+import { logError } from "@/lib/errors";
 
 // Server component. Access is gated by the proxy AND re-checked here, so a
 // proxy bypass can't render it. Agent rows — which include PII (ownerEmail)
@@ -40,7 +41,8 @@ export default async function AdminPage({
   } else {
     try {
       agents = await fetchQuery(api.agents.listAdmin, { platformSecret });
-    } catch {
+    } catch (err) {
+      logError("admin:list-agents", err);
       agentsError = "Failed to load agents.";
     }
   }

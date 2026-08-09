@@ -8,6 +8,7 @@ import {
 import { RATE_LIMITS } from "@/lib/rate-limit";
 import { toPublicReceipt } from "@/lib/public-projections";
 import { cacheHeaders } from "@/lib/cache";
+import { internalErrorResponse } from "@/lib/errors";
 import { api } from "@convex/_generated/api";
 
 // GET /api/v1/receipts — Public receipts feed (newest first).
@@ -29,6 +30,6 @@ export async function GET(request: NextRequest) {
       { headers: cacheHeaders(300) },
     );
   } catch (error) {
-    return errorResponse(error, "Internal server error", 500);
+    return internalErrorResponse("receipts.list:feed", error, { limit });
   }
 }

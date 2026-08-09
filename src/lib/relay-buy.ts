@@ -4,6 +4,7 @@ import { extractBuyerWallet, getNetwork } from "@/lib/x402";
 import { assertPublicHttpUrl } from "@/lib/ssrf";
 import { attachFeeAdvert, collectFee } from "@/lib/x402-fee";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
+import { errorMessage, logError } from "@/lib/errors";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -123,7 +124,8 @@ export async function relayExternalBuy(
   try {
     await assertPublicHttpUrl(offer.externalUrl);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "blocked";
+    const message = errorMessage(err, "blocked");
+    logError("relay-buy:ssrf-guard", err, { offerId: offer._id });
     return NextResponse.json(
       { error: `Offer endpoint not allowed: ${message}` },
       { status: 502 },
@@ -144,7 +146,20 @@ export async function relayExternalBuy(
     }
   }
 
-  const rawBody = request.method === "GET" ? undefined : await request.text().catch(() => "");
+  // A body we cannot read must not be relayed as an empty one — the buyer would
+  // pay the seller for a call that carried none of their input.
+  let rawBody: string | undefined;
+  if (request.method !== "GET") {
+    try {
+      rawBody = await request.text();
+    } catch (err) {
+      logError("relay-buy:read-body", err, { offerId: offer._id });
+      return NextResponse.json(
+        { error: "Could not read request body" },
+        { status: 400 },
+      );
+    }
+  }
 
   const fwdHeaders = forwardRequestHeaders(request.headers);
 
@@ -156,7 +171,8 @@ export async function relayExternalBuy(
       body: rawBody && rawBody.length ? rawBody : undefined,
       redirect: "manual",
     });
-  } catch {
+  } catch (err) {
+    logError("relay-buy:fetch-seller", err, { offerId: offer._id });
     return NextResponse.json(
       { error: "Failed to reach the offer endpoint" },
       { status: 502 },
@@ -245,10 +261,23 @@ export async function relayExternalBuy(
           offerId: offer._id,
         });
         await collectFee(request);
-      } catch {
+      } catch (err) {
         // receipt exists; ranking/delivery marks catch up on the next sale
+        logError("relay-buy:post-settlement", err, {
+          offerId: offer._id,
+          receiptId,
+        });
       }
-    } catch {
+    } catch (err) {
+      // A settlement happened on-chain and we could not record it. Nothing to
+      // return to the buyer but the seller's content, so log loudly with the
+      // tx hash — this is the only trace left to reconcile from.
+      logError("relay-buy:record-settlement", err, {
+        offerId: offer._id,
+        buyerWallet,
+        payTo: offer.payTo,
+        txHash: txHashFromResponse(sellerRes),
+      });
       receiptId = null;
     }
   }

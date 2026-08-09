@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createPublicClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { base, baseSepolia } from "viem/chains";
+import { errorMessage, logError } from "@/lib/errors";
 
 const PLATFORM_WALLET = process.env.PLATFORM_WALLET_ADDRESS!;
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://payanagent.com";
@@ -34,6 +35,17 @@ const USDC_DOMAINS: Record<string, { name: string; version: string }> = {
 // 1 cent = $0.01 = 10000 base units
 export function centsToUsdcBaseUnits(cents: number): string {
   return String(cents * 10000);
+}
+
+// Read a JSON body without letting a malformed one masquerade as an empty
+// object — a facilitator reply we cannot parse is not a verdict.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function readJson(response: Response): Promise<any | null> {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
 }
 
 // Decode a base64-encoded JSON header
@@ -192,22 +204,35 @@ export async function verifyPayment(paymentSignatureHeader: string, paymentRequi
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      return {
-        valid: false,
-        error: errorData.invalidReason || errorData.invalidMessage || errorData.error || "Verification failed",
-      };
+      const errorData = await readJson(response);
+      const error =
+        errorData?.invalidReason ||
+        errorData?.invalidMessage ||
+        errorData?.error ||
+        `Verification failed (facilitator HTTP ${response.status})`;
+      logError("x402:verify", error, {
+        facilitator: FACILITATOR_URL,
+        status: response.status,
+      });
+      return { valid: false, error };
     }
 
-    const data = await response.json();
+    const data = await readJson(response);
+    if (!data) {
+      logError("x402:verify", "facilitator returned an unparseable 2xx response", {
+        facilitator: FACILITATOR_URL,
+      });
+      return { valid: false, error: "Facilitator returned an unparseable response" };
+    }
     if (data.isValid === false) {
       return { valid: false, error: data.invalidReason || data.invalidMessage || "Verification rejected by facilitator" };
     }
     return { valid: true, txHash: data.transaction };
   } catch (error) {
+    logError("x402:verify", error, { facilitator: FACILITATOR_URL });
     return {
       valid: false,
-      error: error instanceof Error ? error.message : "Facilitator unreachable",
+      error: errorMessage(error, "Facilitator unreachable"),
     };
   }
 }
@@ -240,16 +265,29 @@ export async function settlePayment(paymentSignatureHeader: string, paymentRequi
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      return {
-        success: false,
-        error: errorData.errorReason || errorData.errorMessage || errorData.error || "Settlement failed",
-      };
+      const errorData = await readJson(response);
+      const error =
+        errorData?.errorReason ||
+        errorData?.errorMessage ||
+        errorData?.error ||
+        `Settlement failed (facilitator HTTP ${response.status})`;
+      logError("x402:settle", error, {
+        facilitator: FACILITATOR_URL,
+        status: response.status,
+      });
+      return { success: false, error };
     }
 
-    const data = await response.json();
+    const data = await readJson(response);
     // Facilitators return HTTP 200 with { success: false } on settlement
-    // failure — the status code alone is not a settlement guarantee.
+    // failure — the status code alone is not a settlement guarantee. An
+    // unreadable 200 is not one either: never report success we can't confirm.
+    if (!data) {
+      logError("x402:settle", "facilitator returned an unparseable 2xx response", {
+        facilitator: FACILITATOR_URL,
+      });
+      return { success: false, error: "Facilitator returned an unparseable response" };
+    }
     if (data.success === false || !data.transaction) {
       return {
         success: false,
@@ -258,9 +296,12 @@ export async function settlePayment(paymentSignatureHeader: string, paymentRequi
     }
     return { success: true, txHash: data.transaction };
   } catch (error) {
+    // The buyer may or may not have been charged — we cannot tell, so this has
+    // to leave a trace even though the caller only sees "settlement failed".
+    logError("x402:settle", error, { facilitator: FACILITATOR_URL });
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Facilitator unreachable",
+      error: errorMessage(error, "Facilitator unreachable"),
     };
   }
 }
@@ -351,9 +392,10 @@ export async function releaseEscrow(
 
     return await settlePayment(signatureHeader, "");
   } catch (error) {
+    logError("x402:release-escrow", error, { facilitator: FACILITATOR_URL });
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Escrow release failed",
+      error: errorMessage(error, "Escrow release failed"),
     };
   }
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient, PLATFORM_SECRET } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
 import { validateBody, createBidSchema } from "@/lib/validation";
+import { errorMessage, logError } from "@/lib/errors";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -31,7 +32,8 @@ export async function POST(
     });
     return NextResponse.json({ bidId }, { status: 201 });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Failed to submit bid";
+    logError("requests.bid:submit", e, { requestId });
+    const message = errorMessage(e, "Failed to submit bid");
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }

@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { getConvexClient } from "@/lib/convex";
 import { api } from "@convex/_generated/api";
+import { logError } from "@/lib/errors";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://payanagent.com";
 
@@ -19,8 +20,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: new Date(o.lastModified),
       changeFrequency: "weekly" as const,
     }));
-  } catch {
-    // An empty sitemap beats a 500 — crawlers retry on their own schedule.
+  } catch (err) {
+    // An empty sitemap beats a 500 — crawlers retry on their own schedule. It
+    // also silently de-indexes the catalog, so the cause must be logged.
+    logError("sitemap.offers:list", err);
     return [];
   }
 }

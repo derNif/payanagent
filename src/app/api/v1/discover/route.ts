@@ -9,6 +9,7 @@ import {
 import { RATE_LIMITS } from "@/lib/rate-limit";
 import { toPublicAgent, toPublicOffer } from "@/lib/public-projections";
 import { cacheHeaders } from "@/lib/cache";
+import { internalErrorResponse } from "@/lib/errors";
 import { api } from "@convex/_generated/api";
 
 // GET /api/v1/discover — Unified search across agents, offers, and open requests.
@@ -68,6 +69,6 @@ export async function GET(request: NextRequest) {
       { headers: cacheHeaders(300) },
     );
   } catch (error) {
-    return errorResponse(error, "Internal server error", 500);
+    return internalErrorResponse("discover:query", error, { query, category });
   }
 }

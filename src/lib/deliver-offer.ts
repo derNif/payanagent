@@ -7,6 +7,7 @@ import type { ConvexHttpClient } from "convex/browser";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { errorMessage, jsonError } from "./api-http";
+import { logError, swallow } from "./errors";
 import { runInternalHandler } from "./internal-offers";
 import { assertPublicHttpUrl } from "./ssrf";
 import { validateInput } from "./validate-input";
@@ -28,11 +29,20 @@ export interface DeliverableOffer {
 export async function readOfferInput(
   request: Request,
   inputSchema: string | undefined,
+  logScope = "offer",
 ): Promise<
   | { rawBody: string; input: Record<string, unknown>; error?: never }
   | { rawBody?: never; input?: never; error: NextResponse }
 > {
-  const rawBody = await request.text().catch(() => "");
+  let rawBody: string;
+  try {
+    rawBody = await request.text();
+  } catch (err) {
+    // An unreadable body must not be treated as an empty one — the buyer would
+    // pay for a call that dropped their input.
+    logError(`${logScope}:read-body`, err);
+    return { error: jsonError("Could not read request body", 400) };
+  }
   let input: Record<string, unknown> = {};
   if (rawBody) {
     try {
@@ -60,25 +70,34 @@ export async function deliverOffer({
   rawBody,
   receiptId,
   txHash,
+  logScope = "offer",
 }: {
   convex: ConvexHttpClient;
   platformSecret: string;
   offer: DeliverableOffer;
   input: Record<string, unknown>;
   rawBody: string;
-  receiptId: Id<"receipts">;
+  // Null when post-settlement bookkeeping failed: the buyer still gets their
+  // content, there is just no receipt to mark or advertise.
+  receiptId: Id<"receipts"> | null;
   txHash: string;
+  logScope?: string;
 }): Promise<NextResponse> {
-  const mark = (delivered: boolean, deliveryStatus?: string) =>
-    convex.mutation(api.receipts.markDelivered, {
-      platformSecret,
-      receiptId,
-      delivered,
-      deliveryStatus,
-    });
+  const mark = async (delivered: boolean, deliveryStatus?: string) => {
+    if (!receiptId) return null;
+    return convex
+      .mutation(api.receipts.markDelivered, {
+        platformSecret,
+        receiptId,
+        delivered,
+        deliveryStatus,
+      })
+      .catch(swallow(`${logScope}:mark-delivered`, { receiptId, delivered }));
+  };
 
+  // Only advertise a receipt that was actually recorded.
   const deliveryHeaders = {
-    "X-Receipt-Id": String(receiptId),
+    ...(receiptId ? { "X-Receipt-Id": String(receiptId) } : {}),
     "X-Tx-Hash": txHash,
   };
 
@@ -92,6 +111,7 @@ export async function deliverOffer({
       return NextResponse.json(result, { headers: deliveryHeaders });
     } catch (err) {
       const message = errorMessage(err, "service call failed");
+      logError(`${logScope}:internal-handler`, err, { receiptId });
       await mark(false, message.slice(0, 200));
       return jsonError(message, 502, {
         receiptId,
@@ -117,6 +137,7 @@ export async function deliverOffer({
   try {
     await assertPublicHttpUrl(offer.endpoint);
   } catch (err) {
+    logError(`${logScope}:ssrf-guard`, err, { receiptId });
     await mark(false, "blocked endpoint");
     return jsonError(
       `Offer endpoint not allowed: ${errorMessage(err, "blocked endpoint")}`,
@@ -144,7 +165,8 @@ export async function deliverOffer({
         ...deliveryHeaders,
       },
     });
-  } catch {
+  } catch (err) {
+    logError(`${logScope}:fetch-endpoint`, err, { receiptId });
     await mark(false, "endpoint unreachable");
     return jsonError("Failed to reach offer endpoint", 502, {
       receiptId,

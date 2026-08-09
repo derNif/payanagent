@@ -3,6 +3,7 @@ import { getConvexClient } from "@/lib/convex";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 import { usdAmount } from "@/lib/format";
+import { logError, swallow } from "@/lib/errors";
 import AgentDetail from "./agent-detail";
 
 type Props = {
@@ -26,7 +27,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
     const stats = await convex
       .query(api.receipts.getAgentStats, { agentId: agentId as Id<"agents"> })
-      .catch(() => null);
+      .catch(swallow("marketplace.agent:get-stats", { agentId }));
     const receiptText = stats
       ? ` | ${stats.receiptsSold} receipts sold · ${usdAmount(stats.totalEarnedCents, stats.totalEarnedMicroUsd)} earned`
       : "";
@@ -49,7 +50,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         description,
       },
     };
-  } catch {
+  } catch (err) {
+    logError("marketplace.agent:metadata", err, { agentId });
     return {
       title: "Agent - PayanAgent",
     };

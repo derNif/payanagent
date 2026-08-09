@@ -13,6 +13,7 @@ import { cacheHeaders } from "@/lib/cache";
 import { buildPaymentRequiredResponse } from "@/lib/x402";
 import { getPaymentSignature, settleSignedPayment } from "@/lib/x402-settle";
 import { recordSettlementReceipt } from "@/lib/settlement";
+import { internalErrorResponse, logError } from "@/lib/errors";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -51,7 +52,7 @@ export async function GET(request: NextRequest) {
     }
     return NextResponse.json({ requests }, { headers: cacheHeaders(120) });
   } catch (error) {
-    return errorResponse(error, "Internal server error", 500);
+    return internalErrorResponse("requests.list:list", error, { status, limit });
   }
 }
 
@@ -119,6 +120,7 @@ export async function POST(request: NextRequest) {
       agreedPriceCents: data.agreedPriceCents,
     });
   } catch (e) {
+    logError("requests.create:create", e);
     return errorResponse(e, "Failed to create request");
   }
 

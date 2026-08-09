@@ -14,6 +14,7 @@ import { cacheHeaders } from "@/lib/cache";
 import { createOfferSchema, validateBody } from "@/lib/validation";
 import { assertPublicHttpUrl } from "@/lib/ssrf";
 import { probeX402Resource } from "@/lib/external-verify";
+import { internalErrorResponse, logError } from "@/lib/errors";
 import { api } from "@convex/_generated/api";
 
 // GET /api/v1/offers — Public list/search.
@@ -76,7 +77,7 @@ export async function GET(request: NextRequest) {
       { headers: cacheHeaders(300) },
     );
   } catch (error) {
-    return errorResponse(error, "Internal server error", 500);
+    return internalErrorResponse("offers.list:browse", error, { sort, category });
   }
 }
 
@@ -124,6 +125,9 @@ export async function POST(request: NextRequest) {
         data.verificationBody,
       );
     } catch (err) {
+      logError("offers.create:verify-external", err, {
+        externalUrl: data.externalUrl,
+      });
       return jsonError(
         `externalUrl verification failed: ${errorMessage(err, "verification failed")}`,
         400,
@@ -165,6 +169,7 @@ export async function POST(request: NextRequest) {
         { status: 201 },
       );
     } catch (e) {
+      logError("offers.create:register-external", e);
       return errorResponse(e, "Failed to register offer");
     }
   }
@@ -191,6 +196,7 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ offerId }, { status: 201 });
   } catch (e) {
+    logError("offers.create:create", e);
     return errorResponse(e, "Failed to create offer");
   }
 }
