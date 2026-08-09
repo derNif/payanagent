@@ -107,7 +107,11 @@ export const recordSettlement = mutation({
       v.literal("escrow_refund"),
       v.literal("external"),
     ),
-    status: v.union(v.literal("confirmed"), v.literal("failed")),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("confirmed"),
+      v.literal("failed"),
+    ),
     latencyMs: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<Id<"receipts">> => {
@@ -138,6 +142,46 @@ export const recordSettlement = mutation({
       signature,
       emittedAt,
     });
+  },
+});
+
+// Finalize an escrow-release receipt that was written BEFORE the on-chain
+// transfer: set the real txHash and flip pending → confirmed/failed, re-signing
+// the canonical payload so the signature keeps attesting the stored fields.
+export const finalizeSettlement = mutation({
+  args: {
+    platformSecret: v.string(),
+    receiptId: v.id("receipts"),
+    txHash: v.optional(v.string()),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("confirmed"),
+      v.literal("failed"),
+    ),
+  },
+  handler: async (ctx, args): Promise<void> => {
+    requireSecret(args.platformSecret);
+    const r = await ctx.db.get(args.receiptId);
+    if (!r) throw new Error("receipt not found");
+    const txHash = args.txHash ?? r.txHash;
+    const canonical = canonicalize({
+      buyerId: r.buyerId as unknown as string,
+      sellerId: r.sellerId as unknown as string,
+      offerId: (r.offerId as unknown as string | undefined) ?? null,
+      requestId: (r.requestId as unknown as string | undefined) ?? null,
+      externalResourceId: r.externalResourceId ?? null,
+      amountCents: r.amountCents,
+      amountMicroUsd: r.amountMicroUsd,
+      currency: r.currency,
+      chain: r.chain,
+      network: r.network,
+      txHash,
+      settlementType: r.settlementType,
+      status: args.status,
+      emittedAt: r.emittedAt,
+    });
+    const signature = await sign(canonical);
+    await ctx.db.patch(args.receiptId, { txHash, status: args.status, signature });
   },
 });
 
@@ -172,11 +216,14 @@ export const getSettlementForRequest = query({
       .query("receipts")
       .withIndex("by_requestId", (q) => q.eq("requestId", args.requestId))
       .collect();
+    // A failed attempt must not block a retry; a pending one must (it means a
+    // transfer may be in flight — paying again could double-release).
     return (
       receipts.find(
         (r) =>
-          r.settlementType === "escrow_release" ||
-          r.settlementType === "escrow_refund",
+          (r.settlementType === "escrow_release" ||
+            r.settlementType === "escrow_refund") &&
+          r.status !== "failed",
       ) ?? null
     );
   },

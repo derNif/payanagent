@@ -25,14 +25,18 @@ export async function recordSettlementReceipt(
     txHash: string;
     settlementType: SettlementType;
     latencyMs?: number;
+    // "pending" is used ONLY when the receipt is written before the on-chain
+    // transfer (escrow release) so a crash can never double-pay on retry.
+    status?: "pending" | "confirmed";
   },
 ): Promise<Id<"receipts">> {
+  const { status, ...rest } = args;
   return await convex.mutation(api.receipts.recordSettlement, {
-    ...args,
+    ...rest,
     currency: "USDC",
     chain: getNetwork(),
     network: getNetworkId(),
     facilitatorUrl: getFacilitatorUrl(),
-    status: "confirmed",
+    status: status ?? "confirmed",
   });
 }

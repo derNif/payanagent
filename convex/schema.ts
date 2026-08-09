@@ -214,7 +214,14 @@ export default defineSchema({
       v.literal("external"),
     ),
 
-    status: v.union(v.literal("confirmed"), v.literal("failed")),
+    // "pending" exists for escrow releases only: the receipt is written BEFORE
+    // the on-chain transfer so a crash between transfer and bookkeeping can
+    // never lead a retry to pay twice. Reputation/volume count only "confirmed".
+    status: v.union(
+      v.literal("pending"),
+      v.literal("confirmed"),
+      v.literal("failed"),
+    ),
 
     // Whether the service actually DELIVERED after payment settled — distinct
     // from `status` (which only attests the on-chain payment). Drives the

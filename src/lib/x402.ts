@@ -201,6 +201,9 @@ export async function verifyPayment(paymentSignatureHeader: string, paymentRequi
         paymentPayload,
         paymentRequirements,
       }),
+      // A hung facilitator must not hold the route open until the platform
+      // times it out — fail the verify and let the buyer retry.
+      signal: AbortSignal.timeout(30_000),
     });
 
     if (!response.ok) {
@@ -262,6 +265,11 @@ export async function settlePayment(paymentSignatureHeader: string, paymentRequi
         paymentPayload,
         paymentRequirements,
       }),
+      // Longer than verify: settlement waits on an on-chain tx. On timeout the
+      // outcome is UNKNOWN (the tx may still land) — settlePayment reports
+      // failure and the caller must not retry blindly with real money; the
+      // signed payload can only settle once at the facilitator either way.
+      signal: AbortSignal.timeout(60_000),
     });
 
     if (!response.ok) {
@@ -397,6 +405,32 @@ export async function releaseEscrow(
       success: false,
       error: errorMessage(error, "Escrow release failed"),
     };
+  }
+}
+
+// On-chain confirmation for a settlement tx hash. A facilitator's tx hash is a
+// submission, not a guarantee — before a receipt flips pending → confirmed we
+// check the chain itself. "unknown" (RPC down / not yet mined within the
+// bound) is NOT a failure: the caller leaves the receipt pending and reconciles
+// later instead of blocking the response.
+export async function confirmTxOnChain(
+  txHash: string,
+  timeoutMs = 15_000,
+): Promise<"confirmed" | "reverted" | "unknown"> {
+  if (!/^0x[a-fA-F0-9]{64}$/.test(txHash)) return "unknown";
+  try {
+    const publicClient = createPublicClient({
+      chain: NETWORK === "base-sepolia" ? baseSepolia : base,
+      transport: http(),
+    });
+    const receipt = await publicClient.waitForTransactionReceipt({
+      hash: txHash as `0x${string}`,
+      timeout: timeoutMs,
+    });
+    return receipt.status === "success" ? "confirmed" : "reverted";
+  } catch (error) {
+    logError("x402:confirm-tx", error, { txHash });
+    return "unknown";
   }
 }
 

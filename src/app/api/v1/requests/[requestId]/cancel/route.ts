@@ -3,8 +3,7 @@ import { getConvexClient, requirePlatformSecret } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
 import { jsonError } from "@/lib/api-http";
 import { validateBody, cancelSchema } from "@/lib/validation";
-import { releaseEscrow } from "@/lib/x402";
-import { recordSettlementReceipt } from "@/lib/settlement";
+import { payoutEscrow } from "@/lib/escrow-release";
 import {
   isUpstreamUnavailable,
   logError,
@@ -113,11 +112,24 @@ export async function POST(
     return jsonError("Request is already being settled", 409);
   }
 
-  // Idempotency: if a release/refund already moved funds, finalize without
-  // transferring again.
+  // Idempotency: if a release/refund already touched funds, never transfer
+  // again. A pending receipt = a prior attempt's transfer may be in flight —
+  // refunding again could double-pay, so 409 and reconcile from its txHash.
   const existing = await convex.query(api.receipts.getSettlementForRequest, {
     requestId: req._id,
   });
+  if (existing && existing.status === "pending") {
+    logError("requests.cancel:pending-settlement", "prior payout unresolved", {
+      requestId: req._id,
+      receiptId: existing._id,
+      txHash: existing.txHash,
+    });
+    return jsonError(
+      "A prior escrow payout for this request is unresolved (pending). Not retrying automatically to avoid a double payout.",
+      409,
+      { receiptId: existing._id, txHash: existing.txHash || undefined },
+    );
+  }
   if (existing) {
     await convex.mutation(api.requests.markCancelled, {
       platformSecret,
@@ -138,23 +150,24 @@ export async function POST(
   const refundAmount =
     req.escrowDepositedCents ?? req.agreedPriceCents ?? req.budgetMaxCents;
 
-  const refund = await releaseEscrow(buyer.walletAddress, refundAmount);
-  if (!refund.success || !refund.txHash) {
-    await convex.mutation(api.requests.revertSettlement, { platformSecret, requestId: req._id });
-    return jsonError(`Refund failed: ${refund.error || "unknown"}`, 502);
-  }
-
-  const receiptId = await recordSettlementReceipt(convex, {
+  // The pending receipt is written BEFORE the transfer (inside payoutEscrow),
+  // so a crash after funds move can never lead a retry to refund twice.
+  const refund = await payoutEscrow({
+    convex,
     platformSecret,
     buyerId: req.buyerId,
     sellerId: req.providerId ?? req.buyerId,
     requestId: req._id,
+    toAddress: buyer.walletAddress,
     amountCents: refundAmount,
-    amountMicroUsd: refundAmount * 10000,
-    txHash: refund.txHash,
     settlementType: "escrow_refund",
-    latencyMs: Date.now() - startedAt,
+    startedAt,
   });
+  if (!refund.ok) {
+    await convex.mutation(api.requests.revertSettlement, { platformSecret, requestId: req._id });
+    return jsonError(`Refund failed: ${refund.error}`, 502);
+  }
+  const receiptId = refund.receiptId;
 
   await convex.mutation(api.requests.markCancelled, {
       platformSecret,
