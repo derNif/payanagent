@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
-import { requireSecret } from "./platformSecret";
+import { requireSecret, requireSecretIfPresent } from "./platformSecret";
 
 // Public agent reads must not leak PII (ownerEmail) or operator-private growth
 // attribution (discoverySource) — any exported query is reachable unauthenticated.
@@ -84,12 +84,7 @@ export const getOrCreateByWallet = mutation({
   handler: async (ctx, args): Promise<Id<"agents">> => {
     // Gated like every other write: ungated, this public mutation let anyone
     // with the Convex URL insert unbounded agent rows for arbitrary wallets.
-    if (
-      args.platformSecret !== undefined &&
-      (!PLATFORM_INTERNAL_KEY || args.platformSecret !== PLATFORM_INTERNAL_KEY)
-    ) {
-      throw new Error("unauthorized: invalid platform secret");
-    }
+    requireSecretIfPresent(args.platformSecret);
     if (!/^0x[a-fA-F0-9]{40}$/.test(args.walletAddress)) {
       throw new Error("invalid wallet address");
     }

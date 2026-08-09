@@ -9,3 +9,11 @@ export function requireSecret(secret: string) {
     throw new Error("unauthorized: invalid platform secret");
   }
 }
+
+// Deploy-window variant: enforces the secret only when the caller sends one.
+// Exists solely so a mutation can be gated across a non-atomic Convex→Vercel
+// deploy (old Vercel code omits the arg). TODO(tighten): callers migrate to
+// requireSecret once the arg-passing Vercel deploy is live.
+export function requireSecretIfPresent(secret: string | undefined) {
+  if (secret !== undefined) requireSecret(secret);
+}
