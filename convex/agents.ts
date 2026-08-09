@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
-import { requireSecret, requireSecretIfPresent } from "./platformSecret";
+import { requireSecret } from "./platformSecret";
 
 // Public agent reads must not leak PII (ownerEmail) or operator-private growth
 // attribution (discoverySource) — any exported query is reachable unauthenticated.
@@ -74,17 +74,14 @@ export const getById = query({
 // Convex mutations are serializable, so concurrent first-buys can't duplicate.
 export const getOrCreateByWallet = mutation({
   args: {
-    // Optional ONLY for the Convex→Vercel deploy window (the two don't deploy
-    // atomically; a required arg would 500 every anonymous buy in between).
-    // TODO(tighten): make required once the Vercel side that passes it is live.
-    platformSecret: v.optional(v.string()),
+    platformSecret: v.string(),
     walletAddress: v.string(),
     chain: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<Id<"agents">> => {
     // Gated like every other write: ungated, this public mutation let anyone
     // with the Convex URL insert unbounded agent rows for arbitrary wallets.
-    requireSecretIfPresent(args.platformSecret);
+    requireSecret(args.platformSecret);
     if (!/^0x[a-fA-F0-9]{40}$/.test(args.walletAddress)) {
       throw new Error("invalid wallet address");
     }
