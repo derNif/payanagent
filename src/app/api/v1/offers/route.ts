@@ -7,6 +7,7 @@ import { cacheHeaders } from "@/lib/cache";
 import { createOfferSchema, validateBody } from "@/lib/validation";
 import { assertPublicHttpUrl } from "@/lib/ssrf";
 import { probeX402Resource } from "@/lib/external-verify";
+import { errorMessage, internalErrorResponse, logError } from "@/lib/errors";
 import { api } from "@convex/_generated/api";
 
 // GET /api/v1/offers — Public list/search.
@@ -76,8 +77,7 @@ export async function GET(request: NextRequest) {
       { headers: cacheHeaders(300) },
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return internalErrorResponse("offers.list:browse", error, { sort, category });
   }
 }
 
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
     try {
       await assertPublicHttpUrl(data.endpoint);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "invalid endpoint";
+      const message = errorMessage(err, "invalid endpoint");
       return NextResponse.json(
         { error: `endpoint not allowed: ${message}` },
         { status: 400 },
@@ -122,7 +122,10 @@ export async function POST(request: NextRequest) {
     try {
       terms = await probeX402Resource(data.externalUrl, data.httpMethod ?? "GET");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "verification failed";
+      const message = errorMessage(err, "verification failed");
+      logError("offers.create:verify-external", err, {
+        externalUrl: data.externalUrl,
+      });
       return NextResponse.json(
         { error: `externalUrl verification failed: ${message}` },
         { status: 400 },
@@ -166,7 +169,8 @@ export async function POST(request: NextRequest) {
         { status: 201 },
       );
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Failed to register offer";
+      logError("offers.create:register-external", e);
+      const message = errorMessage(e, "Failed to register offer");
       return NextResponse.json({ error: message }, { status: 400 });
     }
   }
@@ -193,7 +197,8 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ offerId }, { status: 201 });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Failed to create offer";
+    logError("offers.create:create", e);
+    const message = errorMessage(e, "Failed to create offer");
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }

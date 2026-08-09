@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { settlePayment, getNetworkId } from "@/lib/x402";
+import { logError } from "@/lib/errors";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PayanAgent fee — the ONE place the platform fee lives, shared by every buy
@@ -72,8 +73,17 @@ export async function collectFee(request: NextRequest): Promise<string | null> {
   try {
     // settlePayment derives the requirements from the signed payload itself.
     const r = await settlePayment(feePayment, "");
-    return r.success ? r.txHash ?? "" : null;
-  } catch {
+    if (!r.success) {
+      // The buyer's own payment is unaffected, so the buy still succeeds — but an
+      // uncollected fee is revenue lost silently unless it is recorded here.
+      logError("x402-fee:collect", r.error ?? "fee settlement rejected", {
+        bps: FEE_BPS,
+      });
+      return null;
+    }
+    return r.txHash ?? "";
+  } catch (err) {
+    logError("x402-fee:collect", err, { bps: FEE_BPS });
     return null;
   }
 }

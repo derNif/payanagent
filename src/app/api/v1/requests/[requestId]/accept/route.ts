@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient, PLATFORM_SECRET } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
 import { validateBody, acceptBidOnRequestSchema } from "@/lib/validation";
+import { errorMessage, lookupErrorResponse } from "@/lib/errors";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -27,8 +28,13 @@ export async function POST(
     req = await convex.query(api.requests.getById, {
       requestId: requestId as Id<"requests">,
     });
-  } catch {
-    return NextResponse.json({ error: "Invalid request ID" }, { status: 400 });
+  } catch (err) {
+    return lookupErrorResponse(
+      "requests.accept:get-request",
+      err,
+      "Invalid request ID",
+      { requestId },
+    );
   }
   if (!req) {
     return NextResponse.json({ error: "Request not found" }, { status: 404 });
@@ -57,7 +63,7 @@ export async function POST(
     });
     return NextResponse.json({ ok: true });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Failed to accept bid";
+    const message = errorMessage(e, "Failed to accept bid");
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }

@@ -6,6 +6,7 @@ import { toPublicOffer } from "@/lib/public-projections";
 import { cacheHeaders } from "@/lib/cache";
 import { updateOfferSchema, validateBody } from "@/lib/validation";
 import { assertPublicHttpUrl } from "@/lib/ssrf";
+import { errorMessage, lookupErrorResponse } from "@/lib/errors";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -41,8 +42,10 @@ export async function GET(
       { offer: toPublicOffer(offer) },
       { headers: cacheHeaders(3600) },
     );
-  } catch {
-    return NextResponse.json({ error: "Invalid offer ID" }, { status: 400 });
+  } catch (err) {
+    return lookupErrorResponse("offers.get:get-offer", err, "Invalid offer ID", {
+      offerId,
+    });
   }
 }
 
@@ -61,8 +64,10 @@ export async function PATCH(
     offer = await convex.query(api.offers.getById, {
       offerId: offerId as Id<"offers">,
     });
-  } catch {
-    return NextResponse.json({ error: "Invalid offer ID" }, { status: 400 });
+  } catch (err) {
+    return lookupErrorResponse("offers.patch:get-offer", err, "Invalid offer ID", {
+      offerId,
+    });
   }
   if (!offer) {
     return NextResponse.json({ error: "Offer not found" }, { status: 404 });
@@ -81,7 +86,7 @@ export async function PATCH(
     try {
       await assertPublicHttpUrl(data.endpoint);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "invalid endpoint";
+      const message = errorMessage(err, "invalid endpoint");
       return NextResponse.json(
         { error: `endpoint not allowed: ${message}` },
         { status: 400 },
@@ -97,7 +102,7 @@ export async function PATCH(
     });
     return NextResponse.json({ ok: true });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Failed to update offer";
+    const message = errorMessage(e, "Failed to update offer");
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }
@@ -117,8 +122,10 @@ export async function DELETE(
     offer = await convex.query(api.offers.getById, {
       offerId: offerId as Id<"offers">,
     });
-  } catch {
-    return NextResponse.json({ error: "Invalid offer ID" }, { status: 400 });
+  } catch (err) {
+    return lookupErrorResponse("offers.delete:get-offer", err, "Invalid offer ID", {
+      offerId,
+    });
   }
   if (!offer) {
     return NextResponse.json({ error: "Offer not found" }, { status: 404 });

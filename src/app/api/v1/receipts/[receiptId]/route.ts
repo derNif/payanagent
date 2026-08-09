@@ -3,6 +3,7 @@ import { getConvexClient } from "@/lib/convex";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { toPublicReceipt } from "@/lib/public-projections";
 import { cacheHeaders } from "@/lib/cache";
+import { lookupErrorResponse } from "@/lib/errors";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -38,7 +39,12 @@ export async function GET(
       { receipt: toPublicReceipt(receipt) },
       { headers: cacheHeaders(300) },
     );
-  } catch {
-    return NextResponse.json({ error: "Invalid receipt ID" }, { status: 400 });
+  } catch (err) {
+    return lookupErrorResponse(
+      "receipts.get:get-receipt",
+      err,
+      "Invalid receipt ID",
+      { receiptId },
+    );
   }
 }

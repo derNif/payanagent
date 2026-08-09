@@ -11,6 +11,12 @@ import {
   getNetwork,
   getNetworkId,
 } from "@/lib/x402";
+import {
+  isUpstreamUnavailable,
+  logError,
+  lookupErrorResponse,
+  upstreamUnavailableResponse,
+} from "@/lib/errors";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -46,8 +52,13 @@ export async function POST(
     req = await convex.query(api.requests.getById, {
       requestId: requestId as Id<"requests">,
     });
-  } catch {
-    return NextResponse.json({ error: "Invalid request ID" }, { status: 400 });
+  } catch (err) {
+    return lookupErrorResponse(
+      "requests.approve:get-request",
+      err,
+      "Invalid request ID",
+      { requestId },
+    );
   }
   if (!req) {
     return NextResponse.json({ error: "Request not found" }, { status: 404 });
@@ -121,7 +132,13 @@ export async function POST(
         requestId: req._id,
         allowedFrom: ["fulfilled", "completing"],
       });
-    } catch {
+    } catch (err) {
+      // A transport failure took no lock — saying "already being settled" would
+      // describe a claim that never happened.
+      logError("requests.approve:claim-settlement-direct", err, {
+        requestId: req._id,
+      });
+      if (isUpstreamUnavailable(err)) return upstreamUnavailableResponse();
       return NextResponse.json(
         { error: "Request is already being settled" },
         { status: 409 },
@@ -233,7 +250,11 @@ export async function POST(
       requestId: req._id,
       allowedFrom: ["fulfilled", "completing"],
     });
-  } catch {
+  } catch (err) {
+    logError("requests.approve:claim-settlement-escrow", err, {
+      requestId: req._id,
+    });
+    if (isUpstreamUnavailable(err)) return upstreamUnavailableResponse();
     return NextResponse.json(
       { error: "Request is already being settled" },
       { status: 409 },

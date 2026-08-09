@@ -3,6 +3,12 @@ import { getConvexClient, PLATFORM_SECRET } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
 import { validateBody, cancelSchema } from "@/lib/validation";
 import {
+  isUpstreamUnavailable,
+  logError,
+  lookupErrorResponse,
+  upstreamUnavailableResponse,
+} from "@/lib/errors";
+import {
   getFacilitatorUrl,
   getNetwork,
   getNetworkId,
@@ -47,8 +53,13 @@ export async function POST(
     req = await convex.query(api.requests.getById, {
       requestId: requestId as Id<"requests">,
     });
-  } catch {
-    return NextResponse.json({ error: "Invalid request ID" }, { status: 400 });
+  } catch (err) {
+    return lookupErrorResponse(
+      "requests.cancel:get-request",
+      err,
+      "Invalid request ID",
+      { requestId },
+    );
   }
   if (!req) {
     return NextResponse.json({ error: "Request not found" }, { status: 404 });
@@ -114,7 +125,12 @@ export async function POST(
       requestId: req._id,
       allowedFrom: ["open", "accepted", "fulfilled"],
     });
-  } catch {
+  } catch (err) {
+    // The lock is only "held" if Convex actually answered. A transport failure
+    // here is ours, and reporting it as a 409 would tell the buyer their cancel
+    // is in flight when nothing was ever claimed.
+    logError("requests.cancel:claim-settlement", err, { requestId: req._id });
+    if (isUpstreamUnavailable(err)) return upstreamUnavailableResponse();
     return NextResponse.json(
       { error: "Request is already being settled" },
       { status: 409 },

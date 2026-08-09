@@ -3,6 +3,7 @@ import { fetchQuery } from "convex/nextjs";
 import { api } from "@convex/_generated/api";
 import { Doc } from "@convex/_generated/dataModel";
 import { usdAmount } from "@/lib/format";
+import { logError } from "@/lib/errors";
 
 // Server component. Access is gated by middleware (ADMIN_KEY). Agent rows —
 // which include PII (ownerEmail) and discoverySource — are read via the
@@ -24,7 +25,8 @@ export default async function AdminPage() {
   } else {
     try {
       agents = await fetchQuery(api.agents.listAdmin, { platformSecret });
-    } catch {
+    } catch (err) {
+      logError("admin:list-agents", err);
       agentsError = "Failed to load agents.";
     }
   }

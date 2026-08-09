@@ -16,6 +16,7 @@ import { attachFeeAdvert, collectFee } from "@/lib/x402-fee";
 import { relayExternalBuy } from "@/lib/relay-buy";
 import { validateInput } from "@/lib/validate-input";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
+import { errorMessage, logError, lookupErrorResponse, swallow } from "@/lib/errors";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -50,8 +51,10 @@ async function handle(
       offerId: offerId as Id<"offers">,
       platformSecret,
     });
-  } catch {
-    return NextResponse.json({ error: "Invalid offer ID" }, { status: 400 });
+  } catch (err) {
+    return lookupErrorResponse("x402.buy:get-offer", err, "Invalid offer ID", {
+      offerId,
+    });
   }
   if (!offer || !offer.isActive) {
     return NextResponse.json(
@@ -140,7 +143,18 @@ async function handle(
 
   // Read + validate the buyer's input BEFORE settling — bad input must never
   // result in a pay-then-fail. Body is read once here and reused for delivery.
-  const rawBody = await request.text().catch(() => "");
+  let rawBody: string;
+  try {
+    rawBody = await request.text();
+  } catch (err) {
+    // An unreadable body must not be treated as an empty one — the buyer would
+    // pay for a call that dropped their input.
+    logError("x402.buy:read-body", err, { offerId });
+    return NextResponse.json(
+      { error: "Could not read request body" },
+      { status: 400 },
+    );
+  }
   let input: Record<string, unknown> = {};
   if (rawBody) {
     try {
@@ -189,15 +203,18 @@ async function handle(
     );
   }
 
-  // Identify (or auto-create) the buyer's wallet account.
-  const buyerId: Id<"agents"> = await convex.mutation(
-    api.agents.getOrCreateByWallet,
-    { walletAddress: buyerWallet, chain: getNetwork() },
-  );
-
-  const receiptId: Id<"receipts"> = await convex.mutation(
-    api.receipts.recordSettlement,
-    {
+  // The money has moved. Bookkeeping failures from here on are logged and
+  // tolerated — throwing would hand the buyer a 500 and withhold the content
+  // they just paid for. The log line carries the tx hash so an unrecorded
+  // settlement can be reconciled from the chain.
+  let receiptId: Id<"receipts"> | null = null;
+  try {
+    // Identify (or auto-create) the buyer's wallet account.
+    const buyerId: Id<"agents"> = await convex.mutation(
+      api.agents.getOrCreateByWallet,
+      { walletAddress: buyerWallet, chain: getNetwork() },
+    );
+    receiptId = await convex.mutation(api.receipts.recordSettlement, {
       platformSecret,
       buyerId,
       sellerId: offer.sellerId,
@@ -211,8 +228,15 @@ async function handle(
       settlementType: "direct",
       status: "confirmed",
       latencyMs: Date.now() - startedAt,
-    },
-  );
+    });
+  } catch (err) {
+    logError("x402.buy:record-settlement", err, {
+      offerId,
+      buyerWallet,
+      txHash: settlement.txHash || "",
+      amountCents: offer.priceCents,
+    });
+  }
 
   // Collect the optional, buyer-signed PayanAgent fee leg → platform wallet
   // (non-custodial; no-op when the fee is off or absent). Same mechanism as
@@ -220,33 +244,38 @@ async function handle(
   await collectFee(request);
 
   // Float this offer into the "sold" rank tier (proven offers rank top).
-  await convex.mutation(api.offers.bumpRankOnSale, {
-    platformSecret,
-    offerId: offer._id,
-  });
+  await convex
+    .mutation(api.offers.bumpRankOnSale, { platformSecret, offerId: offer._id })
+    .catch(swallow("x402.buy:bump-rank", { offerId, receiptId }));
 
   // Record whether the service actually delivered (honest receipts).
-  const mark = (delivered: boolean, deliveryStatus?: string) =>
-    convex.mutation(api.receipts.markDelivered, {
-      platformSecret,
-      receiptId,
-      delivered,
-      deliveryStatus,
-    });
+  const mark = async (delivered: boolean, deliveryStatus?: string) => {
+    if (!receiptId) return null;
+    return convex
+      .mutation(api.receipts.markDelivered, {
+        platformSecret,
+        receiptId,
+        delivered,
+        deliveryStatus,
+      })
+      .catch(swallow("x402.buy:mark-delivered", { receiptId, delivered }));
+  };
+
+  // Only advertise a receipt we actually recorded.
+  const receiptHeaders: Record<string, string> = {
+    ...(receiptId ? { "X-Receipt-Id": String(receiptId) } : {}),
+    "X-Tx-Hash": settlement.txHash || "",
+  };
 
   // PayanAgent-operated (internal) offer — run server-side, key never exposed.
   if (offer.internalHandler) {
     try {
       const result = await runInternalHandler(offer.internalHandler, input);
       await mark(true);
-      return NextResponse.json(result, {
-        headers: {
-          "X-Receipt-Id": String(receiptId),
-          "X-Tx-Hash": settlement.txHash || "",
-        },
-      });
+      return NextResponse.json(result, { headers: receiptHeaders });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "service call failed";
+      const message = errorMessage(err, "service call failed");
+      logError("x402.buy:internal-handler", err, { offerId, receiptId });
       await mark(false, message.slice(0, 200));
       return NextResponse.json(
         { error: message, receiptId, message: "Payment settled but the service call failed." },
@@ -278,7 +307,8 @@ async function handle(
   try {
     await assertPublicHttpUrl(offer.endpoint);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "blocked endpoint";
+    const message = errorMessage(err, "blocked endpoint");
+    logError("x402.buy:ssrf-guard", err, { offerId, receiptId });
     await mark(false, "blocked endpoint");
     return NextResponse.json(
       { error: `Offer endpoint not allowed: ${message}`, receiptId },
@@ -298,13 +328,13 @@ async function handle(
     return new NextResponse(responseData, {
       status: proxyResponse.status,
       headers: {
+        ...receiptHeaders,
         "Content-Type":
           proxyResponse.headers.get("Content-Type") || "application/json",
-        "X-Receipt-Id": String(receiptId),
-        "X-Tx-Hash": settlement.txHash || "",
       },
     });
-  } catch {
+  } catch (err) {
+    logError("x402.buy:fetch-endpoint", err, { offerId, receiptId });
     await mark(false, "endpoint unreachable");
     return NextResponse.json(
       {

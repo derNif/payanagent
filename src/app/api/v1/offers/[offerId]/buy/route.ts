@@ -13,6 +13,7 @@ import {
 import { runInternalHandler } from "@/lib/internal-offers";
 import { assertPublicHttpUrl } from "@/lib/ssrf";
 import { validateInput } from "@/lib/validate-input";
+import { errorMessage, logError, lookupErrorResponse, swallow } from "@/lib/errors";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -48,8 +49,10 @@ export async function POST(
       offerId: offerId as Id<"offers">,
       platformSecret,
     });
-  } catch {
-    return NextResponse.json({ error: "Invalid offer ID" }, { status: 400 });
+  } catch (err) {
+    return lookupErrorResponse("offers.buy:get-offer", err, "Invalid offer ID", {
+      offerId,
+    });
   }
   if (!offer || !offer.isActive) {
     return NextResponse.json(
@@ -98,7 +101,18 @@ export async function POST(
 
   // Validate the buyer's input BEFORE settling — never pay-then-fail on bad
   // input. Body read once here and reused for delivery.
-  const rawBody = await request.text().catch(() => "");
+  let rawBody: string;
+  try {
+    rawBody = await request.text();
+  } catch (err) {
+    // An unreadable body must not be treated as an empty one — the buyer would
+    // pay for a call that dropped their input.
+    logError("offers.buy:read-body", err, { offerId });
+    return NextResponse.json(
+      { error: "Could not read request body" },
+      { status: 400 },
+    );
+  }
   let input: Record<string, unknown> = {};
   if (rawBody) {
     try {
@@ -147,10 +161,13 @@ export async function POST(
     );
   }
 
-  // Emit receipt
-  const receiptId: Id<"receipts"> = await convex.mutation(
-    api.receipts.recordSettlement,
-    {
+  // Emit receipt. The money has moved, so a bookkeeping failure from here on is
+  // logged and tolerated — throwing would hand the buyer a 500 and withhold the
+  // content they paid for. The log line carries the tx hash so an unrecorded
+  // settlement can be reconciled from the chain.
+  let receiptId: Id<"receipts"> | null = null;
+  try {
+    receiptId = await convex.mutation(api.receipts.recordSettlement, {
       platformSecret,
       buyerId: agent._id,
       sellerId,
@@ -165,17 +182,34 @@ export async function POST(
       settlementType: "direct",
       status: "confirmed",
       latencyMs: Date.now() - startedAt,
-    },
-  );
+    });
+  } catch (err) {
+    logError("offers.buy:record-settlement", err, {
+      offerId,
+      buyerId: agent._id,
+      txHash: settlement.txHash || "",
+      amountCents: offer.priceCents,
+    });
+  }
 
   // Record whether the service actually delivered (honest receipts).
-  const mark = (delivered: boolean, deliveryStatus?: string) =>
-    convex.mutation(api.receipts.markDelivered, {
-      platformSecret,
-      receiptId,
-      delivered,
-      deliveryStatus,
-    });
+  const mark = async (delivered: boolean, deliveryStatus?: string) => {
+    if (!receiptId) return null;
+    return convex
+      .mutation(api.receipts.markDelivered, {
+        platformSecret,
+        receiptId,
+        delivered,
+        deliveryStatus,
+      })
+      .catch(swallow("offers.buy:mark-delivered", { receiptId, delivered }));
+  };
+
+  // Only advertise a receipt we actually recorded.
+  const receiptHeaders: Record<string, string> = {
+    ...(receiptId ? { "X-Receipt-Id": String(receiptId) } : {}),
+    "X-Tx-Hash": settlement.txHash || "",
+  };
 
   // PayanAgent-operated (internal) offer: run the handler server-side. The
   // backend key lives only on the server and is never exposed as a callable
@@ -184,14 +218,10 @@ export async function POST(
     try {
       const result = await runInternalHandler(offer.internalHandler, input);
       await mark(true);
-      return NextResponse.json(result, {
-        headers: {
-          "X-Receipt-Id": String(receiptId),
-          "X-Tx-Hash": settlement.txHash || "",
-        },
-      });
+      return NextResponse.json(result, { headers: receiptHeaders });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "service call failed";
+      const message = errorMessage(err, "service call failed");
+      logError("offers.buy:internal-handler", err, { offerId, receiptId });
       await mark(false, message.slice(0, 200));
       return NextResponse.json(
         {
@@ -229,7 +259,8 @@ export async function POST(
   try {
     await assertPublicHttpUrl(offer.endpoint);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "blocked endpoint";
+    const message = errorMessage(err, "blocked endpoint");
+    logError("offers.buy:ssrf-guard", err, { offerId, receiptId });
     await mark(false, "blocked endpoint");
     return NextResponse.json(
       { error: `Offer endpoint not allowed: ${message}`, receiptId },
@@ -252,13 +283,13 @@ export async function POST(
     return new NextResponse(responseData, {
       status: proxyResponse.status,
       headers: {
+        ...receiptHeaders,
         "Content-Type":
           proxyResponse.headers.get("Content-Type") || "application/json",
-        "X-Receipt-Id": String(receiptId),
-        "X-Tx-Hash": settlement.txHash || "",
       },
     });
-  } catch {
+  } catch (err) {
+    logError("offers.buy:fetch-endpoint", err, { offerId, receiptId });
     await mark(false, "endpoint unreachable");
     return NextResponse.json(
       {

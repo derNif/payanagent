@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient, PLATFORM_SECRET } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
 import { validateBody, fulfillRequestSchema } from "@/lib/validation";
+import { errorMessage, logError } from "@/lib/errors";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -29,7 +30,8 @@ export async function POST(
     });
     return NextResponse.json({ ok: true });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Failed to fulfill request";
+    logError("requests.fulfill:fulfill", e, { requestId });
+    const message = errorMessage(e, "Failed to fulfill request");
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }

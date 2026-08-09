@@ -4,6 +4,7 @@ import { authenticateRequest } from "@/lib/auth";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { validateBody, createRequestSchema } from "@/lib/validation";
 import { cacheHeaders } from "@/lib/cache";
+import { errorMessage, internalErrorResponse, logError } from "@/lib/errors";
 import {
   buildPaymentRequiredResponse,
   verifyPayment,
@@ -58,8 +59,7 @@ export async function GET(request: NextRequest) {
     }
     return NextResponse.json({ requests }, { headers: cacheHeaders(120) });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return internalErrorResponse("requests.list:list", error, { status, limit });
   }
 }
 
@@ -153,7 +153,8 @@ export async function POST(request: NextRequest) {
       agreedPriceCents: data.agreedPriceCents,
     });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Failed to create request";
+    logError("requests.create:create", e);
+    const message = errorMessage(e, "Failed to create request");
     return NextResponse.json({ error: message }, { status: 400 });
   }
 

@@ -3,6 +3,7 @@ import { getConvexClient } from "@/lib/convex";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { toPublicReceipt } from "@/lib/public-projections";
 import { cacheHeaders } from "@/lib/cache";
+import { internalErrorResponse } from "@/lib/errors";
 import { api } from "@convex/_generated/api";
 
 // GET /api/v1/receipts — Public receipts feed (newest first).
@@ -32,7 +33,6 @@ export async function GET(request: NextRequest) {
       { headers: cacheHeaders(300) },
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return internalErrorResponse("receipts.list:feed", error, { limit });
   }
 }

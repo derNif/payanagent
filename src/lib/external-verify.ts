@@ -1,4 +1,5 @@
 import { assertPublicHttpUrl } from "@/lib/ssrf";
+import { errorMessage, logError } from "@/lib/errors";
 
 // Server-side verification for seller-registered relay offers (issue #95): an
 // already-x402-gated resource is only accepted if it actually answers with a
@@ -77,8 +78,10 @@ export async function probeX402Resource(
       redirect: "manual",
       signal: AbortSignal.timeout(10_000),
     });
-  } catch {
-    throw new Error(`could not reach ${url}`);
+  } catch (err) {
+    // Keep the transport failure attached: "could not reach" alone can't tell a
+    // DNS miss from a TLS error or the 10s timeout.
+    throw new Error(`could not reach ${url}: ${errorMessage(err)}`, { cause: err });
   }
 
   if (res.status !== 402) {
@@ -98,8 +101,10 @@ export async function probeX402Resource(
   try {
     const terms = termsFromAccepts(await res.json());
     if (terms) return terms;
-  } catch {
-    // fall through to the error below
+  } catch (err) {
+    // Fall through to the error below, which reports the missing terms — but
+    // record whether the body was simply unparseable.
+    logError("external-verify:parse-402-body", err, { url });
   }
 
   throw new Error(

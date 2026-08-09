@@ -5,6 +5,7 @@ import { validateBody, updateAgentSchema } from "@/lib/validation";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { toPublicAgent } from "@/lib/public-projections";
 import { cacheHeaders } from "@/lib/cache";
+import { errorMessage, logError, lookupErrorResponse, swallow } from "@/lib/errors";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -28,7 +29,9 @@ export async function GET(
   try {
     const [targetAgent, reputation] = await Promise.all([
       convex.query(api.agents.getById, { agentId: agentId as Id<"agents"> }),
-      convex.query(api.receipts.getReputation, { agentId: agentId as Id<"agents"> }).catch(() => null),
+      convex
+        .query(api.receipts.getReputation, { agentId: agentId as Id<"agents"> })
+        .catch(swallow("agents.get:reputation", { agentId })),
     ]);
 
     if (!targetAgent) {
@@ -42,8 +45,10 @@ export async function GET(
       { ...toPublicAgent(targetAgent), reputation },
       { headers: cacheHeaders(300) },
     );
-  } catch {
-    return NextResponse.json({ error: "Invalid agent ID" }, { status: 400 });
+  } catch (err) {
+    return lookupErrorResponse("agents.get:get-agent", err, "Invalid agent ID", {
+      agentId,
+    });
   }
 }
 
@@ -85,7 +90,8 @@ export async function PATCH(
 
     return NextResponse.json({ message: "Agent updated" });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Internal server error";
+    logError("agents.patch:update", error, { agentId });
+    const message = errorMessage(error, "Internal server error");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

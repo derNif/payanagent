@@ -3,6 +3,7 @@ import { getConvexClient } from "@/lib/convex";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { toPublicReceipt } from "@/lib/public-projections";
 import { cacheHeaders } from "@/lib/cache";
+import { lookupErrorResponse } from "@/lib/errors";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -56,7 +57,12 @@ export async function GET(
       },
       { headers: cacheHeaders(300) },
     );
-  } catch {
-    return NextResponse.json({ error: "Invalid agent ID" }, { status: 400 });
+  } catch (err) {
+    return lookupErrorResponse(
+      "agents.receipts:list",
+      err,
+      "Invalid agent ID",
+      { agentId },
+    );
   }
 }

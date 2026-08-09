@@ -5,6 +5,7 @@ import { getConvexClient } from "@/lib/convex";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 import { usdAmount } from "@/lib/format";
+import { logError, swallow } from "@/lib/errors";
 
 type Props = {
   params: Promise<{ receiptId: string }>;
@@ -31,7 +32,8 @@ async function getReceipt(receiptId: string) {
       receiptId: receiptId as Id<"receipts">,
     });
     return receipt;
-  } catch {
+  } catch (err) {
+    logError("marketplace.receipt:get-receipt", err, { receiptId });
     return null;
   }
 }
@@ -67,10 +69,16 @@ export default async function ReceiptPage({ params }: Props) {
 
   const convex = getConvexClient();
   const [buyer, seller, offer] = await Promise.all([
-    convex.query(api.agents.getById, { agentId: receipt.buyerId }).catch(() => null),
-    convex.query(api.agents.getById, { agentId: receipt.sellerId }).catch(() => null),
+    convex
+      .query(api.agents.getById, { agentId: receipt.buyerId })
+      .catch(swallow("marketplace.receipt:get-buyer", { receiptId })),
+    convex
+      .query(api.agents.getById, { agentId: receipt.sellerId })
+      .catch(swallow("marketplace.receipt:get-seller", { receiptId })),
     receipt.offerId
-      ? convex.query(api.offers.getById, { offerId: receipt.offerId }).catch(() => null)
+      ? convex
+          .query(api.offers.getById, { offerId: receipt.offerId })
+          .catch(swallow("marketplace.receipt:get-offer", { receiptId }))
       : Promise.resolve(null),
   ]);
 
