@@ -179,8 +179,11 @@ export async function relayExternalBuy(
     const headers = passthroughResponseHeaders(sellerRes.headers, {
       "Content-Type": sellerRes.headers.get("content-type") || "application/json",
     });
+    // Read challenge carriers from the SELLER's headers: STRIP_RES removes
+    // `www-authenticate` from the passthrough set (a seller must not challenge
+    // auth on our origin), but on a 402 that header IS the payment challenge.
     for (const name of CHALLENGE_HEADERS) {
-      const v = headers.get(name);
+      const v = sellerRes.headers.get(name);
       if (v) headers.set(name, rewriteChallengeB64(v, canonicalUrl));
     }
     attachFeeAdvert(headers, Number(offer.amountRaw) || 0);

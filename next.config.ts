@@ -18,7 +18,9 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           {
             key: "Strict-Transport-Security",
-            value: "max-age=63072000; includeSubDomains; preload",
+            // No `preload`: browser preload-list submission is effectively
+            // irreversible; add it only as a deliberate, separate decision.
+            value: "max-age=63072000; includeSubDomains",
           },
         ],
       },
