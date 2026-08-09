@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isAdminKeyValid } from "@/lib/admin-auth";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -11,10 +12,12 @@ const CORS_HEADERS = {
 export function proxy(request: NextRequest) {
   // Admin route protection — key checked server-side, never exposed to client
   if (request.nextUrl.pathname.startsWith("/admin")) {
-    const adminKey = process.env.ADMIN_KEY;
-    const providedKey = request.nextUrl.searchParams.get("key");
+    // `x-admin-key` is preferred: a key in the query string lands in access
+    // logs, browser history, and the Referer of every outbound link.
+    const providedKey =
+      request.headers.get("x-admin-key") ?? request.nextUrl.searchParams.get("key");
 
-    if (!adminKey || providedKey !== adminKey) {
+    if (!isAdminKeyValid(providedKey)) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
   }

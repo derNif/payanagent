@@ -1,15 +1,31 @@
 import Link from "next/link";
+import { headers } from "next/headers";
+import { notFound } from "next/navigation";
 import { fetchQuery } from "convex/nextjs";
 import { api } from "@convex/_generated/api";
 import { Doc } from "@convex/_generated/dataModel";
 import { usdAmount } from "@/lib/format";
+import { isAdminKeyValid } from "@/lib/admin-auth";
 
-// Server component. Access is gated by middleware (ADMIN_KEY). Agent rows —
-// which include PII (ownerEmail) and discoverySource — are read via the
-// platform-secret-gated agents.listAdmin query, never the public agents.list.
+// Server component. Access is gated by the proxy AND re-checked here, so a
+// proxy bypass can't render it. Agent rows — which include PII (ownerEmail)
+// and discoverySource — are read via the platform-secret-gated agents.listAdmin
+// query, never the public agents.list.
 export const dynamic = "force-dynamic";
 
-export default async function AdminPage() {
+// Never index or leak the key-bearing URL to third parties.
+export const metadata = { robots: { index: false, follow: false } };
+
+export default async function AdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ key?: string }>;
+}) {
+  const [{ key }, headerList] = await Promise.all([searchParams, headers()]);
+  if (!isAdminKeyValid(headerList.get("x-admin-key") ?? key)) {
+    notFound();
+  }
+
   const platformSecret = process.env.PLATFORM_INTERNAL_KEY || "";
 
   const [agentStats, globalReceipts] = await Promise.all([

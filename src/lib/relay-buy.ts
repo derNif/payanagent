@@ -21,19 +21,43 @@ export type RelayOffer = {
   network: string;
 };
 
-const STRIP_REQ = new Set([
-  "host",
-  "connection",
-  "content-length",
-  "accept-encoding",
-  "transfer-encoding",
+// The relay target is a THIRD-PARTY, seller-controlled URL, so request headers
+// are forwarded by allowlist only: the x402 payment carriers plus the content
+// negotiation headers a seller legitimately needs. A denylist leaked whatever
+// the buyer happened to send — including `authorization` (their PayanAgent API
+// key) and `cookie` — to any address a seller registered.
+const FORWARD_REQ = new Set([
+  "accept",
+  "accept-language",
+  "content-type",
+  "payment",
+  "payment-required",
+  "payment-signature",
+  "x-payment",
+  "x-payment-required",
 ]);
 const STRIP_RES = new Set([
   "content-encoding",
   "content-length",
   "transfer-encoding",
   "connection",
+  // A seller must not be able to set cookies or auth challenges on our origin.
+  "set-cookie",
+  "set-cookie2",
+  "www-authenticate",
+  "proxy-authenticate",
+  "strict-transport-security",
+  "content-security-policy",
+  "content-security-policy-report-only",
 ]);
+
+function forwardRequestHeaders(from: Headers): Headers {
+  const h = new Headers();
+  from.forEach((value, key) => {
+    if (FORWARD_REQ.has(key.toLowerCase())) h.set(key, value);
+  });
+  return h;
+}
 
 function passthroughResponseHeaders(from: Headers, extra: Record<string, string>): Headers {
   const h = new Headers();
@@ -122,10 +146,7 @@ export async function relayExternalBuy(
 
   const rawBody = request.method === "GET" ? undefined : await request.text().catch(() => "");
 
-  const fwdHeaders = new Headers();
-  request.headers.forEach((value, key) => {
-    if (!STRIP_REQ.has(key.toLowerCase())) fwdHeaders.set(key, value);
-  });
+  const fwdHeaders = forwardRequestHeaders(request.headers);
 
   let sellerRes: Response;
   try {
@@ -158,8 +179,11 @@ export async function relayExternalBuy(
     const headers = passthroughResponseHeaders(sellerRes.headers, {
       "Content-Type": sellerRes.headers.get("content-type") || "application/json",
     });
+    // Read challenge carriers from the SELLER's headers: STRIP_RES removes
+    // `www-authenticate` from the passthrough set (a seller must not challenge
+    // auth on our origin), but on a 402 that header IS the payment challenge.
     for (const name of CHALLENGE_HEADERS) {
-      const v = headers.get(name);
+      const v = sellerRes.headers.get(name);
       if (v) headers.set(name, rewriteChallengeB64(v, canonicalUrl));
     }
     attachFeeAdvert(headers, Number(offer.amountRaw) || 0);
@@ -175,10 +199,12 @@ export async function relayExternalBuy(
     try {
       const [buyerId, sellerId] = await Promise.all([
         convex.mutation(api.agents.getOrCreateByWallet, {
+          platformSecret,
           walletAddress: buyerWallet,
           chain: getNetwork(),
         }),
         convex.mutation(api.agents.getOrCreateByWallet, {
+          platformSecret,
           walletAddress: offer.payTo,
           chain: getNetwork(),
         }),

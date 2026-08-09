@@ -192,7 +192,7 @@ async function handle(
   // Identify (or auto-create) the buyer's wallet account.
   const buyerId: Id<"agents"> = await convex.mutation(
     api.agents.getOrCreateByWallet,
-    { walletAddress: buyerWallet, chain: getNetwork() },
+    { platformSecret, walletAddress: buyerWallet, chain: getNetwork() },
   );
 
   const receiptId: Id<"receipts"> = await convex.mutation(
