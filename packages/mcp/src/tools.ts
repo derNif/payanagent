@@ -214,6 +214,12 @@ export function buildTools(): ToolDef[] {
             description: "api-type, relay mode: an HTTPS URL that already answers with its own x402 402 challenge. Its payTo must equal this agent's walletAddress.",
           },
           httpMethod: { type: "string", enum: ["GET", "POST", "PUT", "PATCH", "DELETE"] },
+          verificationBody: {
+            type: "object",
+            description:
+              "Relay registration only: schema-valid JSON sent once during the unpaid 402 ownership probe when the external gate validates input before returning 402. Not stored or used for buys.",
+            additionalProperties: true,
+          },
           fileUrl: { type: "string", description: "Required for download-type. Private URL." },
           inputSchema: {
             type: "string",
@@ -235,6 +241,7 @@ export function buildTools(): ToolDef[] {
           endpoint: str(a.endpoint),
           externalUrl: str(a.externalUrl),
           httpMethod: str(a.httpMethod),
+          verificationBody: a.verificationBody as Record<string, unknown> | undefined,
           fileUrl: str(a.fileUrl),
           inputSchema: str(a.inputSchema),
           outputSchema: str(a.outputSchema),

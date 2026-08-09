@@ -4,6 +4,12 @@ import { NextResponse } from "next/server";
 // Shared types
 const walletAddress = z.string().regex(/^0x[a-fA-F0-9]{40}$/, "Invalid wallet address");
 const tags = z.array(z.string().max(50)).max(20).default([]);
+const verificationBody = z
+  .record(z.string(), z.unknown())
+  .refine(
+    (value) => JSON.stringify(value).length <= 16_384,
+    "verificationBody must serialize to at most 16384 characters",
+  );
 
 // Agent registration
 export const registerAgentSchema = z.object({
@@ -45,6 +51,9 @@ export const createOfferSchema = z.object({
   // settling + proxying like `endpoint` does.
   externalUrl: z.string().url().optional(),
   httpMethod: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]).optional(),
+  // Registration-only body for input-requiring x402 gates. It is sent once
+  // during the unpaid ownership probe and is neither stored nor used for buys.
+  verificationBody: verificationBody.optional(),
   inputSchema: z.string().optional(),
   outputSchema: z.string().optional(),
   estimatedDurationSeconds: z.number().int().positive().optional(),
@@ -66,6 +75,22 @@ export const createOfferSchema = z.object({
   .refine(
     (data) => data.offerType === "api" || !data.externalUrl,
     { message: "externalUrl is only valid for API offers", path: ["externalUrl"] },
+  )
+  .refine(
+    (data) => data.verificationBody === undefined || !!data.externalUrl,
+    {
+      message: "verificationBody is only valid with externalUrl relay offers",
+      path: ["verificationBody"],
+    },
+  )
+  .refine(
+    (data) =>
+      data.verificationBody === undefined ||
+      (!!data.httpMethod && data.httpMethod !== "GET"),
+    {
+      message: "verificationBody requires an explicit non-GET httpMethod",
+      path: ["verificationBody"],
+    },
   )
   .refine(
     (data) => !!data.externalUrl || data.priceCents !== undefined,

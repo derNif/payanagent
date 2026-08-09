@@ -118,7 +118,11 @@ export async function POST(request: NextRequest) {
     }
     let terms;
     try {
-      terms = await probeX402Resource(data.externalUrl, data.httpMethod ?? "GET");
+      terms = await probeX402Resource(
+        data.externalUrl,
+        data.httpMethod ?? "GET",
+        data.verificationBody,
+      );
     } catch (err) {
       return jsonError(
         `externalUrl verification failed: ${errorMessage(err, "verification failed")}`,

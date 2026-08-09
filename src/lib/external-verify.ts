@@ -56,14 +56,28 @@ function decodeB64Json(raw: string): unknown {
   }
 }
 
-// Probe the resource unauthenticated and unpaid. A real x402 gate answers 402
-// with its terms before looking at the body, so an empty JSON body suffices for
-// POST-style resources.
+export function buildProbeRequestBody(
+  method: string,
+  verificationBody?: Record<string, unknown>,
+): string | undefined {
+  if (method === "GET") return undefined;
+  const serialized = JSON.stringify(verificationBody ?? {});
+  if (Buffer.byteLength(serialized, "utf8") > 16_384) {
+    throw new Error("verificationBody exceeds 16384 bytes");
+  }
+  return serialized;
+}
+
+// Probe the resource unauthenticated and unpaid. Most POST gates accept an
+// empty object; input-validating gates can receive a registration-only body.
 export async function probeX402Resource(
   url: string,
   method: string = "GET",
+  verificationBody?: Record<string, unknown>,
 ): Promise<ExternalX402Terms> {
   await assertPublicHttpUrl(url);
+
+  const serializedBody = buildProbeRequestBody(method, verificationBody);
 
   let res: Response;
   try {
@@ -73,7 +87,7 @@ export async function probeX402Resource(
         method === "GET"
           ? { accept: "application/json" }
           : { accept: "application/json", "content-type": "application/json" },
-      body: method === "GET" ? undefined : "{}",
+      body: serializedBody,
       redirect: "manual",
       signal: AbortSignal.timeout(10_000),
     });
