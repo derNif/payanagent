@@ -135,6 +135,7 @@ async function handle(
     sellerId: offer.sellerId,
     offerId: offer._id,
     amountCents: offer.priceCents,
+    amountMicroUsd: offer.priceCents * 10000,
     txHash: settlement.txHash,
     settlementType: "direct",
     latencyMs: Date.now() - startedAt,
