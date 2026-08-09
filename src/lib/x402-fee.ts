@@ -51,7 +51,8 @@ export function feeAdvertHeader(priceMicroUsd: number): string | null {
     asset: USDC[network] ?? null,
     network,
     bps: FEE_BPS,
-    note: "Optional PayanAgent routing fee — sign and return in x-payanagent-fee-payment.",
+    // Header values must be ASCII (ByteString) — no em dash here.
+    note: "Optional PayanAgent routing fee - sign and return in x-payanagent-fee-payment.",
   });
 }
 

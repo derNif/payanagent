@@ -83,12 +83,14 @@ interface MemEntry {
 const memStore = new Map<string, MemEntry>();
 
 // Cleanup stale entries every 5 minutes (only active in the in-memory path)
-setInterval(() => {
+const cleanupTimer = setInterval(() => {
   const now = Date.now();
   for (const [k, e] of memStore) {
     if (now > e.resetAt) memStore.delete(k);
   }
 }, 5 * 60 * 1000);
+// Don't hold the event loop open for the cleanup tick.
+cleanupTimer.unref?.();
 
 function checkMemory(
   key: string,

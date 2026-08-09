@@ -23,7 +23,17 @@ function ipIsBlocked(ip: string): boolean {
   if (v === "::1" || v === "::") return true; // loopback / unspecified
   if (v.startsWith("fe80")) return true; // link-local
   if (v.startsWith("fc") || v.startsWith("fd")) return true; // unique-local
-  if (v.startsWith("::ffff:")) return ipIsBlocked(v.slice(7)); // IPv4-mapped
+  if (v.startsWith("::ffff:")) {
+    // IPv4-mapped, in dotted form (::ffff:127.0.0.1) or the hex form the URL
+    // parser normalises it to (::ffff:7f00:1). Fail closed if neither parses.
+    const rest = v.slice(7);
+    if (isIP(rest) === 4) return ipIsBlocked(rest);
+    const hex = /^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(rest);
+    if (!hex) return true;
+    const hi = parseInt(hex[1], 16);
+    const lo = parseInt(hex[2], 16);
+    return ipIsBlocked(`${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`);
+  }
   return false;
 }
 
@@ -41,7 +51,9 @@ export async function assertPublicHttpUrl(raw: string): Promise<void> {
   if (url.protocol !== "https:" && url.protocol !== "http:") {
     throw new Error("URL scheme must be http or https");
   }
-  const host = url.hostname.toLowerCase();
+  // URL.hostname keeps the brackets around an IPv6 literal — strip them so the
+  // address itself is what gets checked.
+  const host = url.hostname.toLowerCase().replace(/^\[(.+)\]$/, "$1");
   if (
     host === "localhost" ||
     host.endsWith(".localhost") ||
