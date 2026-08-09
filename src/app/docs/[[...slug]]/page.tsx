@@ -22,7 +22,9 @@ const NAV: Array<{ slug: string; title: string }> = [
 
 async function readDoc(slug: string): Promise<string | null> {
   const filename = slug === "" ? "index.md" : `${slug}.md`;
-  const filepath = path.join(DOCS_DIR, filename);
+  const filepath = path.resolve(DOCS_DIR, filename);
+  // The slug comes from the URL, so confine the resolved path to DOCS_DIR.
+  if (!filepath.startsWith(DOCS_DIR + path.sep)) return null;
   try {
     return await fs.readFile(filepath, "utf8");
   } catch {
@@ -30,8 +32,13 @@ async function readDoc(slug: string): Promise<string | null> {
   }
 }
 
-function slugFromParams(slug?: string[]): string {
+// A percent-encoded `../` segment would otherwise let the slug address any .md
+// file on the host, so only plain doc-name segments are accepted.
+const SAFE_SEGMENT = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+
+function slugFromParams(slug?: string[]): string | null {
   if (!slug || slug.length === 0) return "";
+  if (!slug.every((s) => SAFE_SEGMENT.test(s) && !s.includes(".."))) return null;
   return slug.join("/");
 }
 
@@ -42,7 +49,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const s = slugFromParams(slug);
-  const entry = NAV.find((n) => n.slug === s);
+  const entry = s === null ? undefined : NAV.find((n) => n.slug === s);
   const title = entry ? `${entry.title} — PayanAgent docs` : "PayanAgent docs";
   return { title };
 }
@@ -54,7 +61,7 @@ export default async function DocsPage({
 }) {
   const { slug } = await params;
   const s = slugFromParams(slug);
-  const md = await readDoc(s);
+  const md = s === null ? null : await readDoc(s);
   if (md === null) {
     notFound();
   }

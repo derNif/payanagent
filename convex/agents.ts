@@ -76,8 +76,20 @@ export const getById = query({
 // The wallet is the identity for anonymous x402 buyers — no registration needed.
 // Convex mutations are serializable, so concurrent first-buys can't duplicate.
 export const getOrCreateByWallet = mutation({
-  args: { walletAddress: v.string(), chain: v.optional(v.string()) },
+  args: {
+    platformSecret: v.string(),
+    walletAddress: v.string(),
+    chain: v.optional(v.string()),
+  },
   handler: async (ctx, args): Promise<Id<"agents">> => {
+    // Gated like every other write: ungated, this public mutation let anyone
+    // with the Convex URL insert unbounded agent rows for arbitrary wallets.
+    if (!PLATFORM_INTERNAL_KEY || args.platformSecret !== PLATFORM_INTERNAL_KEY) {
+      throw new Error("unauthorized: invalid platform secret");
+    }
+    if (!/^0x[a-fA-F0-9]{40}$/.test(args.walletAddress)) {
+      throw new Error("invalid wallet address");
+    }
     const existing = await ctx.db
       .query("agents")
       .withIndex("by_walletAddress", (q) =>
