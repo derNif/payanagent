@@ -1,20 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getConvexClient } from "@/lib/convex";
+import { getConvexClient, requirePlatformSecret } from "@/lib/convex";
+import { jsonError } from "@/lib/api-http";
 import {
   buildPaymentRequiredResponse,
-  verifyPayment,
-  verifyPaymentIntegrity,
-  settlePayment,
   extractBuyerWallet,
-  getFacilitatorUrl,
   getNetwork,
-  getNetworkId,
 } from "@/lib/x402";
-import { runInternalHandler } from "@/lib/internal-offers";
-import { assertPublicHttpUrl } from "@/lib/ssrf";
+import { getPaymentSignature, settleSignedPayment } from "@/lib/x402-settle";
+import { recordSettlementReceipt } from "@/lib/settlement";
+import { deliverOffer, readOfferInput } from "@/lib/deliver-offer";
 import { attachFeeAdvert, collectFee } from "@/lib/x402-fee";
 import { relayExternalBuy } from "@/lib/relay-buy";
-import { validateInput } from "@/lib/validate-input";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
@@ -32,14 +28,8 @@ async function handle(
 ): Promise<NextResponse> {
   const startedAt = Date.now();
 
-  // Fail fast on misconfiguration — never after money has moved.
-  const platformSecret = process.env.PLATFORM_INTERNAL_KEY || "";
-  if (!platformSecret) {
-    return NextResponse.json(
-      { error: "Platform misconfigured: missing PLATFORM_INTERNAL_KEY" },
-      { status: 500 },
-    );
-  }
+  const { secret: platformSecret, error: secretError } = requirePlatformSecret();
+  if (secretError) return secretError;
 
   const ip = getClientIp(request);
   const convex = getConvexClient();
@@ -51,13 +41,10 @@ async function handle(
       platformSecret,
     });
   } catch {
-    return NextResponse.json({ error: "Invalid offer ID" }, { status: 400 });
+    return jsonError("Invalid offer ID", 400);
   }
   if (!offer || !offer.isActive) {
-    return NextResponse.json(
-      { error: "Offer not found or inactive" },
-      { status: 404 },
-    );
+    return jsonError("Offer not found or inactive", 404);
   }
 
   // One route, two fulfillment mechanics — invisible to the buyer. A proxied
@@ -79,30 +66,23 @@ async function handle(
 
   // Native: direct buys settle trustlessly buyer -> seller (payTo = seller wallet).
   if (!offer.sellerId) {
-    return NextResponse.json(
-      { error: "Offer has no seller configured" },
-      { status: 503 },
-    );
+    return jsonError("Offer has no seller configured", 503);
   }
   const seller = await convex.query(api.agents.getById, {
     agentId: offer.sellerId,
   });
   if (!seller?.walletAddress) {
-    return NextResponse.json(
-      { error: "Seller has no wallet address configured" },
-      { status: 503 },
-    );
+    return jsonError("Seller has no wallet address configured", 503);
   }
 
   const canonicalUrl = `${APP_URL}/x402/${offer._id}`;
-  const paymentSignature =
-    request.headers.get("payment-signature") || request.headers.get("x-payment");
+  const paymentSignature = getPaymentSignature(request);
 
   // No payment -> anonymous 402 challenge (the discovery/probe path).
   if (!paymentSignature) {
     const rl = await checkRateLimit(`x402probe:${ip}`, RATE_LIMITS.unauthenticated);
     if (!rl.allowed) {
-      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+      return jsonError("Too many requests", 429);
     }
     const challenge = buildPaymentRequiredResponse(
       offer.priceCents,
@@ -119,75 +99,29 @@ async function handle(
   // Buyer identity comes from the payment itself (no API key).
   const buyerWallet = extractBuyerWallet(paymentSignature);
   if (!buyerWallet) {
-    return NextResponse.json(
-      { error: "Could not read payer wallet from payment" },
-      { status: 402 },
-    );
+    return jsonError("Could not read payer wallet from payment", 402);
   }
 
   // Rate-limit by wallet; the payment is the economic gate.
   const rl = await checkRateLimit(`x402buy:${buyerWallet.toLowerCase()}`, RATE_LIMITS.invoke);
   if (!rl.allowed) {
-    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    return jsonError("Too many requests", 429);
   }
 
   if (buyerWallet.toLowerCase() === seller.walletAddress.toLowerCase()) {
-    return NextResponse.json(
-      { error: "Cannot buy your own offer" },
-      { status: 400 },
-    );
+    return jsonError("Cannot buy your own offer", 400);
   }
 
-  // Read + validate the buyer's input BEFORE settling — bad input must never
-  // result in a pay-then-fail. Body is read once here and reused for delivery.
-  const rawBody = await request.text().catch(() => "");
-  let input: Record<string, unknown> = {};
-  if (rawBody) {
-    try {
-      input = JSON.parse(rawBody);
-    } catch {
-      return NextResponse.json(
-        { error: "Request body must be valid JSON" },
-        { status: 400 },
-      );
-    }
-  }
-  const inputCheck = validateInput(offer.inputSchema, input);
-  if (!inputCheck.valid) {
-    return NextResponse.json(
-      { error: `Invalid input: ${inputCheck.error}` },
-      { status: 400 },
-    );
-  }
+  const body = await readOfferInput(request, offer.inputSchema);
+  if (body.error) return body.error;
 
-  const integrityCheck = verifyPaymentIntegrity(
+  const settlement = await settleSignedPayment({
+    request,
     paymentSignature,
-    offer.priceCents,
-    seller.walletAddress,
-  );
-  if (!integrityCheck.valid) {
-    return NextResponse.json(
-      { error: `Payment integrity check failed: ${integrityCheck.error}` },
-      { status: 402 },
-    );
-  }
-
-  const paymentRequired = request.headers.get("payment-required") || "";
-  const verification = await verifyPayment(paymentSignature, paymentRequired);
-  if (!verification.valid) {
-    return NextResponse.json(
-      { error: `Payment verification failed: ${verification.error}` },
-      { status: 402 },
-    );
-  }
-
-  const settlement = await settlePayment(paymentSignature, paymentRequired);
-  if (!settlement.success) {
-    return NextResponse.json(
-      { error: `Payment settlement failed: ${settlement.error}` },
-      { status: 402 },
-    );
-  }
+    amountCents: offer.priceCents,
+    payTo: seller.walletAddress,
+  });
+  if (!settlement.ok) return settlement.response;
 
   // Identify (or auto-create) the buyer's wallet account.
   const buyerId: Id<"agents"> = await convex.mutation(
@@ -195,24 +129,16 @@ async function handle(
     { platformSecret, walletAddress: buyerWallet, chain: getNetwork() },
   );
 
-  const receiptId: Id<"receipts"> = await convex.mutation(
-    api.receipts.recordSettlement,
-    {
-      platformSecret,
-      buyerId,
-      sellerId: offer.sellerId,
-      offerId: offer._id,
-      amountCents: offer.priceCents,
-      currency: "USDC",
-      chain: getNetwork(),
-      network: getNetworkId(),
-      txHash: settlement.txHash || "",
-      facilitatorUrl: getFacilitatorUrl(),
-      settlementType: "direct",
-      status: "confirmed",
-      latencyMs: Date.now() - startedAt,
-    },
-  );
+  const receiptId = await recordSettlementReceipt(convex, {
+    platformSecret,
+    buyerId,
+    sellerId: offer.sellerId,
+    offerId: offer._id,
+    amountCents: offer.priceCents,
+    txHash: settlement.txHash,
+    settlementType: "direct",
+    latencyMs: Date.now() - startedAt,
+  });
 
   // Collect the optional, buyer-signed PayanAgent fee leg → platform wallet
   // (non-custodial; no-op when the fee is off or absent). Same mechanism as
@@ -225,96 +151,15 @@ async function handle(
     offerId: offer._id,
   });
 
-  // Record whether the service actually delivered (honest receipts).
-  const mark = (delivered: boolean, deliveryStatus?: string) =>
-    convex.mutation(api.receipts.markDelivered, {
-      platformSecret,
-      receiptId,
-      delivered,
-      deliveryStatus,
-    });
-
-  // PayanAgent-operated (internal) offer — run server-side, key never exposed.
-  if (offer.internalHandler) {
-    try {
-      const result = await runInternalHandler(offer.internalHandler, input);
-      await mark(true);
-      return NextResponse.json(result, {
-        headers: {
-          "X-Receipt-Id": String(receiptId),
-          "X-Tx-Hash": settlement.txHash || "",
-        },
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "service call failed";
-      await mark(false, message.slice(0, 200));
-      return NextResponse.json(
-        { error: message, receiptId, message: "Payment settled but the service call failed." },
-        { status: 502 },
-      );
-    }
-  }
-
-  // Download-type offer: return fileUrl.
-  if (offer.offerType === "download") {
-    await mark(true);
-    return NextResponse.json({
-      receiptId,
-      fileUrl: offer.fileUrl,
-      txHash: settlement.txHash,
-    });
-  }
-
-  // Api-type offer: proxy to seller's endpoint.
-  if (!offer.endpoint) {
-    await mark(false, "no endpoint configured");
-    return NextResponse.json(
-      { error: "Offer has no endpoint configured", receiptId },
-      { status: 500 },
-    );
-  }
-
-  // SSRF guard — re-validate before fetching (defends DNS rebinding).
-  try {
-    await assertPublicHttpUrl(offer.endpoint);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "blocked endpoint";
-    await mark(false, "blocked endpoint");
-    return NextResponse.json(
-      { error: `Offer endpoint not allowed: ${message}`, receiptId },
-      { status: 502 },
-    );
-  }
-
-  try {
-    const proxyResponse = await fetch(offer.endpoint, {
-      method: offer.httpMethod || "POST",
-      headers: { "Content-Type": "application/json" },
-      body: rawBody || undefined,
-      redirect: "manual",
-    });
-    const responseData = await proxyResponse.text();
-    await mark(proxyResponse.ok, `HTTP ${proxyResponse.status}`);
-    return new NextResponse(responseData, {
-      status: proxyResponse.status,
-      headers: {
-        "Content-Type":
-          proxyResponse.headers.get("Content-Type") || "application/json",
-        "X-Receipt-Id": String(receiptId),
-        "X-Tx-Hash": settlement.txHash || "",
-      },
-    });
-  } catch {
-    await mark(false, "endpoint unreachable");
-    return NextResponse.json(
-      {
-        error: "Failed to reach offer endpoint",
-        receiptId,
-        message: "Payment settled but the offer call failed.",
-      },
-      { status: 502 },
-    );
-  }
+  return deliverOffer({
+    convex,
+    platformSecret,
+    offer,
+    input: body.input,
+    rawBody: body.rawBody,
+    receiptId,
+    txHash: settlement.txHash,
+  });
 }
 
 export async function GET(

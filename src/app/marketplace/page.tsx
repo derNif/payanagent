@@ -6,19 +6,7 @@ import { Id } from "@convex/_generated/dataModel";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { Sparkline } from "@/components/dither-kit/sparkline";
-import { offerPrice, usdAmount } from "@/lib/format";
-
-function formatTime(ms: number): string {
-  const diff = Date.now() - ms;
-  if (diff < 60_000) return `${Math.max(1, Math.floor(diff / 1000))}s ago`;
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
-  return `${Math.floor(diff / 86_400_000)}d ago`;
-}
-
-function shortId(id: string): string {
-  return id.length > 12 ? `${id.slice(0, 6)}…${id.slice(-4)}` : id;
-}
+import { offerPrice, shortId, timeAgo, usdAmount } from "@/lib/format";
 
 function StatCard({
   label,
@@ -256,7 +244,7 @@ export default function MarketplacePage() {
                   </span>
                   <span className="font-mono text-xs shrink-0">
                     <span className="text-primary">{usdAmount(r.amountCents, r.amountMicroUsd)}</span>{" "}
-                    <span className="text-muted-foreground/50">{formatTime(r.emittedAt)}</span>
+                    <span className="text-muted-foreground/50">{timeAgo(r.emittedAt)}</span>
                   </span>
                 </Link>
               ))}

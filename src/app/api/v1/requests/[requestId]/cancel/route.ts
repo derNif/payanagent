@@ -1,13 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getConvexClient, PLATFORM_SECRET } from "@/lib/convex";
+import { getConvexClient, requirePlatformSecret } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
+import { jsonError } from "@/lib/api-http";
 import { validateBody, cancelSchema } from "@/lib/validation";
-import {
-  getFacilitatorUrl,
-  getNetwork,
-  getNetworkId,
-  releaseEscrow,
-} from "@/lib/x402";
+import { releaseEscrow } from "@/lib/x402";
+import { recordSettlementReceipt } from "@/lib/settlement";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -24,14 +21,8 @@ export async function POST(
 ) {
   const startedAt = Date.now();
 
-  // Fail fast on misconfiguration — never after money has moved.
-  const platformSecret = process.env.PLATFORM_INTERNAL_KEY || "";
-  if (!platformSecret) {
-    return NextResponse.json(
-      { error: "Platform misconfigured: missing PLATFORM_INTERNAL_KEY" },
-      { status: 500 },
-    );
-  }
+  const { secret: platformSecret, error: secretError } = requirePlatformSecret();
+  if (secretError) return secretError;
 
   const { agent, error } = await authenticateRequest(request);
   if (error) return error;
@@ -48,23 +39,17 @@ export async function POST(
       requestId: requestId as Id<"requests">,
     });
   } catch {
-    return NextResponse.json({ error: "Invalid request ID" }, { status: 400 });
+    return jsonError("Invalid request ID", 400);
   }
   if (!req) {
-    return NextResponse.json({ error: "Request not found" }, { status: 404 });
+    return jsonError("Request not found", 404);
   }
   if (req.buyerId !== agent._id) {
-    return NextResponse.json(
-      { error: "Only the buyer can cancel" },
-      { status: 403 },
-    );
+    return jsonError("Only the buyer can cancel", 403);
   }
   const cancellable = ["open", "accepted", "fulfilled"];
   if (!cancellable.includes(req.status)) {
-    return NextResponse.json(
-      { error: `Cannot cancel a request in status: ${req.status}` },
-      { status: 400 },
-    );
+    return jsonError(`Cannot cancel a request in status: ${req.status}`, 400);
   }
   // Once work is delivered, the buyer can't instantly cancel-refund and walk
   // off with the deliverable — the provider gets a protection window. After it,
@@ -76,19 +61,16 @@ export async function POST(
     req.fulfilledAt &&
     Date.now() - req.fulfilledAt < DELIVERY_PROTECTION_MS
   ) {
-    return NextResponse.json(
-      {
-        error:
-          "Work has been delivered — approve it, or wait out the 7-day provider-protection window before cancelling.",
-      },
-      { status: 403 },
+    return jsonError(
+      "Work has been delivered — approve it, or wait out the 7-day provider-protection window before cancelling.",
+      403,
     );
   }
 
   // No escrow → straight cancel
   if (!req.escrow) {
     await convex.mutation(api.requests.markCancelled, {
-      platformSecret: PLATFORM_SECRET,
+      platformSecret,
       requestId: req._id,
       reason: data.reason,
     });
@@ -100,25 +82,19 @@ export async function POST(
     agentId: req.buyerId,
   });
   if (!buyer?.walletAddress) {
-    return NextResponse.json(
-      { error: "Buyer has no wallet address configured" },
-      { status: 400 },
-    );
+    return jsonError("Buyer has no wallet address configured", 400);
   }
 
   // Acquire the atomic settlement lock BEFORE the on-chain refund so concurrent
   // cancel/cancel or cancel/approve can't double-spend the platform wallet.
   try {
     await convex.mutation(api.requests.claimForSettlement, {
-        platformSecret: PLATFORM_SECRET,
+        platformSecret,
       requestId: req._id,
       allowedFrom: ["open", "accepted", "fulfilled"],
     });
   } catch {
-    return NextResponse.json(
-      { error: "Request is already being settled" },
-      { status: 409 },
-    );
+    return jsonError("Request is already being settled", 409);
   }
 
   // Idempotency: if a release/refund already moved funds, finalize without
@@ -128,7 +104,7 @@ export async function POST(
   });
   if (existing) {
     await convex.mutation(api.requests.markCancelled, {
-      platformSecret: PLATFORM_SECRET,
+      platformSecret,
       requestId: req._id,
       reason: data.reason,
       refundReceiptId: existing._id,
@@ -148,35 +124,24 @@ export async function POST(
 
   const refund = await releaseEscrow(buyer.walletAddress, refundAmount);
   if (!refund.success || !refund.txHash) {
-    await convex.mutation(api.requests.revertSettlement, { platformSecret: PLATFORM_SECRET, requestId: req._id });
-    return NextResponse.json(
-      { error: `Refund failed: ${refund.error || "unknown"}` },
-      { status: 502 },
-    );
+    await convex.mutation(api.requests.revertSettlement, { platformSecret, requestId: req._id });
+    return jsonError(`Refund failed: ${refund.error || "unknown"}`, 502);
   }
 
-  const receiptId: Id<"receipts"> = await convex.mutation(
-    api.receipts.recordSettlement,
-    {
-      platformSecret,
-      buyerId: req.buyerId,
-      sellerId: req.providerId ?? req.buyerId,
-      requestId: req._id,
-      amountCents: refundAmount,
-      amountMicroUsd: refundAmount * 10000,
-      currency: "USDC",
-      chain: getNetwork(),
-      network: getNetworkId(),
-      txHash: refund.txHash,
-      facilitatorUrl: getFacilitatorUrl(),
-      settlementType: "escrow_refund",
-      status: "confirmed",
-      latencyMs: Date.now() - startedAt,
-    },
-  );
+  const receiptId = await recordSettlementReceipt(convex, {
+    platformSecret,
+    buyerId: req.buyerId,
+    sellerId: req.providerId ?? req.buyerId,
+    requestId: req._id,
+    amountCents: refundAmount,
+    amountMicroUsd: refundAmount * 10000,
+    txHash: refund.txHash,
+    settlementType: "escrow_refund",
+    latencyMs: Date.now() - startedAt,
+  });
 
   await convex.mutation(api.requests.markCancelled, {
-      platformSecret: PLATFORM_SECRET,
+      platformSecret,
     requestId: req._id,
     reason: data.reason,
     refundReceiptId: receiptId,

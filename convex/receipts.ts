@@ -1,13 +1,12 @@
 import { v } from "convex/values";
 import { mutation, query, QueryCtx } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
+import { requireSecret } from "./platformSecret";
 
 // Receipts — the compounding atom of PayanAgent.
 // Created exclusively by settlement code paths in the HTTP layer.
 // `recordSettlement` is platform-secret-gated so external callers can't fake receipts.
 // HMAC signing via WebCrypto (works in V8 runtime).
-
-const PLATFORM_INTERNAL_KEY = process.env.PLATFORM_INTERNAL_KEY ?? "";
 
 // The receipt signing key MUST be set explicitly and be distinct from the
 // wallet key. Fail closed rather than silently signing with a wallet key or a
@@ -112,9 +111,7 @@ export const recordSettlement = mutation({
     latencyMs: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<Id<"receipts">> => {
-    if (!PLATFORM_INTERNAL_KEY || args.platformSecret !== PLATFORM_INTERNAL_KEY) {
-      throw new Error("unauthorized: invalid platform secret");
-    }
+    requireSecret(args.platformSecret);
 
     const emittedAt = Date.now();
     const canonical = canonicalize({
@@ -237,9 +234,7 @@ export const markDelivered = mutation({
     deliveryStatus: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    if (!PLATFORM_INTERNAL_KEY || args.platformSecret !== PLATFORM_INTERNAL_KEY) {
-      throw new Error("unauthorized: invalid platform secret");
-    }
+    requireSecret(args.platformSecret);
     await ctx.db.patch(args.receiptId, {
       delivered: args.delivered,
       deliveryStatus: args.deliveryStatus,

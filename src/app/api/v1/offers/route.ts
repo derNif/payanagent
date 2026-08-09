@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient, PLATFORM_SECRET } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
-import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
+import {
+  enforceIpRateLimit,
+  errorMessage,
+  errorResponse,
+  jsonError,
+  parseLimit,
+} from "@/lib/api-http";
+import { RATE_LIMITS } from "@/lib/rate-limit";
 import { toPublicOffer } from "@/lib/public-projections";
 import { cacheHeaders } from "@/lib/cache";
 import { createOfferSchema, validateBody } from "@/lib/validation";
@@ -11,19 +18,13 @@ import { api } from "@convex/_generated/api";
 
 // GET /api/v1/offers — Public list/search.
 export async function GET(request: NextRequest) {
-  const ip = getClientIp(request);
-  const rl = await checkRateLimit(`public:${ip}`, RATE_LIMITS.unauthenticated);
-  if (!rl.allowed) {
-    return NextResponse.json(
-      { error: "Too many requests" },
-      {
-        status: 429,
-        headers: {
-          "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)),
-        },
-      },
-    );
-  }
+  const limited = await enforceIpRateLimit(
+    request,
+    "public",
+    RATE_LIMITS.unauthenticated,
+    "Too many requests",
+  );
+  if (limited) return limited;
 
   const params = request.nextUrl.searchParams;
   const query = params.get("q");
@@ -32,8 +33,7 @@ export async function GET(request: NextRequest) {
   const sortParam = params.get("sort");
   const sort = sortParam === "price" || sortParam === "new" ? sortParam : "top";
   const cursor = params.get("cursor");
-  const limitParam = params.get("limit");
-  const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10), 1), 200) : 50;
+  const limit = parseLimit(params.get("limit"));
 
   const withBuyUrl = (o: object) => ({
     ...o,
@@ -76,8 +76,7 @@ export async function GET(request: NextRequest) {
       { headers: cacheHeaders(300) },
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errorResponse(error, "Internal server error", 500);
   }
 }
 
@@ -95,10 +94,9 @@ export async function POST(request: NextRequest) {
     try {
       await assertPublicHttpUrl(data.endpoint);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "invalid endpoint";
-      return NextResponse.json(
-        { error: `endpoint not allowed: ${message}` },
-        { status: 400 },
+      return jsonError(
+        `endpoint not allowed: ${errorMessage(err, "invalid endpoint")}`,
+        400,
       );
     }
   }
@@ -113,27 +111,24 @@ export async function POST(request: NextRequest) {
   // already-ingested catalog URL legitimate.
   if (data.externalUrl) {
     if (!agent.walletAddress) {
-      return NextResponse.json(
-        { error: "Relay offers require the agent to have a walletAddress" },
-        { status: 400 },
+      return jsonError(
+        "Relay offers require the agent to have a walletAddress",
+        400,
       );
     }
     let terms;
     try {
       terms = await probeX402Resource(data.externalUrl, data.httpMethod ?? "GET");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "verification failed";
-      return NextResponse.json(
-        { error: `externalUrl verification failed: ${message}` },
-        { status: 400 },
+      return jsonError(
+        `externalUrl verification failed: ${errorMessage(err, "verification failed")}`,
+        400,
       );
     }
     if (terms.payTo.toLowerCase() !== agent.walletAddress.toLowerCase()) {
-      return NextResponse.json(
-        {
-          error: `externalUrl pays ${terms.payTo}, but this agent's wallet is ${agent.walletAddress}. Register from the agent that owns the receiving wallet.`,
-        },
-        { status: 403 },
+      return jsonError(
+        `externalUrl pays ${terms.payTo}, but this agent's wallet is ${agent.walletAddress}. Register from the agent that owns the receiving wallet.`,
+        403,
       );
     }
     try {
@@ -166,8 +161,7 @@ export async function POST(request: NextRequest) {
         { status: 201 },
       );
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Failed to register offer";
-      return NextResponse.json({ error: message }, { status: 400 });
+      return errorResponse(e, "Failed to register offer");
     }
   }
 
@@ -193,7 +187,6 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ offerId }, { status: 201 });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Failed to create offer";
-    return NextResponse.json({ error: message }, { status: 400 });
+    return errorResponse(e, "Failed to create offer");
   }
 }

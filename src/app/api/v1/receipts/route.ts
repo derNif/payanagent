@@ -1,28 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
-import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
+import {
+  enforceIpRateLimit,
+  errorResponse,
+  parseLimit,
+} from "@/lib/api-http";
+import { RATE_LIMITS } from "@/lib/rate-limit";
 import { toPublicReceipt } from "@/lib/public-projections";
 import { cacheHeaders } from "@/lib/cache";
 import { api } from "@convex/_generated/api";
 
 // GET /api/v1/receipts — Public receipts feed (newest first).
 export async function GET(request: NextRequest) {
-  const ip = getClientIp(request);
-  const rl = await checkRateLimit(`public:${ip}`, RATE_LIMITS.unauthenticated);
-  if (!rl.allowed) {
-    return NextResponse.json(
-      { error: "Too many requests. Please try again later." },
-      {
-        status: 429,
-        headers: {
-          "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)),
-        },
-      },
-    );
-  }
+  const limited = await enforceIpRateLimit(
+    request,
+    "public",
+    RATE_LIMITS.unauthenticated,
+  );
+  if (limited) return limited;
 
-  const limitParam = request.nextUrl.searchParams.get("limit");
-  const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10), 1), 200) : 50;
+  const limit = parseLimit(request.nextUrl.searchParams.get("limit"));
 
   try {
     const convex = getConvexClient();
@@ -32,7 +29,6 @@ export async function GET(request: NextRequest) {
       { headers: cacheHeaders(300) },
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errorResponse(error, "Internal server error", 500);
   }
 }

@@ -1,17 +1,10 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { requireSecret } from "./platformSecret";
 
 // SECURITY: everything here is platform-gated. Convex functions are publicly
 // callable; an ungated `create` would let anyone mint a valid API key for any
 // agent (full account takeover). Only our server-side routes hold the secret.
-
-const PLATFORM_INTERNAL_KEY = process.env.PLATFORM_INTERNAL_KEY ?? "";
-
-function requireSecret(secret: string) {
-  if (!PLATFORM_INTERNAL_KEY || secret !== PLATFORM_INTERNAL_KEY) {
-    throw new Error("unauthorized: invalid platform secret");
-  }
-}
 
 export const create = mutation({
   args: {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
-import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
+import { enforceIpRateLimit, jsonError, parseLimit } from "@/lib/api-http";
+import { RATE_LIMITS } from "@/lib/rate-limit";
 import { toPublicReceipt } from "@/lib/public-projections";
 import { cacheHeaders } from "@/lib/cache";
 import { api } from "@convex/_generated/api";
@@ -14,27 +15,20 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ agentId: string }> },
 ) {
-  const ip = getClientIp(request);
-  const rl = await checkRateLimit(`public:${ip}`, RATE_LIMITS.unauthenticated);
-  if (!rl.allowed) {
-    return NextResponse.json(
-      { error: "Too many requests" },
-      {
-        status: 429,
-        headers: {
-          "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)),
-        },
-      },
-    );
-  }
+  const limited = await enforceIpRateLimit(
+    request,
+    "public",
+    RATE_LIMITS.unauthenticated,
+    "Too many requests",
+  );
+  if (limited) return limited;
 
   const { agentId } = await params;
   const searchParams = request.nextUrl.searchParams;
   const sideParam = searchParams.get("side");
   const side: "buyer" | "seller" | "both" =
     sideParam === "buyer" || sideParam === "seller" ? sideParam : "both";
-  const limitParam = searchParams.get("limit");
-  const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10), 1), 200) : 50;
+  const limit = parseLimit(searchParams.get("limit"));
 
   const convex = getConvexClient();
 
@@ -57,6 +51,6 @@ export async function GET(
       { headers: cacheHeaders(300) },
     );
   } catch {
-    return NextResponse.json({ error: "Invalid agent ID" }, { status: 400 });
+    return jsonError("Invalid agent ID", 400);
   }
 }

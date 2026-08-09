@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
+import { requireSecret } from "./platformSecret";
 
 // Requests — bespoke work posted by buyers.
 // Lifecycle:
@@ -19,7 +20,6 @@ import { Doc, Id } from "./_generated/dataModel";
 // (which enforce API-key auth + business rules server-side). Without the
 // gate, anyone could call e.g. markApproved directly and skip payment.
 
-const PLATFORM_INTERNAL_KEY = process.env.PLATFORM_INTERNAL_KEY ?? "";
 const requestStatusValidator = v.union(
   v.literal("open"),
   v.literal("accepted"),
@@ -29,12 +29,6 @@ const requestStatusValidator = v.union(
   v.literal("cancelled"),
   v.literal("disputed"),
 );
-
-function requireSecret(secret: string) {
-  if (!PLATFORM_INTERNAL_KEY || secret !== PLATFORM_INTERNAL_KEY) {
-    throw new Error("unauthorized: invalid platform secret");
-  }
-}
 
 // Public projection: inputPayload/outputPayload are the paid work product —
 // never exposed on public queries (a fulfilled deliverable must not be

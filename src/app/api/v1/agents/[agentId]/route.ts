@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient, PLATFORM_SECRET } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
 import { validateBody, updateAgentSchema } from "@/lib/validation";
-import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
+import { enforceIpRateLimit, errorResponse, jsonError } from "@/lib/api-http";
+import { RATE_LIMITS } from "@/lib/rate-limit";
 import { toPublicAgent } from "@/lib/public-projections";
 import { cacheHeaders } from "@/lib/cache";
 import { api } from "@convex/_generated/api";
@@ -13,14 +14,12 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ agentId: string }> }
 ) {
-  const ip = getClientIp(request);
-  const rl = await checkRateLimit(`public:${ip}`, RATE_LIMITS.unauthenticated);
-  if (!rl.allowed) {
-    return NextResponse.json(
-      { error: "Too many requests. Please try again later." },
-      { status: 429, headers: { "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)) } }
-    );
-  }
+  const limited = await enforceIpRateLimit(
+    request,
+    "public",
+    RATE_LIMITS.unauthenticated,
+  );
+  if (limited) return limited;
 
   const { agentId } = await params;
   const convex = getConvexClient();
@@ -32,7 +31,7 @@ export async function GET(
     ]);
 
     if (!targetAgent) {
-      return NextResponse.json({ error: "Agent not found" }, { status: 404 });
+      return jsonError("Agent not found", 404);
     }
 
     // PII already stripped in the Convex query; strip again at the boundary.
@@ -43,7 +42,7 @@ export async function GET(
       { headers: cacheHeaders(300) },
     );
   } catch {
-    return NextResponse.json({ error: "Invalid agent ID" }, { status: 400 });
+    return jsonError("Invalid agent ID", 400);
   }
 }
 
@@ -59,10 +58,7 @@ export async function PATCH(
 
   // Only allow self-update
   if (agent._id !== agentId) {
-    return NextResponse.json(
-      { error: "You can only update your own profile" },
-      { status: 403 }
-    );
+    return jsonError("You can only update your own profile", 403);
   }
 
   try {
@@ -85,7 +81,6 @@ export async function PATCH(
 
     return NextResponse.json({ message: "Agent updated" });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errorResponse(error, "Internal server error", 500);
   }
 }

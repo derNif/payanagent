@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient, PLATFORM_SECRET } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
-import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
+import { enforceIpRateLimit, jsonError } from "@/lib/api-http";
+import { RATE_LIMITS } from "@/lib/rate-limit";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -28,19 +29,13 @@ export async function GET(
     if (error) return error;
     viewerId = agent._id;
   } else {
-    const ip = getClientIp(request);
-    const rl = await checkRateLimit(`public:${ip}`, RATE_LIMITS.unauthenticated);
-    if (!rl.allowed) {
-      return NextResponse.json(
-        { error: "Too many requests" },
-        {
-          status: 429,
-          headers: {
-            "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)),
-          },
-        },
-      );
-    }
+    const limited = await enforceIpRateLimit(
+      request,
+      "public",
+      RATE_LIMITS.unauthenticated,
+      "Too many requests",
+    );
+    if (limited) return limited;
   }
 
   try {
@@ -48,7 +43,7 @@ export async function GET(
       requestId: requestId as Id<"requests">,
     });
     if (!result.request) {
-      return NextResponse.json({ error: "Request not found" }, { status: 404 });
+      return jsonError("Request not found", 404);
     }
 
     const req = result.request; // already payload-stripped
@@ -79,6 +74,6 @@ export async function GET(
       bids: result.bids,
     });
   } catch {
-    return NextResponse.json({ error: "Invalid request ID" }, { status: 400 });
+    return jsonError("Invalid request ID", 400);
   }
 }

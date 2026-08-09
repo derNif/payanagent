@@ -13,6 +13,7 @@ import type * as apiKeys from "../apiKeys.js";
 import type * as crons from "../crons.js";
 import type * as ingest from "../ingest.js";
 import type * as offers from "../offers.js";
+import type * as platformSecret from "../platformSecret.js";
 import type * as receipts from "../receipts.js";
 import type * as requests from "../requests.js";
 import type * as search from "../search.js";
@@ -29,6 +30,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   ingest: typeof ingest;
   offers: typeof offers;
+  platformSecret: typeof platformSecret;
   receipts: typeof receipts;
   requests: typeof requests;
   search: typeof search;
