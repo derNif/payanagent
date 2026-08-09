@@ -49,6 +49,17 @@ export function resolve(specifier, context, nextResolve) {
     }
     return nextResolve(pathToFileURL(withExt).href, context);
   }
+  // Extensionless relative imports between source files (`./convex`) — TypeScript
+  // resolves these, plain ESM does not.
+  if (specifier.startsWith('./') || specifier.startsWith('../')) {
+    const parentPath = context.parentURL?.startsWith('file:')
+      ? dirname(fileURLToPath(context.parentURL))
+      : null;
+    if (parentPath && !extname(specifier)) {
+      const abs = resolveWithExtension(pathResolve(parentPath, specifier));
+      if (existsSync(abs)) return nextResolve(pathToFileURL(abs).href, context);
+    }
+  }
   return nextResolve(specifier, context);
 }
 
