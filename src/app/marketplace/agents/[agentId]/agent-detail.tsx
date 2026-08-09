@@ -6,20 +6,8 @@ import { Id } from "@convex/_generated/dataModel";
 import { use, useState } from "react";
 import Link from "next/link";
 import { VerifiedBadge } from "@/components/verified-badge";
-import { offerPrice, usdAmount } from "@/lib/format";
+import { offerPrice, shortId, timeAgo, usdAmount } from "@/lib/format";
 import { DitherAvatar } from "@/components/dither-kit/avatar";
-
-function formatTime(ms: number): string {
-  const diff = Date.now() - ms;
-  if (diff < 60_000) return `${Math.floor(diff / 1000)}s ago`;
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
-  return `${Math.floor(diff / 86_400_000)}d ago`;
-}
-
-function shortId(id: string): string {
-  return id.length > 12 ? `${id.slice(0, 6)}…${id.slice(-4)}` : id;
-}
 
 const TYPE_BADGES: Record<string, string> = {
   agent: "bg-blue-500/10 text-blue-400",
@@ -290,7 +278,7 @@ export default function AgentDetail({
                           href={`/marketplace/receipts/${r._id}`}
                           className="hover:text-primary"
                         >
-                          {formatTime(r.emittedAt)}
+                          {timeAgo(r.emittedAt)}
                         </Link>
                       </td>
                       <td className="py-2">

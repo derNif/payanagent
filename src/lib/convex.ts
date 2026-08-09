@@ -1,4 +1,6 @@
 import { ConvexHttpClient } from "convex/browser";
+import type { NextResponse } from "next/server";
+import { jsonError } from "./api-http";
 
 const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL!;
 
@@ -12,4 +14,22 @@ export const PLATFORM_SECRET = process.env.PLATFORM_INTERNAL_KEY ?? "";
 // Server-side Convex client for use in API route handlers
 export function getConvexClient() {
   return new ConvexHttpClient(convexUrl);
+}
+
+/**
+ * Platform secret for the money paths. They fail fast on misconfiguration —
+ * never after money has moved — so the check is an explicit gate, not a `!`.
+ */
+export function requirePlatformSecret():
+  | { secret: string; error?: never }
+  | { secret?: never; error: NextResponse } {
+  if (!PLATFORM_SECRET) {
+    return {
+      error: jsonError(
+        "Platform misconfigured: missing PLATFORM_INTERNAL_KEY",
+        500,
+      ),
+    };
+  }
+  return { secret: PLATFORM_SECRET };
 }

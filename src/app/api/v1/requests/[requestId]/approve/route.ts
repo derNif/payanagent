@@ -1,16 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getConvexClient, PLATFORM_SECRET } from "@/lib/convex";
+import { getConvexClient, requirePlatformSecret } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
-import {
-  buildPaymentRequiredResponse,
-  verifyPayment,
-  verifyPaymentIntegrity,
-  settlePayment,
-  releaseEscrow,
-  getFacilitatorUrl,
-  getNetwork,
-  getNetworkId,
-} from "@/lib/x402";
+import { jsonError } from "@/lib/api-http";
+import { buildPaymentRequiredResponse, releaseEscrow } from "@/lib/x402";
+import { getPaymentSignature, settleSignedPayment } from "@/lib/x402-settle";
+import { recordSettlementReceipt } from "@/lib/settlement";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -26,14 +20,8 @@ export async function POST(
 ) {
   const startedAt = Date.now();
 
-  // Fail fast on misconfiguration — never after money has moved.
-  const platformSecret = process.env.PLATFORM_INTERNAL_KEY || "";
-  if (!platformSecret) {
-    return NextResponse.json(
-      { error: "Platform misconfigured: missing PLATFORM_INTERNAL_KEY" },
-      { status: 500 },
-    );
-  }
+  const { secret: platformSecret, error: secretError } = requirePlatformSecret();
+  if (secretError) return secretError;
 
   const { agent, error } = await authenticateRequest(request);
   if (error) return error;
@@ -47,44 +35,32 @@ export async function POST(
       requestId: requestId as Id<"requests">,
     });
   } catch {
-    return NextResponse.json({ error: "Invalid request ID" }, { status: 400 });
+    return jsonError("Invalid request ID", 400);
   }
   if (!req) {
-    return NextResponse.json({ error: "Request not found" }, { status: 404 });
+    return jsonError("Request not found", 404);
   }
   if (req.buyerId !== agent._id) {
-    return NextResponse.json(
-      { error: "Only the buyer can approve" },
-      { status: 403 },
-    );
+    return jsonError("Only the buyer can approve", 403);
   }
   // `completing` is allowed through so a settlement that crashed mid-flight
   // (lock acquired, then the process died) can recover via the idempotency
   // check below instead of being stranded forever.
   if (req.status !== "fulfilled" && req.status !== "completing") {
-    return NextResponse.json(
-      { error: `Cannot approve a request in status: ${req.status}` },
-      { status: 400 },
-    );
+    return jsonError(`Cannot approve a request in status: ${req.status}`, 400);
   }
   if (!req.providerId) {
-    return NextResponse.json(
-      { error: "Request has no assigned provider" },
-      { status: 500 },
-    );
+    return jsonError("Request has no assigned provider", 500);
   }
   if (!req.agreedPriceCents) {
-    return NextResponse.json(
-      { error: "Request has no agreed price" },
-      { status: 500 },
-    );
+    return jsonError("Request has no agreed price", 500);
   }
   // Look up provider wallet
   const provider = await convex.query(api.agents.getById, {
     agentId: req.providerId,
   });
   if (!provider) {
-    return NextResponse.json({ error: "Provider not found" }, { status: 500 });
+    return jsonError("Provider not found", 500);
   }
 
   if (!req.escrow) {
@@ -92,15 +68,10 @@ export async function POST(
     // approval time — payTo is the provider's wallet, the platform never
     // takes custody. Same trustless flow as direct offer buys.
     if (!provider.walletAddress) {
-      return NextResponse.json(
-        { error: "Provider has no wallet address configured" },
-        { status: 503 },
-      );
+      return jsonError("Provider has no wallet address configured", 503);
     }
 
-    const paymentSignature =
-      request.headers.get("payment-signature") ||
-      request.headers.get("x-payment");
+    const paymentSignature = getPaymentSignature(request);
     if (!paymentSignature) {
       // Just asking for the challenge — take no lock (a buyer who never returns
       // must not strand the request in `completing`).
@@ -117,15 +88,12 @@ export async function POST(
     // both settle and double-charge the buyer.
     try {
       await convex.mutation(api.requests.claimForSettlement, {
-        platformSecret: PLATFORM_SECRET,
+        platformSecret,
         requestId: req._id,
         allowedFrom: ["fulfilled", "completing"],
       });
     } catch {
-      return NextResponse.json(
-        { error: "Request is already being settled" },
-        { status: 409 },
-      );
+      return jsonError("Request is already being settled", 409);
     }
     // If a prior attempt already recorded a settlement, finalize idempotently.
     const priorDirect = await convex.query(api.receipts.getSettlementForRequest, {
@@ -133,7 +101,7 @@ export async function POST(
     });
     if (priorDirect) {
       await convex.mutation(api.requests.markApproved, {
-        platformSecret: PLATFORM_SECRET,
+        platformSecret,
         requestId: req._id,
         settlementReceiptId: priorDirect._id,
       });
@@ -144,68 +112,35 @@ export async function POST(
       });
     }
 
-    const integrityCheck = verifyPaymentIntegrity(
-      paymentSignature,
-      req.agreedPriceCents,
-      provider.walletAddress,
-    );
     // Any pre-settlement failure must release the lock back to `fulfilled`,
     // else a bad/late payment attempt strands the request in `completing`.
-    const releaseLock = () =>
-      convex.mutation(api.requests.revertSettlement, {
-        platformSecret: PLATFORM_SECRET,
-        requestId: req._id,
-      });
+    const settlement = await settleSignedPayment({
+      request,
+      paymentSignature,
+      amountCents: req.agreedPriceCents,
+      payTo: provider.walletAddress,
+      onFailure: () =>
+        convex.mutation(api.requests.revertSettlement, {
+          platformSecret,
+          requestId: req._id,
+        }),
+    });
+    if (!settlement.ok) return settlement.response;
 
-    if (!integrityCheck.valid) {
-      await releaseLock();
-      return NextResponse.json(
-        { error: `Payment integrity check failed: ${integrityCheck.error}` },
-        { status: 402 },
-      );
-    }
-
-    const paymentRequired = request.headers.get("payment-required") || "";
-    const verification = await verifyPayment(paymentSignature, paymentRequired);
-    if (!verification.valid) {
-      await releaseLock();
-      return NextResponse.json(
-        { error: `Payment verification failed: ${verification.error}` },
-        { status: 402 },
-      );
-    }
-
-    const settlement = await settlePayment(paymentSignature, paymentRequired);
-    if (!settlement.success) {
-      await releaseLock();
-      return NextResponse.json(
-        { error: `Payment settlement failed: ${settlement.error}` },
-        { status: 402 },
-      );
-    }
-
-    const receiptId: Id<"receipts"> = await convex.mutation(
-      api.receipts.recordSettlement,
-      {
-        platformSecret,
-        buyerId: req.buyerId,
-        sellerId: req.providerId,
-        requestId: req._id,
-        amountCents: req.agreedPriceCents,
-        amountMicroUsd: req.agreedPriceCents * 10000,
-        currency: "USDC",
-        chain: getNetwork(),
-        network: getNetworkId(),
-        txHash: settlement.txHash || "",
-        facilitatorUrl: getFacilitatorUrl(),
-        settlementType: "direct",
-        status: "confirmed",
-        latencyMs: Date.now() - startedAt,
-      },
-    );
+    const receiptId = await recordSettlementReceipt(convex, {
+      platformSecret,
+      buyerId: req.buyerId,
+      sellerId: req.providerId,
+      requestId: req._id,
+      amountCents: req.agreedPriceCents,
+      amountMicroUsd: req.agreedPriceCents * 10000,
+      txHash: settlement.txHash,
+      settlementType: "direct",
+      latencyMs: Date.now() - startedAt,
+    });
 
     await convex.mutation(api.requests.markApproved, {
-        platformSecret: PLATFORM_SECRET,
+        platformSecret,
       requestId: req._id,
       settlementReceiptId: receiptId,
     });
@@ -218,10 +153,7 @@ export async function POST(
   }
 
   if (!provider.walletAddress) {
-    return NextResponse.json(
-      { error: "Provider has no wallet address configured" },
-      { status: 503 },
-    );
+    return jsonError("Provider has no wallet address configured", 503);
   }
 
   // Acquire the atomic settlement lock BEFORE any on-chain transfer. Convex
@@ -229,15 +161,12 @@ export async function POST(
   // can't both reach releaseEscrow and double-spend the shared platform wallet.
   try {
     await convex.mutation(api.requests.claimForSettlement, {
-        platformSecret: PLATFORM_SECRET,
+        platformSecret,
       requestId: req._id,
       allowedFrom: ["fulfilled", "completing"],
     });
   } catch {
-    return NextResponse.json(
-      { error: "Request is already being settled" },
-      { status: 409 },
-    );
+    return jsonError("Request is already being settled", 409);
   }
 
   // Idempotency: if a release/refund already moved funds for this request,
@@ -247,7 +176,7 @@ export async function POST(
   });
   if (existing) {
     await convex.mutation(api.requests.markApproved, {
-        platformSecret: PLATFORM_SECRET,
+        platformSecret,
       requestId: req._id,
       settlementReceiptId: existing._id,
     });
@@ -262,33 +191,22 @@ export async function POST(
   const release = await releaseEscrow(provider.walletAddress, req.agreedPriceCents);
   if (!release.success || !release.txHash) {
     // Transfer failed — revert the lock so the buyer can retry.
-    await convex.mutation(api.requests.revertSettlement, { platformSecret: PLATFORM_SECRET, requestId: req._id });
-    return NextResponse.json(
-      { error: `Escrow release failed: ${release.error || "unknown"}` },
-      { status: 502 },
-    );
+    await convex.mutation(api.requests.revertSettlement, { platformSecret, requestId: req._id });
+    return jsonError(`Escrow release failed: ${release.error || "unknown"}`, 502);
   }
 
   // Emit escrow_release receipt
-  const receiptId: Id<"receipts"> = await convex.mutation(
-    api.receipts.recordSettlement,
-    {
-      platformSecret,
-      buyerId: req.buyerId,
-      sellerId: req.providerId,
-      requestId: req._id,
-      amountCents: req.agreedPriceCents,
-      amountMicroUsd: req.agreedPriceCents * 10000,
-      currency: "USDC",
-      chain: getNetwork(),
-      network: getNetworkId(),
-      txHash: release.txHash,
-      facilitatorUrl: getFacilitatorUrl(),
-      settlementType: "escrow_release",
-      status: "confirmed",
-      latencyMs: Date.now() - startedAt,
-    },
-  );
+  const receiptId = await recordSettlementReceipt(convex, {
+    platformSecret,
+    buyerId: req.buyerId,
+    sellerId: req.providerId,
+    requestId: req._id,
+    amountCents: req.agreedPriceCents,
+    amountMicroUsd: req.agreedPriceCents * 10000,
+    txHash: release.txHash,
+    settlementType: "escrow_release",
+    latencyMs: Date.now() - startedAt,
+  });
 
   // Refund any surplus (deposited budget − agreed price) back to the buyer, so
   // an open request whose winning bid was below budget doesn't strand funds.
@@ -302,20 +220,15 @@ export async function POST(
       const refund = await releaseEscrow(buyer.walletAddress, surplus);
       if (refund.success && refund.txHash) {
         refundTxHash = refund.txHash;
-        refundReceiptId = await convex.mutation(api.receipts.recordSettlement, {
+        refundReceiptId = await recordSettlementReceipt(convex, {
           platformSecret,
           buyerId: req.buyerId,
           sellerId: req.buyerId,
           requestId: req._id,
           amountCents: surplus,
           amountMicroUsd: surplus * 10000,
-          currency: "USDC",
-          chain: getNetwork(),
-          network: getNetworkId(),
           txHash: refund.txHash,
-          facilitatorUrl: getFacilitatorUrl(),
           settlementType: "escrow_refund",
-          status: "confirmed",
           latencyMs: Date.now() - startedAt,
         });
       }
@@ -324,7 +237,7 @@ export async function POST(
 
   // Finalize: completing -> approved.
   await convex.mutation(api.requests.markApproved, {
-        platformSecret: PLATFORM_SECRET,
+        platformSecret,
     requestId: req._id,
     settlementReceiptId: receiptId,
   });

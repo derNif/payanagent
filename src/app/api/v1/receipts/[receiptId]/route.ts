@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
-import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
+import { enforceIpRateLimit, jsonError } from "@/lib/api-http";
+import { RATE_LIMITS } from "@/lib/rate-limit";
 import { toPublicReceipt } from "@/lib/public-projections";
 import { cacheHeaders } from "@/lib/cache";
 import { api } from "@convex/_generated/api";
@@ -11,19 +12,12 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ receiptId: string }> },
 ) {
-  const ip = getClientIp(request);
-  const rl = await checkRateLimit(`public:${ip}`, RATE_LIMITS.unauthenticated);
-  if (!rl.allowed) {
-    return NextResponse.json(
-      { error: "Too many requests. Please try again later." },
-      {
-        status: 429,
-        headers: {
-          "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)),
-        },
-      },
-    );
-  }
+  const limited = await enforceIpRateLimit(
+    request,
+    "public",
+    RATE_LIMITS.unauthenticated,
+  );
+  if (limited) return limited;
 
   const { receiptId } = await params;
   try {
@@ -32,13 +26,13 @@ export async function GET(
       receiptId: receiptId as Id<"receipts">,
     });
     if (!receipt) {
-      return NextResponse.json({ error: "Receipt not found" }, { status: 404 });
+      return jsonError("Receipt not found", 404);
     }
     return NextResponse.json(
       { receipt: toPublicReceipt(receipt) },
       { headers: cacheHeaders(300) },
     );
   } catch {
-    return NextResponse.json({ error: "Invalid receipt ID" }, { status: 400 });
+    return jsonError("Invalid receipt ID", 400);
   }
 }

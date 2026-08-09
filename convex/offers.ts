@@ -9,6 +9,7 @@ import {
   loadReceiptSignals,
   OfferDelivery,
 } from "./receipts";
+import { requireSecret } from "./platformSecret";
 
 // Ranking tiers for the default "top" browse:
 //   sold/proven  → SOLD_BASE + reputation score (settled offers float to top)
@@ -26,8 +27,6 @@ async function bumpCounter(ctx: MutationCtx, key: string, delta: number) {
   if (row) await ctx.db.patch(row._id, { value: Math.max(0, row.value + delta) });
   else await ctx.db.insert("counters", { key, value: Math.max(0, delta) });
 }
-
-const PLATFORM_INTERNAL_KEY = process.env.PLATFORM_INTERNAL_KEY ?? "";
 
 // The one field `search_offers` indexes (Convex search indexes a single field).
 // Must be recomputed whenever title/description/tags change.
@@ -335,9 +334,7 @@ export const getById = query({
 export const getByIdInternal = query({
   args: { offerId: v.id("offers"), platformSecret: v.string() },
   handler: async (ctx, args): Promise<Doc<"offers"> | null> => {
-    if (!PLATFORM_INTERNAL_KEY || args.platformSecret !== PLATFORM_INTERNAL_KEY) {
-      throw new Error("unauthorized: invalid platform secret");
-    }
+    requireSecret(args.platformSecret);
     return await ctx.db.get(args.offerId);
   },
 });
@@ -670,12 +667,6 @@ export const searchPage = query({
 });
 
 // --- proxied external offers (the aggregated launch inventory) ---
-
-function requireSecret(secret: string) {
-  if (!PLATFORM_INTERNAL_KEY || secret !== PLATFORM_INTERNAL_KEY) {
-    throw new Error("unauthorized: invalid platform secret");
-  }
-}
 
 // One ingested external listing, already normalized by the ingester. Upsert by
 // `externalUrl` so re-ingestion is idempotent (refreshes lastSeenAt + reactivates).

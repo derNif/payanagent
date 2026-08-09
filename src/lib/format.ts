@@ -33,3 +33,17 @@ export function offerPrice(o: {
   if (!Number.isFinite(v) || v <= 0) return "free";
   return usd(v);
 }
+
+// Compact relative timestamp for feeds/tickers ("42s ago", "3h ago").
+export function timeAgo(ms: number): string {
+  const diff = Date.now() - ms;
+  if (diff < 60_000) return `${Math.max(1, Math.floor(diff / 1000))}s ago`;
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  return `${Math.floor(diff / 86_400_000)}d ago`;
+}
+
+// Convex ids / tx hashes are too long to display raw.
+export function shortId(id: string): string {
+  return id.length > 12 ? `${id.slice(0, 6)}…${id.slice(-4)}` : id;
+}

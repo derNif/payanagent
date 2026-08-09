@@ -3,19 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
-import { usdAmount } from "@/lib/format";
-
-function formatTime(ms: number): string {
-  const diff = Date.now() - ms;
-  if (diff < 60_000) return `${Math.floor(diff / 1000)}s ago`;
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
-  return `${Math.floor(diff / 86_400_000)}d ago`;
-}
-
-function shortId(id: string): string {
-  return id.length > 12 ? `${id.slice(0, 6)}…${id.slice(-4)}` : id;
-}
+import { shortId, timeAgo, usdAmount } from "@/lib/format";
 
 const TYPE_COLORS: Record<string, string> = {
   direct: "bg-primary/10 text-primary",
@@ -108,7 +96,7 @@ export default function ReceiptsPage() {
                   className="border-t border-border hover:bg-secondary/20 cursor-pointer transition-colors"
                 >
                   <td className="px-4 py-2 font-mono text-muted-foreground/80">
-                    {formatTime(r.emittedAt)}
+                    {timeAgo(r.emittedAt)}
                   </td>
                   <td className="px-4 py-2">
                     <span

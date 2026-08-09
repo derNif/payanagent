@@ -1,44 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getConvexClient, PLATFORM_SECRET } from "@/lib/convex";
+import { getConvexClient, requirePlatformSecret } from "@/lib/convex";
 import { authenticateRequest } from "@/lib/auth";
-import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
+import {
+  enforceIpRateLimit,
+  errorResponse,
+  jsonError,
+  parseLimit,
+} from "@/lib/api-http";
+import { RATE_LIMITS } from "@/lib/rate-limit";
 import { validateBody, createRequestSchema } from "@/lib/validation";
 import { cacheHeaders } from "@/lib/cache";
-import {
-  buildPaymentRequiredResponse,
-  verifyPayment,
-  verifyPaymentIntegrity,
-  settlePayment,
-  getFacilitatorUrl,
-  getNetwork,
-  getNetworkId,
-} from "@/lib/x402";
+import { buildPaymentRequiredResponse } from "@/lib/x402";
+import { getPaymentSignature, settleSignedPayment } from "@/lib/x402-settle";
+import { recordSettlementReceipt } from "@/lib/settlement";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
 // GET /api/v1/requests — Public list/search.
 // Filters: ?status=open|accepted|... &q=<text>
 export async function GET(request: NextRequest) {
-  const ip = getClientIp(request);
-  const rl = await checkRateLimit(`public:${ip}`, RATE_LIMITS.unauthenticated);
-  if (!rl.allowed) {
-    return NextResponse.json(
-      { error: "Too many requests" },
-      {
-        status: 429,
-        headers: {
-          "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)),
-        },
-      },
-    );
-  }
+  const limited = await enforceIpRateLimit(
+    request,
+    "public",
+    RATE_LIMITS.unauthenticated,
+    "Too many requests",
+  );
+  if (limited) return limited;
 
   const convex = getConvexClient();
   const params = request.nextUrl.searchParams;
   const status = params.get("status");
   const query = params.get("q");
-  const limitParam = params.get("limit");
-  const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10), 1), 200) : 50;
+  const limit = parseLimit(params.get("limit"));
 
   try {
     let requests;
@@ -58,8 +51,7 @@ export async function GET(request: NextRequest) {
     }
     return NextResponse.json({ requests }, { headers: cacheHeaders(120) });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errorResponse(error, "Internal server error", 500);
   }
 }
 
@@ -73,14 +65,8 @@ export async function GET(request: NextRequest) {
 //     Emits an escrow_deposit receipt and links via escrowReceiptId.
 //   - If escrow=false: no payment now; settlement happens at /approve.
 export async function POST(request: NextRequest) {
-  // Fail fast on misconfiguration — never after money has moved.
-  const platformSecret = process.env.PLATFORM_INTERNAL_KEY || "";
-  if (!platformSecret) {
-    return NextResponse.json(
-      { error: "Platform misconfigured: missing PLATFORM_INTERNAL_KEY" },
-      { status: 500 },
-    );
-  }
+  const { secret: platformSecret, error: secretError } = requirePlatformSecret();
+  if (secretError) return secretError;
 
   const { agent, error } = await authenticateRequest(request);
   if (error) return error;
@@ -91,10 +77,7 @@ export async function POST(request: NextRequest) {
   const convex = getConvexClient();
 
   if (data.providerId && data.providerId === agent._id) {
-    return NextResponse.json(
-      { error: "Cannot hire yourself" },
-      { status: 400 },
-    );
+    return jsonError("Cannot hire yourself", 400);
   }
 
   const escrowAmountCents = data.providerId
@@ -104,8 +87,7 @@ export async function POST(request: NextRequest) {
   // Handle x402 escrow up-front, if requested
   let escrowTxHash: string | undefined;
   if (data.escrow) {
-    const paymentSignature =
-      request.headers.get("payment-signature") || request.headers.get("x-payment");
+    const paymentSignature = getPaymentSignature(request);
     if (!paymentSignature) {
       return buildPaymentRequiredResponse(
         escrowAmountCents,
@@ -113,28 +95,12 @@ export async function POST(request: NextRequest) {
         `Escrow for request: ${data.title}`,
       );
     }
-    const integrity = verifyPaymentIntegrity(paymentSignature, escrowAmountCents);
-    if (!integrity.valid) {
-      return NextResponse.json(
-        { error: `Payment integrity check failed: ${integrity.error}` },
-        { status: 402 },
-      );
-    }
-    const paymentRequired = request.headers.get("payment-required") || "";
-    const verification = await verifyPayment(paymentSignature, paymentRequired);
-    if (!verification.valid) {
-      return NextResponse.json(
-        { error: `Payment verification failed: ${verification.error}` },
-        { status: 402 },
-      );
-    }
-    const settlement = await settlePayment(paymentSignature, paymentRequired);
-    if (!settlement.success) {
-      return NextResponse.json(
-        { error: `Payment settlement failed: ${settlement.error}` },
-        { status: 402 },
-      );
-    }
+    const settlement = await settleSignedPayment({
+      request,
+      paymentSignature,
+      amountCents: escrowAmountCents,
+    });
+    if (!settlement.ok) return settlement.response;
     escrowTxHash = settlement.txHash;
   }
 
@@ -142,7 +108,7 @@ export async function POST(request: NextRequest) {
   let requestId: Id<"requests">;
   try {
     requestId = await convex.mutation(api.requests.create, {
-        platformSecret: PLATFORM_SECRET,
+        platformSecret,
       buyerId: agent._id,
       title: data.title,
       description: data.description,
@@ -153,37 +119,28 @@ export async function POST(request: NextRequest) {
       agreedPriceCents: data.agreedPriceCents,
     });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Failed to create request";
-    return NextResponse.json({ error: message }, { status: 400 });
+    return errorResponse(e, "Failed to create request");
   }
 
   // Emit escrow_deposit receipt and link it to the request
   if (data.escrow && escrowTxHash) {
-    const receiptId: Id<"receipts"> = await convex.mutation(
-      api.receipts.recordSettlement,
-      {
-        platformSecret,
-        buyerId: agent._id,
-        // For escrow deposit the funds go to the platform until release.
-        // We record sellerId as the platform's own agent... but for v1 we use
-        // the buyer as a placeholder if no provider is set yet. When the
-        // request is fulfilled and approved, a separate escrow_release receipt
-        // will record the actual provider.
-        sellerId: (data.providerId as Id<"agents"> | undefined) ?? agent._id,
-        requestId,
-        amountCents: escrowAmountCents,
-        amountMicroUsd: escrowAmountCents * 10000,
-        currency: "USDC",
-        chain: getNetwork(),
-        network: getNetworkId(),
-        txHash: escrowTxHash,
-        facilitatorUrl: getFacilitatorUrl(),
-        settlementType: "escrow_deposit",
-        status: "confirmed",
-      },
-    );
+    const receiptId = await recordSettlementReceipt(convex, {
+      platformSecret,
+      buyerId: agent._id,
+      // For escrow deposit the funds go to the platform until release.
+      // We record sellerId as the platform's own agent... but for v1 we use
+      // the buyer as a placeholder if no provider is set yet. When the
+      // request is fulfilled and approved, a separate escrow_release receipt
+      // will record the actual provider.
+      sellerId: (data.providerId as Id<"agents"> | undefined) ?? agent._id,
+      requestId,
+      amountCents: escrowAmountCents,
+      amountMicroUsd: escrowAmountCents * 10000,
+      txHash: escrowTxHash,
+      settlementType: "escrow_deposit",
+    });
     await convex.mutation(api.requests.linkEscrowReceipt, {
-        platformSecret: PLATFORM_SECRET,
+        platformSecret,
       requestId,
       escrowReceiptId: receiptId,
       escrowDepositedCents: escrowAmountCents,

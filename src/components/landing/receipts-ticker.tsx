@@ -3,15 +3,7 @@
 import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
-import { usdAmount } from "@/lib/format";
-
-function formatTime(ms: number): string {
-  const diff = Date.now() - ms;
-  if (diff < 60_000) return `${Math.max(1, Math.floor(diff / 1000))}s ago`;
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
-  return `${Math.floor(diff / 86_400_000)}d ago`;
-}
+import { timeAgo, usdAmount } from "@/lib/format";
 
 const VERB_LABELS: Record<string, string> = {
   direct: "buy",
@@ -45,7 +37,7 @@ export function ReceiptsTicker() {
           className="font-mono text-xs text-muted-foreground hover:text-primary transition-colors whitespace-nowrap shrink-0"
         >
           <span className="text-primary">{usdAmount(r.amountCents, r.amountMicroUsd)}</span>{" "}
-          {VERB_LABELS[r.settlementType] ?? r.settlementType} · {formatTime(r.emittedAt)}
+          {VERB_LABELS[r.settlementType] ?? r.settlementType} · {timeAgo(r.emittedAt)}
         </Link>
       ))}
       <Link
