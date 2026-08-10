@@ -87,7 +87,7 @@ export function ForSaasSection() {
             isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
           }`}
         >
-          <p className="text-sm font-mono text-primary mb-4">// FOR SAAS &amp; API PROVIDERS</p>
+          <p className="text-sm font-mono text-primary mb-4">{"// FOR SAAS & API PROVIDERS"}</p>
           <h2 className="text-4xl lg:text-5xl font-semibold tracking-tight mb-6 text-balance">
             List your service.
             <br />
@@ -159,7 +159,7 @@ export function ForSaasSection() {
               </div>
 
               <div className="font-mono text-xs text-muted-foreground space-y-2 bg-background/50 rounded-lg p-4 sm:p-6 border border-border overflow-x-auto">
-                <div className="text-muted-foreground/40 italic mb-2">// List your offer</div>
+                <div className="text-muted-foreground/40 italic mb-2">{"// List your offer"}</div>
                 <div>
                   <span className="text-blue-400">POST</span> /api/v1/offers
                 </div>
@@ -178,7 +178,7 @@ export function ForSaasSection() {
                 </div>
                 <div>{`}`}</div>
                 <div className="mt-3 text-muted-foreground/40 italic">
-                  // Agents pay $0.25 per call — USDC settles to your wallet
+                  {"// Agents pay $0.25 per call \u2014 USDC settles to your wallet"}
                 </div>
               </div>
             </div>

@@ -33,7 +33,7 @@ export default function ContactPage() {
               >
                 GitHub
               </a>
-              . Include a minimal reproduction if it's a bug, and which version
+              . Include a minimal reproduction if it&apos;s a bug, and which version
               of the SDK or which endpoint is involved.
             </p>
           </section>
@@ -50,7 +50,7 @@ export default function ContactPage() {
               >
                 @payanagent
               </a>
-              . We're not a 24/7 support operation — expect a few days before
+              . We&apos;re not a 24/7 support operation — expect a few days before
               you hear back.
             </p>
           </section>

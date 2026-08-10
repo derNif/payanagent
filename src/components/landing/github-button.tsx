@@ -26,8 +26,9 @@ export function useGitHubStars(): number | null {
   useEffect(() => {
     const cached = sessionStorage.getItem("gh-stars");
     if (cached) {
-      setStars(Number(cached));
-      return;
+      // Async so hydration finishes on the server-rendered markup first.
+      const id = setTimeout(() => setStars(Number(cached)), 0);
+      return () => clearTimeout(id);
     }
     fetch(`https://api.github.com/repos/${REPO}`)
       .then((r) => (r.ok ? r.json() : null))

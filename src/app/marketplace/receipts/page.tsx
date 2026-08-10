@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { shortId, timeAgo, usdAmount } from "@/lib/format";
@@ -69,12 +70,12 @@ export default function ReceiptsPage() {
             Every settled transaction emits a public, signed receipt. The first one will appear
             here the moment it happens.
           </p>
-          <a
+          <Link
             href="/docs"
             className="inline-block text-sm font-mono text-primary hover:underline"
           >
             Make the first one →
-          </a>
+          </Link>
         </div>
       ) : (
         <div className="bg-card border border-border rounded-xl overflow-x-auto card-shadow">

@@ -176,7 +176,7 @@ export function verifyPaymentIntegrity(
 }
 
 // Verify a payment via the facilitator (x402 v2 structured format)
-export async function verifyPayment(paymentSignatureHeader: string, paymentRequiredHeader: string): Promise<{
+export async function verifyPayment(paymentSignatureHeader: string, _paymentRequiredHeader: string): Promise<{
   valid: boolean;
   txHash?: string;
   error?: string;
@@ -241,7 +241,7 @@ export async function verifyPayment(paymentSignatureHeader: string, paymentRequi
 }
 
 // Settle a payment via the facilitator (x402 v2 structured format)
-export async function settlePayment(paymentSignatureHeader: string, paymentRequiredHeader: string): Promise<{
+export async function settlePayment(paymentSignatureHeader: string, _paymentRequiredHeader: string): Promise<{
   success: boolean;
   txHash?: string;
   error?: string;

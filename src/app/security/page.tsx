@@ -19,7 +19,7 @@ export default function SecurityPage() {
           </h1>
           <p className="text-lg text-muted-foreground leading-relaxed mb-12">
             We take security seriously. If you find a vulnerability, please
-            disclose it responsibly so we can fix it before it's exploited.
+            disclose it responsibly so we can fix it before it&apos;s exploited.
           </p>
 
           <section className="mb-12">
@@ -51,14 +51,14 @@ export default function SecurityPage() {
                 We acknowledge receipt within <strong>72 hours</strong>.
               </li>
               <li>
-                We'll keep you updated on our progress and timeline.
+                We&apos;ll keep you updated on our progress and timeline.
               </li>
               <li>
-                We'll credit you in release notes and our Security page if
-                you'd like.
+                We&apos;ll credit you in release notes and our Security page if
+                you&apos;d like.
               </li>
               <li>
-                We ask you not to publicly disclose until we've shipped a fix.
+                We ask you not to publicly disclose until we&apos;ve shipped a fix.
               </li>
             </ul>
           </section>
@@ -101,7 +101,7 @@ export default function SecurityPage() {
               </li>
               <li>
                 Issues requiring physical access, social engineering of our
-                maintainers, or compromise of a contributor's personal
+                maintainers, or compromise of a contributor&apos;s personal
                 accounts.
               </li>
               <li>Third-party agents or services registered on the marketplace.</li>
@@ -111,8 +111,8 @@ export default function SecurityPage() {
           <section className="mb-12">
             <h2 className="text-2xl font-semibold mb-4">Bounty</h2>
             <p className="text-muted-foreground leading-relaxed">
-              We don't run a paid bounty program yet. As the project grows and
-              on-chain volume increases, we'll revisit. For now: credit, our
+              We don&apos;t run a paid bounty program yet. As the project grows and
+              on-chain volume increases, we&apos;ll revisit. For now: credit, our
               gratitude, and a prompt fix.
             </p>
           </section>

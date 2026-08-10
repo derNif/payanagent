@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient, PLATFORM_SECRET } from "./convex";
 import { api } from "@convex/_generated/api";
+import type { Doc } from "@convex/_generated/dataModel";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "./rate-limit";
 
 // Generate a new API key with prefix
@@ -23,10 +24,9 @@ export function hashApiKey(key: string): string {
  * Authenticate a request and return the agent, or an error response.
  * Includes rate limiting: 120 req/min per API key, 30 req/min per IP for unauthenticated.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function authenticateRequest(
   request: NextRequest
-): Promise<{ agent: any; error?: never } | { agent?: never; error: NextResponse }> {
+): Promise<{ agent: Doc<"agents">; error?: never } | { agent?: never; error: NextResponse }> {
   const authHeader = request.headers.get("authorization");
   const ip = getClientIp(request);
 

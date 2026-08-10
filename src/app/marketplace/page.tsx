@@ -176,7 +176,7 @@ export default function MarketplacePage() {
         {/* Latest offers */}
         <div className="bg-card border border-border rounded-xl card-shadow overflow-hidden">
           <div className="px-5 py-3 border-b border-border flex items-center justify-between">
-            <p className="text-xs font-mono text-primary">// LATEST OFFERS</p>
+            <p className="text-xs font-mono text-primary">{"// LATEST OFFERS"}</p>
             <Link
               href="/marketplace/offers"
               className="text-xs font-mono text-muted-foreground/60 hover:text-primary"
@@ -216,7 +216,7 @@ export default function MarketplacePage() {
         {/* Live receipts */}
         <div className="bg-card border border-border rounded-xl card-shadow overflow-hidden">
           <div className="px-5 py-3 border-b border-border flex items-center justify-between">
-            <p className="text-xs font-mono text-green-400">// SETTLED ON-CHAIN</p>
+            <p className="text-xs font-mono text-green-400">{"// SETTLED ON-CHAIN"}</p>
             <Link
               href="/marketplace/receipts"
               className="text-xs font-mono text-muted-foreground/60 hover:text-primary"
@@ -257,7 +257,7 @@ export default function MarketplacePage() {
       {topSellers && topSellers.length > 0 && (
         <div className="bg-card border border-border rounded-xl card-shadow overflow-hidden mb-8">
           <div className="px-5 py-3 border-b border-border flex items-center justify-between">
-            <p className="text-xs font-mono text-muted-foreground/70">// TOP SELLERS</p>
+            <p className="text-xs font-mono text-muted-foreground/70">{"// TOP SELLERS"}</p>
             <Link
               href="/marketplace/leaderboard"
               className="text-xs font-mono text-muted-foreground/60 hover:text-primary"
@@ -288,7 +288,7 @@ export default function MarketplacePage() {
         <h3 className="font-semibold text-foreground mb-4">Four verbs</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           <div>
-            <p className="text-xs font-mono text-primary mb-3">// SELL</p>
+            <p className="text-xs font-mono text-primary mb-3">{"// SELL"}</p>
             <div className="space-y-3">
               <div className="flex gap-3">
                 <span className="text-primary font-mono text-sm mt-0.5">offer</span>
@@ -305,7 +305,7 @@ export default function MarketplacePage() {
             </div>
           </div>
           <div>
-            <p className="text-xs font-mono text-blue-400 mb-3">// BUY</p>
+            <p className="text-xs font-mono text-blue-400 mb-3">{"// BUY"}</p>
             <div className="space-y-3">
               <div className="flex gap-3">
                 <span className="text-blue-400 font-mono text-sm mt-0.5">buy</span>

@@ -231,7 +231,7 @@ export function LeaderboardDashboard() {
         {/* Right: live settlement feed */}
         <div className="bg-card border border-border rounded-xl overflow-hidden card-shadow h-fit">
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-            <span className="text-xs font-mono uppercase tracking-widest text-green-400">// settlement feed</span>
+            <span className="text-xs font-mono uppercase tracking-widest text-green-400">{"// settlement feed"}</span>
             <span className="text-[10px] font-mono text-muted-foreground/50">live</span>
           </div>
           {feed.length === 0 ? (
