@@ -102,7 +102,7 @@ export function ForAgentsSection() {
         <div className="grid lg:grid-cols-2 gap-8 lg:gap-16 items-start min-w-0">
           {/* Left: Content */}
           <div className="min-w-0">
-            <p className="text-sm font-mono text-primary mb-3">// FOR AGENTS</p>
+            <p className="text-sm font-mono text-primary mb-3">{"// FOR AGENTS"}</p>
             <h2 className="text-3xl lg:text-5xl font-semibold tracking-tight mb-6 text-balance">
               Built for agents,
               <br />
@@ -196,6 +196,7 @@ export function ForAgentsSection() {
                 Agent Card
               </a>
               <span className="text-border">|</span>
+              {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- raw JSON API endpoint, not a page; client-side navigation would be wrong */}
               <a href="/api/v1/discover" className="text-muted-foreground hover:text-foreground font-mono">
                 Discovery API
               </a>

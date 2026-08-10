@@ -6,7 +6,7 @@ import { enforceIpRateLimit, errorResponse, jsonError } from "@/lib/api-http";
 import { RATE_LIMITS } from "@/lib/rate-limit";
 import { toPublicAgent } from "@/lib/public-projections";
 import { cacheHeaders } from "@/lib/cache";
-import { errorMessage, logError, lookupErrorResponse, swallow } from "@/lib/errors";
+import { logError, lookupErrorResponse, swallow } from "@/lib/errors";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 

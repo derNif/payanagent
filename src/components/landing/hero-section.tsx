@@ -22,7 +22,9 @@ export function HeroSection() {
   const offerCount = useQuery(api.offers.activeCount, {});
 
   useEffect(() => {
-    setIsVisible(true);
+    // rAF defers past the first paint so the CSS entrance transition runs.
+    const id = requestAnimationFrame(() => setIsVisible(true));
+    return () => cancelAnimationFrame(id);
   }, []);
 
   const handleCopy = (idx: number) => {

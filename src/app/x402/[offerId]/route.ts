@@ -12,7 +12,7 @@ import { deliverOffer, readOfferInput } from "@/lib/deliver-offer";
 import { attachFeeAdvert, collectFee } from "@/lib/x402-fee";
 import { relayExternalBuy } from "@/lib/relay-buy";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
-import { errorMessage, logError, lookupErrorResponse, swallow } from "@/lib/errors";
+import { logError, lookupErrorResponse, swallow } from "@/lib/errors";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 

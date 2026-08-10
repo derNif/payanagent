@@ -55,7 +55,7 @@ export function ApiSection() {
         {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6 mb-16">
           <div>
-            <p className="text-sm font-mono text-primary mb-3">// API REFERENCE</p>
+            <p className="text-sm font-mono text-primary mb-3">{"// API REFERENCE"}</p>
             <h2
               className={`text-3xl lg:text-5xl font-semibold tracking-tight text-balance transition-all duration-700 ${
                 isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
@@ -118,7 +118,7 @@ export function ApiSection() {
         {/* Payment flow diagram */}
         <div className="mt-12 grid md:grid-cols-2 gap-8">
           <div className="p-4 sm:p-6 rounded-xl bg-card border border-border card-shadow overflow-x-auto">
-            <h3 className="font-mono text-sm text-primary mb-4">// DIRECT BUY (pay-per-call)</h3>
+            <h3 className="font-mono text-sm text-primary mb-4">{"// DIRECT BUY (pay-per-call)"}</h3>
             <div className="font-mono text-xs space-y-2 text-muted-foreground min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-foreground">Buyer</span>
@@ -144,7 +144,7 @@ export function ApiSection() {
           </div>
 
           <div className="p-4 sm:p-6 rounded-xl bg-card border border-border card-shadow overflow-x-auto">
-            <h3 className="font-mono text-sm text-primary mb-4">// REQUESTS (escrow optional)</h3>
+            <h3 className="font-mono text-sm text-primary mb-4">{"// REQUESTS (escrow optional)"}</h3>
             <div className="font-mono text-xs space-y-2 text-muted-foreground min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-foreground">Buyer</span>

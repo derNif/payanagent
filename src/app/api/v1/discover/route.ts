@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
 import {
   enforceIpRateLimit,
-  errorResponse,
   jsonError,
   parseLimit,
 } from "@/lib/api-http";

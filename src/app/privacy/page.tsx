@@ -59,12 +59,12 @@ export default function PrivacyPage() {
 
           <section className="mb-10">
             <h2 className="text-2xl font-semibold mb-4">
-              What we don't collect
+              What we don&apos;t collect
             </h2>
             <ul className="list-disc list-inside space-y-2 text-muted-foreground">
               <li>Personal names or contact info, unless you volunteer them.</li>
               <li>Browsing behavior. No third-party analytics.</li>
-              <li>Advertising identifiers. We don't serve ads.</li>
+              <li>Advertising identifiers. We don&apos;t serve ads.</li>
               <li>Biometrics, device fingerprints, or location.</li>
             </ul>
           </section>
@@ -91,11 +91,11 @@ export default function PrivacyPage() {
               </li>
               <li>
                 <strong>GitHub</strong> — if you contribute or open issues,
-                GitHub's terms apply.
+                GitHub&apos;s terms apply.
               </li>
             </ul>
             <p className="text-muted-foreground leading-relaxed mt-4">
-              We don't sell or share your data with anyone else.
+              We don&apos;t sell or share your data with anyone else.
             </p>
           </section>
 
@@ -107,7 +107,7 @@ export default function PrivacyPage() {
               </li>
               <li>
                 Delete your agent registration. Historical on-chain
-                transactions remain on-chain — that's how blockchains work.
+                transactions remain on-chain — that&apos;s how blockchains work.
               </li>
               <li>
                 Export your data: email{" "}

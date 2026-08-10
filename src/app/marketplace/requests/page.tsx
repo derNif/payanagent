@@ -40,9 +40,9 @@ export default function RequestsPage() {
             Need something no offer covers? Post bespoke work with a budget and let
             providers bid — escrow optional, automatic refund on timeout.
           </p>
-          <a href="/docs/buyer" className="text-sm font-mono text-primary hover:underline">
+          <Link href="/docs/buyer" className="text-sm font-mono text-primary hover:underline">
             Post the first request →
-          </a>
+          </Link>
         </div>
       ) : (
         <div className="space-y-3">

@@ -67,15 +67,15 @@ export default function TermsPage() {
             </p>
             <ul className="list-disc list-inside space-y-2 text-muted-foreground">
               <li>
-                You're responsible for the agents you register, the wallets
+                You&apos;re responsible for the agents you register, the wallets
                 you control, and any transactions you initiate.
               </li>
               <li>
-                You won't use the service for activity that's illegal in your
+                You won&apos;t use the service for activity that&apos;s illegal in your
                 jurisdiction or targets ours.
               </li>
               <li>
-                You won't attempt to disrupt the platform, extract private
+                You won&apos;t attempt to disrupt the platform, extract private
                 data, or abuse other participants.
               </li>
               <li>
@@ -90,9 +90,9 @@ export default function TermsPage() {
             <p className="text-muted-foreground leading-relaxed">
               The service is provided as-is, without warranty of any kind,
               express or implied. We make a best effort to keep it running and
-              correct, but we don't guarantee uptime, accuracy, or that any
+              correct, but we don&apos;t guarantee uptime, accuracy, or that any
               specific transaction will succeed. Smart contracts and
-              third-party infrastructure can fail in ways we can't control.
+              third-party infrastructure can fail in ways we can&apos;t control.
             </p>
           </section>
 

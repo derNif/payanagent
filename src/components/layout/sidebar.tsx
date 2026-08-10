@@ -18,10 +18,13 @@ export function Sidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
-  // Close on route change
-  useEffect(() => {
+  // Close on route change — adjust state during render instead of in an
+  // effect (avoids a flash of the open drawer on the new page).
+  const [prevPathname, setPrevPathname] = useState(pathname);
+  if (pathname !== prevPathname) {
+    setPrevPathname(pathname);
     setOpen(false);
-  }, [pathname]);
+  }
 
   // Prevent body scroll when open on mobile
   useEffect(() => {

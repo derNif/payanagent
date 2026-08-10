@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConvexClient } from "@/lib/convex";
-import { enforceIpRateLimit, jsonError, parseLimit } from "@/lib/api-http";
+import { enforceIpRateLimit, parseLimit } from "@/lib/api-http";
 import { RATE_LIMITS } from "@/lib/rate-limit";
 import { toPublicReceipt } from "@/lib/public-projections";
 import { cacheHeaders } from "@/lib/cache";
