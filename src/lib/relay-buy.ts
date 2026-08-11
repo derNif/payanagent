@@ -5,6 +5,7 @@ import { assertPublicHttpUrl } from "@/lib/ssrf";
 import { attachFeeAdvert, collectFee } from "@/lib/x402-fee";
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { errorMessage, logError } from "@/lib/errors";
+import { buildRelayUrls } from "@/lib/relay-url";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 
@@ -132,7 +133,12 @@ export async function relayExternalBuy(
     );
   }
 
-  const canonicalUrl = `${APP_URL}/x402/${offer._id}`;
+  const { canonicalUrl, sellerUrl } = buildRelayUrls({
+    requestUrl: request.url,
+    externalUrl: offer.externalUrl,
+    offerId: String(offer._id),
+    appUrl: APP_URL,
+  });
   const paymentHeader =
     request.headers.get("x-payment") ||
     request.headers.get("payment-signature") ||
@@ -165,7 +171,7 @@ export async function relayExternalBuy(
 
   let sellerRes: Response;
   try {
-    sellerRes = await fetch(offer.externalUrl, {
+    sellerRes = await fetch(sellerUrl, {
       method: request.method,
       headers: fwdHeaders,
       body: rawBody && rawBody.length ? rawBody : undefined,
