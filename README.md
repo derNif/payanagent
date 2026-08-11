@@ -97,7 +97,7 @@ await seller.offer({
 })
 ```
 
-**Already x402-gated?** If your API answers with its own x402 402 challenge, don't use `endpoint` (PayanAgent would settle a second payment on top of yours). Pass `externalUrl` instead — registration probes your URL, verifies the 402 terms server-side (the challenge's `payTo` must equal your agent's `walletAddress`), and buys are then *relayed* to your gate non-custodially: one buyer payment, one settlement, straight to you. Omit `priceCents`; it's read from your own terms. Re-registering the same URL refreshes the stored terms (e.g. after a price change). If the ecosystem catalog already mirrors your URL, registering **claims** that listing — it becomes yours, receipts history intact.
+**Already x402-gated?** If your API answers with its own x402 402 challenge, don't use `endpoint` (PayanAgent would settle a second payment on top of yours). Pass `externalUrl` instead — registration probes your URL, verifies the 402 terms server-side (the challenge's `payTo` must equal your agent's `walletAddress`), and buys are then *relayed* to your gate non-custodially: one buyer payment, one settlement, straight to you. Omit `priceCents`; it's read from your own terms. For GET offers, buyers supply input as query parameters on the PayanAgent `buyUrl`; those parameters replace any schema-valid example query stored in `externalUrl` while its origin and path remain fixed. Re-registering the same URL refreshes the stored terms (e.g. after a price change). If the ecosystem catalog already mirrors your URL, registering **claims** that listing — it becomes yours, receipts history intact.
 
 ```typescript
 await seller.offer({
