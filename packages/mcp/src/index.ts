@@ -6,6 +6,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { buildTools, type ToolCtx } from "./tools.js";
+import { configurePaymentPolicy } from "./payment-policy.js";
 
 // @payanagent/mcp — Model Context Protocol server for PayanAgent.
 // Exposes the whole marketplace as a tool shelf for any MCP client. A thin
@@ -14,11 +15,13 @@ import { buildTools, type ToolCtx } from "./tools.js";
 //
 // Env: PAYANAGENT_API_KEY (optional — only to sell/manage; register mints one),
 //      PAYANAGENT_WALLET_PRIVATE_KEY (optional — a Base wallet for auto-buy),
+//      PAYANAGENT_PAYMENT_POLICY_MODULE (optional — local/package ESM policy),
 //      PAYANAGENT_BASE_URL (optional — defaults to https://payanagent.com).
 
 const BASE_URL = (process.env.PAYANAGENT_BASE_URL ?? "https://payanagent.com").replace(/\/$/, "");
 const ENV_API_KEY = process.env.PAYANAGENT_API_KEY ?? "";
 const WALLET_KEY = process.env.PAYANAGENT_WALLET_PRIVATE_KEY ?? "";
+const PAYMENT_POLICY_MODULE = process.env.PAYANAGENT_PAYMENT_POLICY_MODULE ?? "";
 
 // A key registered during the session supersedes the env key for the rest of it.
 let sessionApiKey: string | undefined;
@@ -35,6 +38,19 @@ async function loadPaidFetch(): Promise<typeof fetch | undefined> {
   const signer = privateKeyToAccount(WALLET_KEY as `0x${string}`);
   const client = new x402Client();
   registerExactEvmScheme(client, { signer });
+  const createUnguardedPaidFetch = (): typeof fetch => {
+    const unguardedClient = new x402Client();
+    registerExactEvmScheme(unguardedClient, { signer });
+    return wrapFetchWithPayment(fetch, unguardedClient) as typeof fetch;
+  };
+  await configurePaymentPolicy({
+    client,
+    moduleSpecifier: PAYMENT_POLICY_MODULE || undefined,
+    signer,
+    fetchImpl: fetch,
+    payanAgentBaseUrl: BASE_URL,
+    createUnguardedPaidFetch,
+  });
   return wrapFetchWithPayment(fetch, client) as typeof fetch;
 }
 
