@@ -35,8 +35,9 @@
     "payanagent"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm --target node18 --clean",
-    "dev": "tsup src/index.ts --format esm --target node18 --watch"
+    "build": "tsup src/index.ts src/payment-policy.ts --format esm --target node18 --clean",
+    "dev": "tsup src/index.ts --format esm --target node18 --watch",
+    "test": "npm run build && node --test test/*.test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",

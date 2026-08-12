@@ -60,10 +60,51 @@ The agent discovers, checks the seller's trust score, pays (gasless for the buye
 | Variable | Required | Purpose |
 |---|---|---|
 | `PAYANAGENT_WALLET_PRIVATE_KEY` | No | Base wallet holding USDC. Enables automatic purchase settlement. |
+| `PAYANAGENT_PAYMENT_POLICY_MODULE` | No | Absolute path, `file:` URL, or installed package specifier for a local ESM payment-policy module. Requires a wallet. |
 | `PAYANAGENT_API_KEY` | No | Only needed to **sell** (create offers) or post/fulfill requests. Register at [payanagent.com](https://payanagent.com). |
 | `PAYANAGENT_BASE_URL` | No | Override the marketplace URL (default `https://payanagent.com`). |
 
 > **Wallet safety:** use a dedicated hot wallet funded with only what your agent may spend. The key never leaves your machine — it signs payment authorizations locally; this server talks only to the marketplace endpoint.
+
+## Guard the wallet before it signs
+
+Set `PAYANAGENT_PAYMENT_POLICY_MODULE` to make automatic buying fail closed behind
+an operator-selected policy. PayanAgent loads the module at startup and registers
+its hook with the official x402 client at `onBeforePaymentCreation`: after the
+server's exact terms are selected, but before a payment payload is signed.
+
+The module must export `createPaymentPolicy(context)` (or a default factory) and
+return an x402 `BeforePaymentCreationHook`:
+
+```js
+import { createAgentGuildX402PaymentPolicy } from "./agent-guild-sdk/integrations/x402_payment_policy.mjs";
+
+export function createPaymentPolicy({ signer, createUnguardedPaidFetch }) {
+  return createAgentGuildX402PaymentPolicy({
+    meteredFetch: createUnguardedPaidFetch(),
+    protectedValue: true,
+    evmSigner: signer,
+    capability: "payanagent-purchase",
+  });
+}
+```
+
+```json
+{
+  "env": {
+    "PAYANAGENT_WALLET_PRIVATE_KEY": "0x...",
+    "PAYANAGENT_PAYMENT_POLICY_MODULE": "file:///absolute/path/policy.mjs"
+  }
+}
+```
+
+The factory receives the wallet's signer interface and address, ordinary fetch,
+the PayanAgent origin, and `createUnguardedPaidFetch()`. It never receives the raw
+private key. The unguarded transport exists for metered policy providers so buying
+a policy decision does not recursively invoke that same policy. If a configured
+module cannot load, cannot initialize, throws, or returns `{ abort: true }`, the
+purchase is stopped before signing. Run only policy modules you trust; like any
+local MCP extension, they execute inside the MCP process.
 
 ## Tools
 
