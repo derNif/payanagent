@@ -3,7 +3,6 @@ import { getConvexClient } from "@/lib/convex";
 import { extractBuyerWallet, getNetwork } from "@/lib/x402";
 import { assertPublicHttpUrl } from "@/lib/ssrf";
 import { attachFeeAdvert, collectFee } from "@/lib/x402-fee";
-import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { errorMessage, logError } from "@/lib/errors";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
@@ -86,6 +85,47 @@ function rewriteChallengeB64(value: string, newUrl: string): string {
   return value;
 }
 
+// Unpaid probes vastly outnumber real buys and most of the catalog's sellers
+// are slow or gone, so a probe gets a short leash while a paid buy gets a
+// generous one (the seller may be doing real paid work).
+const PROBE_TIMEOUT_MS = 8_000;
+const PAID_TIMEOUT_MS = 60_000;
+
+// Per-instance cache of relayed 402 challenges. A challenge only changes when
+// the seller re-prices, so repeated probes of the same offer (crawler sweeps)
+// must not each cost an SSRF DNS lookup + an upstream fetch to the seller.
+const CHALLENGE_TTL_MS = 120_000;
+const CHALLENGE_CACHE_MAX = 5_000;
+const challengeCache = new Map<
+  string,
+  { body: string; headers: [string, string][]; expiresAt: number }
+>();
+
+function cachedChallenge(key: string): NextResponse | null {
+  const hit = challengeCache.get(key);
+  if (!hit) return null;
+  if (Date.now() > hit.expiresAt) {
+    challengeCache.delete(key);
+    return null;
+  }
+  return new NextResponse(hit.body, {
+    status: 402,
+    headers: new Headers(hit.headers),
+  });
+}
+
+function storeChallenge(key: string, body: string, headers: Headers): void {
+  if (challengeCache.size >= CHALLENGE_CACHE_MAX) {
+    const oldest = challengeCache.keys().next().value;
+    if (oldest !== undefined) challengeCache.delete(oldest);
+  }
+  challengeCache.set(key, {
+    body,
+    headers: [...headers.entries()],
+    expiresAt: Date.now() + CHALLENGE_TTL_MS,
+  });
+}
+
 function txHashFromResponse(res: Response): string {
   const raw = res.headers.get("x-payment-response") || res.headers.get("payment-response");
   if (!raw) return "";
@@ -121,6 +161,21 @@ export async function relayExternalBuy(
     );
   }
 
+  const canonicalUrl = `${APP_URL}/x402/${offer._id}`;
+  const paymentHeader =
+    request.headers.get("x-payment") ||
+    request.headers.get("payment-signature") ||
+    request.headers.get("payment");
+
+  // Unpaid probe with a warm challenge: answer from cache without touching
+  // DNS or the seller at all. (Probe rate limiting happens in the route,
+  // before the Convex offer lookup.)
+  const challengeKey = `${offer._id}:${request.method}`;
+  if (!paymentHeader) {
+    const cached = cachedChallenge(challengeKey);
+    if (cached) return cached;
+  }
+
   try {
     await assertPublicHttpUrl(offer.externalUrl);
   } catch (err) {
@@ -130,20 +185,6 @@ export async function relayExternalBuy(
       { error: `Offer endpoint not allowed: ${message}` },
       { status: 502 },
     );
-  }
-
-  const canonicalUrl = `${APP_URL}/x402/${offer._id}`;
-  const paymentHeader =
-    request.headers.get("x-payment") ||
-    request.headers.get("payment-signature") ||
-    request.headers.get("payment");
-
-  const ip = getClientIp(request);
-  if (!paymentHeader) {
-    const rl = await checkRateLimit(`extprobe:${ip}`, RATE_LIMITS.unauthenticated);
-    if (!rl.allowed) {
-      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
-    }
   }
 
   // A body we cannot read must not be relayed as an empty one — the buyer would
@@ -170,6 +211,9 @@ export async function relayExternalBuy(
       headers: fwdHeaders,
       body: rawBody && rawBody.length ? rawBody : undefined,
       redirect: "manual",
+      signal: AbortSignal.timeout(
+        paymentHeader ? PAID_TIMEOUT_MS : PROBE_TIMEOUT_MS,
+      ),
     });
   } catch (err) {
     logError("relay-buy:fetch-seller", err, { offerId: offer._id });
@@ -203,6 +247,9 @@ export async function relayExternalBuy(
       if (v) headers.set(name, rewriteChallengeB64(v, canonicalUrl));
     }
     attachFeeAdvert(headers, Number(offer.amountRaw) || 0);
+    if (!paymentHeader && sellerRes.status === 402) {
+      storeChallenge(challengeKey, body, headers);
+    }
     return new NextResponse(body, { status: 402, headers });
   }
 
