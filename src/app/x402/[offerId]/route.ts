@@ -35,6 +35,24 @@ async function handle(
   const ip = getClientIp(request);
   const convex = getConvexClient();
 
+  // Unpaid probes are the overwhelming bulk of traffic (crawlers walking the
+  // catalog), so gate them BEFORE any Convex read or upstream work — a 429
+  // must be the cheapest possible response.
+  const hasPayment = Boolean(
+    request.headers.get("x-payment") ||
+      request.headers.get("payment-signature") ||
+      request.headers.get("payment"),
+  );
+  if (!hasPayment) {
+    const rl = await checkRateLimit(
+      `x402probe:${ip}`,
+      RATE_LIMITS.unauthenticated,
+    );
+    if (!rl.allowed) {
+      return jsonError("Too many requests", 429);
+    }
+  }
+
   let offer;
   try {
     offer = await convex.query(api.offers.getByIdInternal, {
@@ -81,12 +99,9 @@ async function handle(
   const canonicalUrl = `${APP_URL}/x402/${offer._id}`;
   const paymentSignature = getPaymentSignature(request);
 
-  // No payment -> anonymous 402 challenge (the discovery/probe path).
+  // No payment -> anonymous 402 challenge (the discovery/probe path; already
+  // rate-limited above, before the offer lookup).
   if (!paymentSignature) {
-    const rl = await checkRateLimit(`x402probe:${ip}`, RATE_LIMITS.unauthenticated);
-    if (!rl.allowed) {
-      return jsonError("Too many requests", 429);
-    }
     const challenge = buildPaymentRequiredResponse(
       offer.priceCents,
       canonicalUrl,

@@ -733,6 +733,12 @@ export const upsertExternalBulk = mutation({
           // Rows the backfill hasn't reached yet self-heal on the next refresh.
           existing.searchText !== undefined;
         if (same) {
+          // Still stamp presence: the post-refresh stale sweep deactivates
+          // anything with lastSeenAt before the run, so a present-but-unchanged
+          // offer must carry this run's timestamp.
+          if ((existing.lastSeenAt ?? 0) < args.now) {
+            await ctx.db.patch(existing._id, { lastSeenAt: args.now });
+          }
           unchanged++;
           continue;
         }
@@ -773,27 +779,41 @@ export const upsertExternalBulk = mutation({
 });
 
 // Deactivate proxied offers not seen since a cutoff (dropped from the source).
+// Paginated: swept-but-inactive rows stay in the index range, so a caller
+// looping over the whole backlog must advance by cursor, not re-take the head.
 export const sweepStaleExternal = mutation({
-  args: { platformSecret: v.string(), cutoff: v.number(), limit: v.optional(v.number()) },
+  args: {
+    platformSecret: v.string(),
+    cutoff: v.number(),
+    limit: v.optional(v.number()),
+    cursor: v.optional(v.string()),
+  },
   handler: async (ctx, args) => {
     requireSecret(args.platformSecret);
     // Offers not refreshed this run (lastSeenAt before the cutoff) = dropped from
     // the source. The index gives us exactly those (not a scan of the whole table).
-    const stale = await ctx.db
+    const page = await ctx.db
       .query("offers")
       .withIndex("by_source_lastSeen", (q) =>
         q.eq("source", "bazaar").lt("lastSeenAt", args.cutoff),
       )
-      .take(Math.min(args.limit ?? 2000, 4000));
+      .paginate({
+        numItems: Math.min(args.limit ?? 2000, 4000),
+        cursor: args.cursor ?? null,
+      });
     let swept = 0;
-    for (const o of stale) {
+    for (const o of page.page) {
       if (o.isActive) {
         await ctx.db.patch(o._id, { isActive: false });
         swept++;
       }
     }
     if (swept > 0) await bumpCounter(ctx, "activeOffers", -swept);
-    return { swept };
+    return {
+      swept,
+      isDone: page.isDone,
+      continueCursor: page.continueCursor,
+    };
   },
 });
 

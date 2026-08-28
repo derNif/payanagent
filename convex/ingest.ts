@@ -84,6 +84,10 @@ export const refreshCatalog = internalAction({
     let offset = args.offset;
     let total: number | null = null;
     let done = false;
+    // Only a run that provably covered the WHOLE source may trigger the stale
+    // sweep — sweeping after a partial run (source API error, empty page early)
+    // would deactivate offers that are still listed.
+    let coveredSource = false;
 
     for (let p = 0; p < CHUNK; p++) {
       const res = await fetch(`${DISCOVERY}?limit=${PAGE}&offset=${offset}`, {
@@ -118,6 +122,7 @@ export const refreshCatalog = internalAction({
       offset += items.length;
       if (total != null && offset >= total) {
         done = true;
+        coveredSource = true;
         break;
       }
     }
@@ -128,11 +133,36 @@ export const refreshCatalog = internalAction({
         offset,
         runStart,
       });
+    } else if (coveredSource) {
+      // Every offer still listed at the source now carries lastSeenAt >=
+      // runStart (the upsert stamps unchanged rows too), so anything older was
+      // dropped from the source: deactivate it. Dead listings otherwise pile
+      // up forever and every crawler hit on them costs a relay attempt.
+      await ctx.scheduler.runAfter(0, internal.ingest.sweepStale, {
+        cutoff: runStart,
+      });
     }
-    // No stale-sweep here: the upsert skips no-op writes (doesn't touch
-    // lastSeenAt on unchanged rows), so a lastSeenAt-based sweep would wrongly
-    // flag present-but-unchanged offers. Removed sellers are rare and just 502
-    // on buy; `offers.sweepStaleExternal` stays available for an occasional
-    // manual full pass if dead listings ever pile up.
+  },
+});
+
+// Deactivate bazaar offers not seen by the refresh run that just completed.
+// Loops by cursor until the stale range is exhausted.
+export const sweepStale = internalAction({
+  args: { cutoff: v.number(), cursor: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const platformSecret = process.env.PLATFORM_INTERNAL_KEY ?? "";
+    if (!platformSecret) return;
+    const res: { swept: number; isDone: boolean; continueCursor: string } =
+      await ctx.runMutation(api.offers.sweepStaleExternal, {
+        platformSecret,
+        cutoff: args.cutoff,
+        cursor: args.cursor,
+      });
+    if (!res.isDone) {
+      await ctx.scheduler.runAfter(0, internal.ingest.sweepStale, {
+        cutoff: args.cutoff,
+        cursor: res.continueCursor,
+      });
+    }
   },
 });
