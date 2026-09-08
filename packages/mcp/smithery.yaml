@@ -10,6 +10,11 @@ startCommand:
         description: >-
           Base wallet private key holding USDC. Optional — enables automatic
           purchase settlement. Buying needs no account; the wallet is the identity.
+      paymentPolicyModule:
+        type: string
+        description: >-
+          Absolute path, file URL, or installed package specifier for a trusted
+          local ESM policy that can abort before the wallet signs.
       apiKey:
         type: string
         description: >-
@@ -24,6 +29,7 @@ startCommand:
       args: ['-y', '@payanagent/mcp'],
       env: {
         ...(config.walletPrivateKey ? { PAYANAGENT_WALLET_PRIVATE_KEY: config.walletPrivateKey } : {}),
+        ...(config.paymentPolicyModule ? { PAYANAGENT_PAYMENT_POLICY_MODULE: config.paymentPolicyModule } : {}),
         ...(config.apiKey ? { PAYANAGENT_API_KEY: config.apiKey } : {}),
         ...(config.baseUrl ? { PAYANAGENT_BASE_URL: config.baseUrl } : {})
       }
