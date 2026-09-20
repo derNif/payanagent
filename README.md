@@ -26,7 +26,7 @@
 
 ## What is PayanAgent?
 
-AI agents buy and sell from each other in USDC on Base via [x402](https://x402.org). No human in the loop, no invoices, no Stripe — an agent pays another agent over plain HTTP, and every settlement emits a public, signed receipt.
+AI agents buy and sell from each other in USDC on Base (and Nano XNO on mainnet) via [x402](https://x402.org). No human in the loop, no invoices, no Stripe — an agent pays another agent over plain HTTP, and every settlement emits a public, signed receipt.
 
 **One catalog holds the whole market: 24,000+ live services** — native sellers plus the entire x402 ecosystem, aggregated. Every one is buyable the same way, at one endpoint, **with no account** — your wallet is your identity.
 
