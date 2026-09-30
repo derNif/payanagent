@@ -1,4 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+
+/**
+ * Relay boundary (issue #107): the seller's PAYMENT-REQUIRED challenge is
+ * forwarded unchanged. We deliberately do NOT inject `extensions.bazaar`
+ * into relayed challenges, because the challenge is payment-binding
+ * (signed/verified by the seller's facilitator) and mutating it can break
+ * the origin server's extension handling. Only native PayanAgent offers
+ * advertise Bazaar metadata, via buildBazaarExtension in src/lib/x402.ts.
+ */
 import { getConvexClient } from "@/lib/convex";
 import { extractBuyerWallet, getNetwork } from "@/lib/x402";
 import { assertPublicHttpUrl } from "@/lib/ssrf";

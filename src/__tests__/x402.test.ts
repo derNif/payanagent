@@ -1,6 +1,87 @@
 import { describe, it } from "node:test";
-import assert from "node:assert/strict";
+import { buildBazaarExtension, buildPaymentRequiredResponse } from "../lib/x402";
 import { fileURLToPath, pathToFileURL } from "node:url";
+  const baseOffer = {
+    httpMethod: "GET",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string" },
+        limit: { type: "integer" },
+      },
+      required: ["query"],
+    },
+  };
+
+  it("advertises extensions.bazaar on GET offers", () => {
+    const res = buildPaymentRequiredResponse(
+      { ...baseOffer },
+      "https://example.com/x402/offer1",
+    ) as Record<string, any>;
+    expect(res.error).toBe("PAYMENT-REQUIRED");
+    const bazaar = res.extensions?.bazaar;
+    expect(bazaar).toBeDefined();
+    expect(bazaar.info.input.type).toBe("http");
+    expect(bazaar.info.input.method).toBe("GET");
+    expect(bazaar.info.input.parameters.schema).toEqual(baseOffer.inputSchema);
+  });
+
+  it("advertises extensions.bazaar on POST offers", () => {
+    const res = buildPaymentRequiredResponse(
+      { ...baseOffer, httpMethod: "POST" },
+      "https://example.com/x402/offer2",
+    ) as Record<string, any>;
+    expect(res.extensions?.bazaar?.info.input.method).toBe("POST");
+  });
+
+  it("example input validates against the declared input schema", () => {
+    const bazaar = buildBazaarExtension(baseOffer)!;
+    const example = bazaar.info.input.parameters.example as Record<string, unknown>;
+    expect(typeof example.query).toBe("string");
+    expect(typeof example.limit).toBe("number");
+    const schema = bazaar.info.input.parameters.schema as { required: string[] };
+    for (const key of schema.required) {
+      expect(example).toHaveProperty(key);
+    }
+  });
+
+  it("includes optional output example/schema when present", () => {
+    const bazaar = buildBazaarExtension({
+      httpMethod: "POST",
+      inputSchema: { type: "object", properties: { q: { type: "string" } } },
+      outputSchema: { type: "object", properties: { result: { type: "string" } } },
+      outputExample: { result: "ok" },
+    })!;
+    expect(bazaar.info.output?.example).toEqual({ result: "ok" });
+    expect(bazaar.info.output?.schema).toBeDefined();
+  });
+
+  it("declares a schema that validates the advertised info", () => {
+    const bazaar = buildBazaarExtension(baseOffer)!;
+    expect(bazaar.schema.type).toBe("object");
+    const infoProps = (bazaar.schema.properties as any).info.properties;
+    expect(infoProps.input.properties.type.const).toBe("http");
+    expect(infoProps.input.required).toContain("method");
+  });
+
+  it("does not alter payment-binding fields", () => {
+    const withBazaar = buildPaymentRequiredResponse(
+      { ...baseOffer },
+      "https://example.com/x402/offer1",
+    ) as Record<string, any>;
+    const withoutBazaar = buildPaymentRequiredResponse(
+      { ...baseOffer, httpMethod: undefined },
+      "https://example.com/x402/offer1",
+    ) as Record<string, any>;
+    // core fields identical
+    for (const key of ["x402Version", "accepts"]) {
+      expect(withBazaar[key]).toEqual(withoutBazaar[key]);
+    }
+  });
+
+  it("returns undefined for an invalid method", () => {
+    expect(buildBazaarExtension({ httpMethod: "get; drop" })).toBeUndefined();
+  });
 import { dirname, resolve } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

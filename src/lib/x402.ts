@@ -1,4 +1,148 @@
 import { NextResponse } from "next/server";
+
+/**
+ * Builds the x402 v2 Bazaar discovery extension from existing offer metadata.
+ *
+ * Reference: Coinbase x402 v2 spec — `extensions.bazaar` is the discovery
+ * declaration used by Bazaar-indexing validators (e.g. Agentic Market's
+ * `has_bazaar_extension` check). It is metadata-only and MUST NOT alter any
+ * payment-binding field (scheme, network, asset, amount, payTo, resource).
+ *
+ * NOTE: this improves standards compatibility only. Listing in CDP's own
+ * Bazaar additionally requires at least one settlement through the CDP
+ * Facilitator, which PayanAgent does not use (it settles via xpay).
+ */
+export function buildBazaarExtension(offer: {
+  httpMethod?: string;
+  inputSchema?: unknown;
+  inputExample?: unknown;
+  outputSchema?: unknown;
+  outputExample?: unknown;
+}): {
+  info: {
+    input: {
+      type: "http";
++      method: string;
+      parameters: {
+        example: unknown;
+        schema?: unknown;
+      };
+    };
+    output?: {
+      example: unknown;
+      schema?: unknown;
+    };
+  };
+  schema: Record<string, unknown>;
+} | undefined {
+  // Without a method we cannot advertise a standards-shaped declaration.
+  const method = (offer.httpMethod ?? "GET").toUpperCase();
+  if (!/^[A-Z]+$/.test(method)) return undefined;
+
+  const hasInputSchema =
+    offer.inputSchema != null &&
+    typeof offer.inputSchema === "object" &&
+    !Array.isArray(offer.inputSchema);
+
+  // An example input is required by the Bazaar declaration; fall back to an
+  // empty object for offers without one (safe for GET endpoints).
+  const exampleInput =
+    offer.inputExample !== undefined
+      ? offer.inputExample
+      : hasInputSchema
+        ? buildExampleFromSchema(offer.inputSchema as Record<string, unknown>)
+        : {};
+
+  const parameters: { example: unknown; schema?: unknown } = {
+    example: exampleInput,
+  };
+  if (hasInputSchema) parameters.schema = offer.inputSchema;
+
+  const info: Record<string, unknown> = {
+    input: {
+      type: "http",
+      method,
+      parameters,
+    },
+  };
+
+  const hasOutputSchema =
+    offer.outputSchema != null &&
+    typeof offer.outputSchema === "object" &&
+    !Array.isArray(offer.outputSchema);
+
+  if (offer.outputExample !== undefined || hasOutputSchema) {
+    const output: Record<string, unknown> = {
+      example: offer.outputExample ?? {},
+    };
+    if (hasOutputSchema) output.schema = offer.outputSchema;
+    info.output = output;
+  }
+
+  return {
+    info: info as Parameters<typeof buildBazaarExtension>[0] extends never
+      ? never
+      : ReturnType<typeof buildBazaarExtension> extends infer R
+        ? R extends { info: infer I }
+          ? I
+          : never
+        : never,
+    schema: {
+      type: "object",
+      properties: {
+        info: {
+          type: "object",
+          properties: {
+            input: {
+              type: "object",
+              properties: {
+                type: { const: "http" },
+                method: { type: "string" },
+                parameters: { type: "object" },
+              },
+              required: ["type", "method", "parameters"],
+            },
+            output: { type: "object" },
+          },
+          required: ["input"],
+        },
+      },
+      required: ["info"],
+    },
+  } as ReturnType<typeof buildBazaarExtension>;
+}
+
+/** Best-effort example derivation from a JSON Schema. */
+function buildExampleFromSchema(schema: Record<string, unknown>): unknown {
+  if (schema.example !== undefined) return schema.example;
+  const props = schema.properties as Record<string, Record<string, unknown>> | undefined;
+  if (!props) return {};
+  const example: Record<string, unknown> = {};
+  for (const [key, propSchema] of Object.entries(props)) {
+    if (!propSchema || typeof propSchema !== "object") continue;
+    switch (propSchema.type) {
+      case "string":
+        example[key] = typeof propSchema.example === "string" ? propSchema.example : "example";
+        break;
+      case "number":
+      case "integer":
+        example[key] = typeof propSchema.example === "number" ? propSchema.example : 1;
+        break;
+      case "boolean":
+        example[key] = false;
+        break;
+      case "array":
+        example[key] = [];
+        break;
+      case "object":
+        example[key] = {};
+        break;
+      default:
+        if (typeof propSchema.example !== "undefined") example[key] = propSchema.example;
+    }
+  }
+  return example;
+}
 import { createPublicClient, getAddress, http, keccak256, parseAbi, toBytes } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { base, baseSepolia } from "viem/chains";
@@ -9,6 +153,24 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://payanagent.com";
 const NETWORK = process.env.X402_NETWORK || "base";
 // x402.org/facilitator is testnet only; xpay supports Base mainnet
 const FACILITATOR_URL = process.env.X402_FACILITATOR_URL ||
+
+  // Advertise Bazaar discovery metadata on native payable routes.
+  // Relay paths (src/lib/relay-buy.ts) intentionally do NOT pass through
+  // here — seller challenges are preserved byte-for-byte (see issue scope).
+  const bazaar = buildBazaarExtension({
+    httpMethod: offer.httpMethod,
+    inputSchema: offer.inputSchema,
+    inputExample: offer.inputExample,
+    outputSchema: offer.outputSchema,
+    outputExample: offer.outputExample,
+  });
+  if (bazaar) {
+    response.extensions = {
+      ...(response.extensions as Record<string, unknown> | undefined),
+      bazaar,
+    };
+  }
+
   (NETWORK === "base-sepolia" ? "https://x402.org/facilitator" : "https://facilitator.xpay.sh");
 
 // CAIP-2 chain IDs
